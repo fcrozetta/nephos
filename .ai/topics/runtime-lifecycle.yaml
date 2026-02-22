@@ -1,0 +1,62 @@
+meta:
+  title: runtime_identity_lifecycle_v1
+  created_at: 2026-02-22T18:04:49Z
+  updated_at: 2026-02-22T18:04:49Z
+  owner: Soren
+  related_claims:
+    - C-0020
+    - C-0021
+    - C-0024
+    - C-0025
+    - C-0026
+    - C-0027
+    - C-0028
+    - C-0029
+    - C-0031
+    - C-0032
+    - C-0033
+
+summary:
+  objective: Deterministic tenant runtime with safe identity, lifecycle, and storage semantics.
+
+decisions:
+  state_backend:
+    type: sqlite
+    wal_mode: enabled
+
+  runtime_selection:
+    compose_include_list: explicit_only
+    tenant_compose_editing: forbidden_on_disk
+    strategy: runtime_commands_only
+
+  identity_model:
+    tenant_id: namespaced_manifest_identity
+    instance_id: immutable_internal_id
+    instance_name:
+      globally_unique: true
+      immutable: true
+      style: memorable_with_random_suffix
+    command_resolution: instance_name_to_instance_id_before_execution
+
+  credentials:
+    provider_principal_from_user_input: false
+    revocation_scope: instance_id_targeted_only
+
+  lifecycle:
+    up:
+      - provision_dependencies
+      - start_selected_services
+      - inject_runtime_credentials
+    down:
+      - stop_selected_services_only
+      - keep_database
+      - keep_credentials
+    clean:
+      - stop_remove_selected_services
+      - revoke_runtime_credentials
+      - keep_database
+
+  validation_workflow:
+    standalone_preflight_command: true
+    ci_cd_use_case: supported
+

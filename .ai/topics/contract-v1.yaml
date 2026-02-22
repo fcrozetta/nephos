@@ -1,0 +1,68 @@
+meta:
+  title: nephos_manifest_v1
+  created_at: 2026-02-22T18:04:49Z
+  updated_at: 2026-02-22T18:04:49Z
+  owner: Soren
+  related_claims:
+    - C-0001
+    - C-0002
+    - C-0003
+    - C-0004
+    - C-0007
+    - C-0008
+    - C-0009
+    - C-0010
+    - C-0011
+    - C-0030
+
+summary:
+  objective: Tenant-focused v1 nephos.yml contract with strict validation and explicit runtime behavior.
+  non_goals:
+    - Plugin declaration in tenant manifest.
+    - Hooks in v1.
+    - Capability version constraints in v1.
+    - x-* extensions in v1.
+
+decisions:
+  manifest_version:
+    field: version
+    accepted_formats:
+      - x
+      - x.y
+      - x.y.z
+    semver_semantics:
+      major: breaking
+      minor: backward_compatible_additive
+      patch: non_breaking_fix
+    normalization:
+      major_only: latest_supported_minor_patch
+
+  identity:
+    tenant_field: tenant
+    format_example: acme/myapp
+    immutability: tenant_cannot_change_after_creation
+    tenant_version:
+      field: tenantVersion
+      format: semver
+      v1_semantics: informational_only
+      future: may_drive_migrations
+
+  requires:
+    model: capability_based
+    v1_constraints: none
+
+  provides:
+    v1_mode:
+      registration_discovery_only: true
+      controls_routing: false
+      rollout: incremental
+    visibility_values:
+      - internal
+      - lan
+      - wan
+
+  validation:
+    unknown_keys: fail_at_all_object_depths
+    command_modes:
+      - contract
+      - runtime
