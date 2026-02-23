@@ -1,7 +1,7 @@
 meta:
   schema_version: 1
   created_at: 2026-02-21T23:36:08Z
-  updated_at: 2026-02-22T18:20:13Z
+  updated_at: 2026-02-23T00:49:48Z
   maintainer: Soren
   notes: Canonical agent memory for explicit claims and assumptions.
 
@@ -383,5 +383,239 @@ claims:
     source: Developer directive in chat on 2026-02-22.
     created_at: 2026-02-22T18:13:45Z
     updated_at: 2026-02-22T18:14:18Z
+
+  - id: C-0044
+    type: decision
+    topic: orchestration_up
+    status: accepted
+    statement: up runs preflight first and fails fast on preflight blockers.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0045
+    type: decision
+    topic: orchestration_up
+    status: accepted
+    statement: If runtime start fails after beginning execution, partial state is allowed to remain for debugging and reconciliation.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0046
+    type: decision
+    topic: tenant_runtime_selection
+    status: accepted
+    statement: Compose execution for selected services uses --no-deps.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0047
+    type: decision
+    topic: validation_workflow
+    status: accepted
+    statement: up refuses to run when preflight has hard blockers unless --force is supplied.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0048
+    type: decision
+    topic: tenant_lifecycle
+    status: accepted
+    statement: clean requires explicit confirmation via --yes or an interactive confirmation prompt.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0049
+    type: decision
+    topic: orchestration_locking
+    status: accepted
+    statement: v1 uses a global mutation lock to keep orchestration simple and safe.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:06:37Z
+    updated_at: 2026-02-23T00:06:37Z
+
+  - id: C-0050
+    type: decision
+    topic: orchestration_locking
+    status: accepted
+    statement: Per-instance locking is a planned future evolution after v1 stabilization.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:06:37Z
+    updated_at: 2026-02-23T00:06:37Z
+
+  - id: C-0051
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: CLI target syntax uses positional tenant plus --name/-n for instance_name.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:11:38Z
+
+  - id: C-0052
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: --instance is reserved for internal instance_id targeting.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:11:38Z
+
+  - id: C-0053
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: If instance selector is omitted, Nephos uses a configured default instance.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:11:38Z
+
+  - id: C-0054
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: "@ syntax is discarded for instance targeting to avoid version-related ambiguity."
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:12:12Z
+
+  - id: C-0055
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: If default instance is missing or ambiguous, CLI fails with actionable guidance to use --name or --instance.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:13:19Z
+    updated_at: 2026-02-23T00:13:19Z
+
+  - id: C-0056
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: Nephos state uses an operations journal table.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:16:11Z
+    updated_at: 2026-02-23T00:16:11Z
+
+  - id: C-0057
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: Reconciliation is triggered by explicit command and auto-run before mutating commands.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:16:11Z
+    updated_at: 2026-02-23T00:16:11Z
+
+  - id: C-0058
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: Mutating commands block on critical drift and continue with warnings for non-critical drift.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:19:24Z
+    updated_at: 2026-02-23T00:19:24Z
+
+  - id: C-0059
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: State model is hybrid; live state is used for mutation/reconcile checks and snapshot cache is used for fast status/list views.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:19:24Z
+    updated_at: 2026-02-23T00:19:24Z
+
+  - id: C-0060
+    type: decision
+    topic: plugin_model
+    status: accepted
+    statement: v1 allows host-mode plugins in addition to container-mode plugins to reduce adoption friction.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:29:59Z
+
+  - id: C-0061
+    type: decision
+    topic: plugin_interface
+    status: accepted
+    statement: v1 plugin contract requires check, provision, deprovision, and status operations.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:29:59Z
+
+  - id: C-0062
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: v1 scope is one plugin provides one capability.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:29:59Z
+
+  - id: C-0063
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: v1 uses a single active provider per capability.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:44:42Z
+
+  - id: C-0064
+    type: decision
+    topic: plugin_interface
+    status: accepted
+    statement: Plugins may expose extra commands, but commands are namespaced and never auto-invoked by core lifecycle.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:39:36Z
+    updated_at: 2026-02-23T00:39:36Z
+
+  - id: C-0065
+    type: decision
+    topic: plugin_security
+    status: accepted
+    statement: Host-mode plugins are allowed in v1 and must declare explicit permission requirements in plugin manifest.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:39:36Z
+    updated_at: 2026-02-23T00:39:36Z
+
+  - id: C-0066
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: Tenant manifests remain provider-agnostic and cannot directly select provider instances.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:42:58Z
+    updated_at: 2026-02-23T00:42:58Z
+
+  - id: C-0067
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: Nephos owns provider selection and binds one configured provider to each capability globally in v1.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:42:58Z
+    updated_at: 2026-02-23T00:44:42Z
+
+  - id: C-0068
+    type: decision
+    topic: plugin_source
+    status: accepted
+    statement: Plugin sources in v1 are local paths or pinned git refs; Nephos clones plugins into its configured plugin directory.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:49:48Z
+    updated_at: 2026-02-23T00:49:48Z
+
+  - id: C-0069
+    type: decision
+    topic: plugin_interface
+    status: accepted
+    statement: v1 has no automatic lifecycle hooks beyond required operations check, provision, deprovision, and status.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:49:48Z
+    updated_at: 2026-02-23T00:49:48Z
 
 assumptions: []

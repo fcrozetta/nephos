@@ -24,6 +24,8 @@ This directory is agent-only working memory for Nephos.
 - `.ai/topics/contract-v1.yaml`
 - `.ai/topics/runtime-lifecycle.yaml`
 - `.ai/topics/hostname-policy.yaml`
+- `.ai/topics/state-reconciliation.yaml`
+- `.ai/topics/plugin-model.yaml`
 
 ## Context Loading Strategy
 
