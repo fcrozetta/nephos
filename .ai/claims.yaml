@@ -1,7 +1,7 @@
 meta:
   schema_version: 1
   created_at: 2026-02-21T23:36:08Z
-  updated_at: 2026-02-23T00:49:48Z
+  updated_at: 2026-02-23T01:00:40Z
   maintainer: Soren
   notes: Canonical agent memory for explicit claims and assumptions.
 
@@ -617,5 +617,77 @@ claims:
     source: Developer directive in chat on 2026-02-23.
     created_at: 2026-02-23T00:49:48Z
     updated_at: 2026-02-23T00:49:48Z
+
+  - id: C-0070
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: v1 command surface includes up, down, clean, preflight, reconcile, status, logs, ps, and plugins.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0071
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: CLI implementation stack is Typer with Rich for terminal UX; machine output is exposed via flags.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0072
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: Warnings return exit code 0; critical failures return non-zero.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0073
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: clean default scope is runtime artifacts, credentials, and hostname bindings while preserving databases.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0074
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: reconcile defaults to check mode; apply mode is explicit.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0075
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: status default shows all running instances and supports an all-states flag to include failed/stopped instances.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0076
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: logs default to last 200 lines with optional follow mode and source-selection flags.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0077
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: Exit code mapping is fixed as 0 success/warning-only, 10 validation, 20 preflight blocker, 30 drift blocker, 40 plugin/provider failure, 50 runtime failure, 60 lock conflict, 70 internal error.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T01:00:40Z
+    updated_at: 2026-02-23T01:00:40Z
 
 assumptions: []
