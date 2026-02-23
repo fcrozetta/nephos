@@ -1,7 +1,7 @@
 meta:
   title: runtime_identity_lifecycle_v1
   created_at: 2026-02-22T18:04:49Z
-  updated_at: 2026-02-22T18:04:49Z
+  updated_at: 2026-02-23T00:13:19Z
   owner: Soren
   related_claims:
     - C-0020
@@ -15,6 +15,18 @@ meta:
     - C-0031
     - C-0032
     - C-0033
+    - C-0044
+    - C-0045
+    - C-0046
+    - C-0047
+    - C-0048
+    - C-0049
+    - C-0050
+    - C-0051
+    - C-0052
+    - C-0053
+    - C-0054
+    - C-0055
 
 summary:
   objective: Deterministic tenant runtime with safe identity, lifecycle, and storage semantics.
@@ -26,6 +38,8 @@ decisions:
 
   runtime_selection:
     compose_include_list: explicit_only
+    compose_start_flags:
+      - --no-deps
     tenant_compose_editing: forbidden_on_disk
     strategy: runtime_commands_only
 
@@ -44,9 +58,11 @@ decisions:
 
   lifecycle:
     up:
+      - run_preflight_and_fail_fast_on_blockers
       - provision_dependencies
       - start_selected_services
       - inject_runtime_credentials
+      - on_start_failure_leave_partial_state_for_debug
     down:
       - stop_selected_services_only
       - keep_database
@@ -59,4 +75,26 @@ decisions:
   validation_workflow:
     standalone_preflight_command: true
     ci_cd_use_case: supported
+    up_blocks_without_force: true
 
+  safety:
+    clean_confirmation:
+      --yes_supported: true
+      interactive_prompt_if_missing_yes: true
+
+  concurrency:
+    mutation_lock_scope_v1: global
+    future_direction: per_instance_locking
+
+  cli_targeting:
+    tenant_selector: positional_tenant_id
+    instance_name_selector:
+      flag: --name
+      short_flag: -n
+    instance_id_selector:
+      flag: --instance
+    default_behavior:
+      when_instance_unspecified: use_configured_default_instance
+      on_missing_or_ambiguous_default: fail_with_actionable_guidance
+    rejected_notation:
+      - tenant@instance
