@@ -1,0 +1,49 @@
+meta:
+  title: hostname_mapping_v1
+  created_at: 2026-02-22T18:04:49Z
+  updated_at: 2026-02-22T18:04:49Z
+  owner: Soren
+  related_claims:
+    - C-0022
+    - C-0023
+    - C-0034
+    - C-0035
+    - C-0036
+    - C-0037
+
+summary:
+  objective: Deterministic, collision-safe hostname allocation with platform-owned mapping.
+
+decisions:
+  ownership:
+    tenant_manifest_controls_final_hostname: false
+    source_of_truth: nephos_platform_state
+
+  defaults:
+    wan: ${tenant_name}.${platform_domain}
+    lan: ${tenant_name}.nephos.local
+    namespace_in_wan_default: false
+    future_option: include_namespace_toggle
+
+  constraints:
+    hostname_count_per_endpoint_v1: 1
+    visibility_values:
+      - internal
+      - lan
+      - wan
+
+  conflict_resolution:
+    strategy: deterministic_suffix_append
+    suffix:
+      algorithm: base36(hash(instance_id:endpoint_ref))[0:4]
+    operator_feedback: warning_required
+
+  lifecycle:
+    on_clean:
+      hostname_binding: release
+
+  local_networking:
+    nephos_local_resolution:
+      required: true
+      strategy: local_resolver_with_nephos_managed_dns
+      note: platform should configure host resolution for nephos.local

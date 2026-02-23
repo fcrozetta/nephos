@@ -1,0 +1,58 @@
+meta:
+  title: plugin_capability_model_v1
+  created_at: 2026-02-23T00:29:59Z
+  updated_at: 2026-02-23T00:49:48Z
+  owner: Soren
+  related_claims:
+    - C-0060
+    - C-0061
+    - C-0062
+    - C-0063
+    - C-0064
+    - C-0065
+    - C-0066
+    - C-0067
+    - C-0068
+    - C-0069
+
+summary:
+  objective: Define minimum plugin contract and capability exposure model for v1.
+
+decisions:
+  plugin_modes:
+    container: allowed
+    host: allowed
+
+  required_operations:
+    - check
+    - provision
+    - deprovision
+    - status
+
+  lifecycle_hooks:
+    auto_hooks_beyond_required_operations_v1: disallowed
+
+  extension_commands:
+    allowed: true
+    namespaced: true
+    core_auto_invocation: false
+
+  capability_scope:
+    plugin_to_capability_cardinality_v1: 1_to_1
+    active_provider_per_capability_v1: single
+
+  provider_resolution:
+    tenant_manifest_provider_selection: disallowed
+    provider_binding_owner: nephos
+    provider_binding_scope: global_per_capability
+
+  host_mode_permissions:
+    explicit_manifest_permissions_required: true
+
+  source_policy:
+    allowed_sources_v1:
+      - local_path
+      - git_url_with_pinned_ref
+    clone_target: nephos_configured_plugins_directory
+
+open_questions: []

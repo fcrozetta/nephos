@@ -1,0 +1,702 @@
+meta:
+  schema_version: 1
+  created_at: 2026-02-21T23:36:08Z
+  updated_at: 2026-02-23T01:05:08Z
+  maintainer: Soren
+  notes: Canonical agent memory for explicit claims and assumptions.
+
+claims:
+  - id: C-0001
+    type: decision
+    topic: nephos_manifest_contract
+    status: accepted
+    statement: Unknown keys fail validation at all manifest object depths in v1; x-* extension keys are deferred to a later version.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:36:08Z
+    updated_at: 2026-02-22T16:59:44Z
+
+  - id: C-0002
+    type: decision
+    topic: nephos_manifest_contract
+    status: accepted
+    statement: Manifest versioning uses semantic version format x.y.z.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:36:08Z
+    updated_at: 2026-02-21T23:36:08Z
+
+  - id: C-0003
+    type: decision
+    topic: nephos_manifest_scope
+    status: accepted
+    statement: v1 scope is tenant-focused only; plugin declarations are not part of v1 tenant manifest.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:36:08Z
+    updated_at: 2026-02-21T23:36:08Z
+
+  - id: C-0004
+    type: decision
+    topic: nephos_manifest_hooks
+    status: accepted
+    statement: Hooks are deferred; v1 manifest includes basics only.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:36:08Z
+    updated_at: 2026-02-21T23:36:08Z
+
+  - id: C-0005
+    type: decision
+    topic: secrets_handling
+    status: accepted
+    statement: Secrets are referenced by symbolic keys and optionally sourced from runtime keyvault integrations; inline secret values are not allowed.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:36:08Z
+    updated_at: 2026-02-21T23:36:08Z
+
+  - id: C-0006
+    type: decision
+    topic: agent_memory
+    status: accepted
+    statement: Repository-local agent memory lives under .ai/, with .ai/claims.yaml as canonical claims index and mandatory timestamp updates on file and claim changes.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:36:58Z
+    updated_at: 2026-02-21T23:36:58Z
+
+  - id: C-0007
+    type: decision
+    topic: nephos_manifest_versioning
+    status: accepted
+    statement: "Semver semantics are strict: major=breaking, minor=backward-compatible additive, patch=non-breaking fixes."
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:46:32Z
+    updated_at: 2026-02-22T18:06:04Z
+
+  - id: C-0008
+    type: decision
+    topic: nephos_manifest_versioning
+    status: accepted
+    statement: Manifest parser accepts partial versions in addition to full semver (x, x.y, x.y.z).
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:46:32Z
+    updated_at: 2026-02-21T23:46:32Z
+
+  - id: C-0009
+    type: decision
+    topic: nephos_manifest_contract
+    status: accepted
+    statement: Manifest version field name is version.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:46:32Z
+    updated_at: 2026-02-21T23:46:32Z
+
+  - id: C-0010
+    type: decision
+    topic: nephos_manifest_requires
+    status: accepted
+    statement: requires is capability-based rather than provider-implementation-based.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:46:32Z
+    updated_at: 2026-02-21T23:46:32Z
+
+  - id: C-0011
+    type: decision
+    topic: nephos_manifest_requires
+    status: accepted
+    statement: Capability version constraints are deferred from v1 but should be designed for forward-compatibility.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:46:32Z
+    updated_at: 2026-02-21T23:46:32Z
+
+  - id: C-0012
+    type: decision
+    topic: runtime_ux
+    status: accepted
+    statement: Runtime behavior must remain transparent so the operator knows what is happening at all times.
+    source: Developer directive in chat on 2026-02-21.
+    created_at: 2026-02-21T23:46:32Z
+    updated_at: 2026-02-21T23:46:32Z
+
+  - id: C-0013
+    type: decision
+    topic: nephos_manifest_versioning
+    status: accepted
+    statement: "Partial version normalization resolves major-only to latest supported minor/patch in that major (example: 1 => latest supported 1.y.z)."
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:00:40Z
+    updated_at: 2026-02-22T18:06:22Z
+
+  - id: C-0014
+    type: decision
+    topic: secrets_scope
+    status: accepted
+    statement: Secret symbols are tenant-local by default, with optional read-only access to a global store.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:00:40Z
+    updated_at: 2026-02-22T16:00:40Z
+
+  - id: C-0015
+    type: decision
+    topic: secrets_bootstrap
+    status: accepted
+    statement: Core includes a minimal built-in secret resolver bootstrap path.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:00:40Z
+    updated_at: 2026-02-22T16:00:40Z
+
+  - id: C-0016
+    type: decision
+    topic: validation_modes
+    status: accepted
+    statement: Validation supports both static contract checks and runtime-aware checks; naming should avoid online/offline ambiguity.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:00:40Z
+    updated_at: 2026-02-22T16:00:40Z
+
+  - id: C-0017
+    type: decision
+    topic: platform_plugin_boundary
+    status: accepted
+    statement: Nephos core should function directly with OS/runtime basics, while plugins provide additional capabilities exposed to tenants.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:00:40Z
+    updated_at: 2026-02-22T16:00:40Z
+
+  - id: C-0018
+    type: decision
+    topic: nephos_manifest_provides
+    status: accepted
+    statement: In v1, provides is runtime-effective for registration and discovery only (not routing control), implemented incrementally.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:09:03Z
+    updated_at: 2026-02-22T18:13:45Z
+
+  - id: C-0019
+    type: decision
+    topic: runtime_fail_policy
+    status: accepted
+    statement: Runtime should hard-fail on unresolved required dependencies and surface explicit failure context.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:09:03Z
+    updated_at: 2026-02-22T16:09:03Z
+
+  - id: C-0020
+    type: decision
+    topic: tenant_runtime_selection
+    status: accepted
+    statement: v1 tenant runtime uses explicit compose service inclusion; only listed services are started by Nephos.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:59:44Z
+    updated_at: 2026-02-22T16:59:44Z
+
+  - id: C-0021
+    type: decision
+    topic: tenant_lifecycle
+    status: accepted
+    statement: down stops app runtime while keeping credentials valid; clean stops/removes app runtime artifacts and revokes tenant credentials without deleting the database.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:59:44Z
+    updated_at: 2026-02-22T16:59:44Z
+
+  - id: C-0022
+    type: decision
+    topic: service_visibility
+    status: accepted
+    statement: provides visibility classes in v1 are internal, lan, and wan.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:59:44Z
+    updated_at: 2026-02-22T16:59:44Z
+
+  - id: C-0023
+    type: decision
+    topic: hostname_ownership
+    status: accepted
+    statement: Hostname assignment is owned by Nephos platform configuration; tenant nephos.yml remains public and does not dictate final hostnames.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:59:44Z
+    updated_at: 2026-02-22T16:59:44Z
+
+  - id: C-0024
+    type: decision
+    topic: security_identity
+    status: accepted
+    statement: User-specified credential principals are disallowed for provider account creation in v1 to prevent cross-tenant collisions and accidental revocation.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T16:59:44Z
+    updated_at: 2026-02-22T16:59:44Z
+
+  - id: C-0025
+    type: decision
+    topic: tenant_identity
+    status: accepted
+    statement: Manifest carries tenant identity as namespaced tenant_id (for example acme/myapp); runtime identity is two-level with immutable instance_id.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:07:42Z
+    updated_at: 2026-02-22T17:39:55Z
+
+  - id: C-0026
+    type: decision
+    topic: platform_state_backend
+    status: accepted
+    statement: v1 Nephos state backend is SQLite.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:07:42Z
+    updated_at: 2026-02-22T17:07:42Z
+
+  - id: C-0027
+    type: decision
+    topic: tenant_compose_handling
+    status: accepted
+    statement: Nephos must not modify tenant compose files on disk; orchestration changes are done via runtime command behavior only.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:07:42Z
+    updated_at: 2026-02-22T17:07:42Z
+
+  - id: C-0028
+    type: decision
+    topic: instance_naming
+    status: accepted
+    statement: Instance naming uses globally unique immutable instance_name; adding random memorable suffix is acceptable for ergonomics.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:39:55Z
+    updated_at: 2026-02-22T17:39:55Z
+
+  - id: C-0029
+    type: decision
+    topic: tenant_identity
+    status: accepted
+    statement: Tenant identity is immutable after creation; tenant name cannot change.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:46:10Z
+    updated_at: 2026-02-22T17:46:10Z
+
+  - id: C-0030
+    type: decision
+    topic: tenant_contract
+    status: accepted
+    statement: Manifest includes tenantVersion field using semver; in v1 it is informational only, with migrations considered later.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:46:10Z
+    updated_at: 2026-02-22T18:20:13Z
+
+  - id: C-0031
+    type: decision
+    topic: sqlite_operations
+    status: accepted
+    statement: SQLite WAL mode should be enabled in v1 to reduce lock contention risks.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:46:10Z
+    updated_at: 2026-02-22T17:46:10Z
+
+  - id: C-0032
+    type: decision
+    topic: validation_workflow
+    status: accepted
+    statement: Nephos should expose a standalone preflight command suitable for CI/CD validation of tenant compatibility.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:46:10Z
+    updated_at: 2026-02-22T17:46:10Z
+
+  - id: C-0033
+    type: decision
+    topic: instance_lookup
+    status: accepted
+    statement: User-facing commands resolve instance_name input to internal instance_id before execution.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:46:10Z
+    updated_at: 2026-02-22T17:46:10Z
+
+  - id: C-0034
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: WAN hostname default excludes namespace and uses ${tenant_name}.${platform_domain}; namespace inclusion is a future platform option.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:55:24Z
+    updated_at: 2026-02-22T17:55:24Z
+
+  - id: C-0035
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: v1 supports one hostname per endpoint.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:55:24Z
+    updated_at: 2026-02-22T17:55:24Z
+
+  - id: C-0036
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: Hostname collisions resolve via deterministic suffix append and user warning.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T17:55:24Z
+    updated_at: 2026-02-22T17:55:24Z
+
+  - id: C-0037
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: LAN hostname default is ${tenant_name}.nephos.local and Nephos should configure local machine resolution for nephos.local.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T18:04:49Z
+    updated_at: 2026-02-22T18:04:49Z
+
+  - id: C-0038
+    type: decision
+    topic: agent_memory
+    status: accepted
+    statement: Organize .ai context by topic files to reduce context-window pressure while keeping claims.yaml as canonical index.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T18:04:49Z
+    updated_at: 2026-02-22T18:04:49Z
+
+  - id: C-0040
+    type: decision
+    topic: agent_memory
+    status: accepted
+    statement: .ai files are public repository context and must not include private machine paths, user-specific local metadata, or personal details.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T18:09:23Z
+    updated_at: 2026-02-22T18:09:23Z
+
+  - id: C-0041
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: Deterministic collision suffix format is acceptable as base36(hash(instance_id:endpoint_ref))[0:4].
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T18:13:45Z
+    updated_at: 2026-02-22T18:13:45Z
+
+  - id: C-0042
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: On clean, hostname bindings are released.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T18:13:45Z
+    updated_at: 2026-02-22T18:13:45Z
+
+  - id: C-0043
+    type: decision
+    topic: hostname_policy
+    status: accepted
+    statement: Local nephos.local setup uses a local resolver with Nephos-managed DNS.
+    source: Developer directive in chat on 2026-02-22.
+    created_at: 2026-02-22T18:13:45Z
+    updated_at: 2026-02-22T18:14:18Z
+
+  - id: C-0044
+    type: decision
+    topic: orchestration_up
+    status: accepted
+    statement: up runs preflight first and fails fast on preflight blockers.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0045
+    type: decision
+    topic: orchestration_up
+    status: accepted
+    statement: If runtime start fails after beginning execution, partial state is allowed to remain for debugging and reconciliation.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0046
+    type: decision
+    topic: tenant_runtime_selection
+    status: accepted
+    statement: Compose execution for selected services uses --no-deps.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0047
+    type: decision
+    topic: validation_workflow
+    status: accepted
+    statement: up refuses to run when preflight has hard blockers unless --force is supplied.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0048
+    type: decision
+    topic: tenant_lifecycle
+    status: accepted
+    statement: clean requires explicit confirmation via --yes or an interactive confirmation prompt.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:00:21Z
+    updated_at: 2026-02-23T00:00:21Z
+
+  - id: C-0049
+    type: decision
+    topic: orchestration_locking
+    status: accepted
+    statement: v1 uses a global mutation lock to keep orchestration simple and safe.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:06:37Z
+    updated_at: 2026-02-23T00:06:37Z
+
+  - id: C-0050
+    type: decision
+    topic: orchestration_locking
+    status: accepted
+    statement: Per-instance locking is a planned future evolution after v1 stabilization.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:06:37Z
+    updated_at: 2026-02-23T00:06:37Z
+
+  - id: C-0051
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: CLI target syntax uses positional tenant plus --name/-n for instance_name.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:11:38Z
+
+  - id: C-0052
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: --instance is reserved for internal instance_id targeting.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:11:38Z
+
+  - id: C-0053
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: If instance selector is omitted, Nephos uses a configured default instance.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:11:38Z
+
+  - id: C-0054
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: "@ syntax is discarded for instance targeting to avoid version-related ambiguity."
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:11:38Z
+    updated_at: 2026-02-23T00:12:12Z
+
+  - id: C-0055
+    type: decision
+    topic: cli_ux
+    status: accepted
+    statement: If default instance is missing or ambiguous, CLI fails with actionable guidance to use --name or --instance.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:13:19Z
+    updated_at: 2026-02-23T00:13:19Z
+
+  - id: C-0056
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: Nephos state uses an operations journal table.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:16:11Z
+    updated_at: 2026-02-23T00:16:11Z
+
+  - id: C-0057
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: Reconciliation is triggered by explicit command and auto-run before mutating commands.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:16:11Z
+    updated_at: 2026-02-23T00:16:11Z
+
+  - id: C-0058
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: Mutating commands block on critical drift and continue with warnings for non-critical drift.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:19:24Z
+    updated_at: 2026-02-23T00:19:24Z
+
+  - id: C-0059
+    type: decision
+    topic: state_reconciliation
+    status: accepted
+    statement: State model is hybrid; live state is used for mutation/reconcile checks and snapshot cache is used for fast status/list views.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:19:24Z
+    updated_at: 2026-02-23T00:19:24Z
+
+  - id: C-0060
+    type: decision
+    topic: plugin_model
+    status: accepted
+    statement: v1 allows host-mode plugins in addition to container-mode plugins to reduce adoption friction.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:29:59Z
+
+  - id: C-0061
+    type: decision
+    topic: plugin_interface
+    status: accepted
+    statement: v1 plugin contract requires check, provision, deprovision, and status operations.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:29:59Z
+
+  - id: C-0062
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: v1 scope is one plugin provides one capability.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:29:59Z
+
+  - id: C-0063
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: v1 uses a single active provider per capability.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:29:59Z
+    updated_at: 2026-02-23T00:44:42Z
+
+  - id: C-0064
+    type: decision
+    topic: plugin_interface
+    status: accepted
+    statement: Plugins may expose extra commands, but commands are namespaced and never auto-invoked by core lifecycle.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:39:36Z
+    updated_at: 2026-02-23T00:39:36Z
+
+  - id: C-0065
+    type: decision
+    topic: plugin_security
+    status: accepted
+    statement: Host-mode plugins are allowed in v1 and must declare explicit permission requirements in plugin manifest.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:39:36Z
+    updated_at: 2026-02-23T00:39:36Z
+
+  - id: C-0066
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: Tenant manifests remain provider-agnostic and cannot directly select provider instances.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:42:58Z
+    updated_at: 2026-02-23T00:42:58Z
+
+  - id: C-0067
+    type: decision
+    topic: plugin_capabilities
+    status: accepted
+    statement: Nephos owns provider selection and binds one configured provider to each capability globally in v1.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:42:58Z
+    updated_at: 2026-02-23T00:44:42Z
+
+  - id: C-0068
+    type: decision
+    topic: plugin_source
+    status: accepted
+    statement: Plugin sources in v1 are local paths or pinned git refs; Nephos clones plugins into its configured plugin directory.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:49:48Z
+    updated_at: 2026-02-23T00:49:48Z
+
+  - id: C-0069
+    type: decision
+    topic: plugin_interface
+    status: accepted
+    statement: v1 has no automatic lifecycle hooks beyond required operations check, provision, deprovision, and status.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:49:48Z
+    updated_at: 2026-02-23T00:49:48Z
+
+  - id: C-0070
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: v1 command surface includes up, down, clean, preflight, reconcile, status, logs, ps, and plugins.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0071
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: CLI implementation stack is Typer with Rich for terminal UX; machine output is exposed via flags.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0072
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: Warnings return exit code 0; critical failures return non-zero.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0073
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: clean default scope is runtime artifacts, credentials, and hostname bindings while preserving databases.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0074
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: reconcile defaults to check mode; apply mode is explicit.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0075
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: status default shows all running instances and supports an all-states flag to include failed/stopped instances.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0076
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: logs default to last 200 lines with optional follow mode and source-selection flags.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T00:59:35Z
+    updated_at: 2026-02-23T00:59:35Z
+
+  - id: C-0077
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: Exit code mapping is fixed as 0 success/warning-only, 10 validation, 20 preflight blocker, 30 drift blocker, 40 plugin/provider failure, 50 runtime failure, 60 lock conflict, 70 internal error.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T01:00:40Z
+    updated_at: 2026-02-23T01:00:40Z
+
+  - id: C-0078
+    type: decision
+    topic: cli_operator_contract
+    status: accepted
+    statement: Textual is the planned TUI frontend (post-v1), while Typer plus Rich remains the v1 CLI stack.
+    source: Developer directive in chat on 2026-02-23.
+    created_at: 2026-02-23T01:05:08Z
+    updated_at: 2026-02-23T01:05:08Z
+
+assumptions: []
