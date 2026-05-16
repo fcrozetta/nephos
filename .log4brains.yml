@@ -1,0 +1,5 @@
+project:
+  name: nephos
+  tz: Europe/Amsterdam
+  adrFolder: ./docs/adr
+  packages: []
