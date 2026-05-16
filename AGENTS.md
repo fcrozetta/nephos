@@ -302,6 +302,14 @@ For multi-step implementation work, create or update a plan using `PLANS.md` bef
 
 Do not infer missing architecture. If a decision is not documented, record it as an open question before implementing.
 
+### Architecture Documentation Writes
+
+Before writing or changing architecture context or ADR files, tell Fer explicitly which context files or ADRs need to change and why.
+
+Do not silently add, accept, or reshape architectural decisions in `.agents/context/`, `docs/adr/`, `examples/`, or `schemas/`.
+
+If Fer has not selected a decision, keep it in `.agents/context/nephos-open-questions.md` or in a draft ADR.
+
 ---
 
 ## Documentation

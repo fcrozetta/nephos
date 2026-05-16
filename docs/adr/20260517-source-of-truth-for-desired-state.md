@@ -1,6 +1,6 @@
 # Source of Truth for Desired State
 
-- Status: draft
+- Status: accepted
 - Date: 2026-05-17
 - Tags: state, api, database, yaml, crd, gitops
 
@@ -17,13 +17,19 @@ Possible sources include:
 
 This decision affects the entire architecture.
 
-## Current Leaning
+## Decision
 
-The current leaning is:
+Use the Nephos API and database as the canonical source of desired platform state.
 
-- Nephos API/database is canonical
-- YAML is import/export
-- Kubernetes is runtime state
+For Phase 1, use SQLite as the canonical desired-state database.
+
+Use YAML for import/export only.
+
+Treat Kubernetes as runtime state, not desired-state authority.
+
+Defer Kubernetes CRDs and GitOps-as-source-of-truth until a later explicit decision.
+
+Use simple explicit SQL migrations for Phase 1 database versioning.
 
 ## Considered Options
 
@@ -83,20 +89,16 @@ Cons:
 - too high-barrier as default
 - not ideal for local-first one-click UX
 
-## Proposed Direction
+## Decision Outcome
 
-Use Nephos API/database as canonical desired state.
+Chosen option: "Nephos API and Database", because Nephos must own platform intent, relationships, lifecycle semantics, and capability binding above the Kubernetes runtime layer.
 
-Use YAML as import/export.
+The accepted boundary is:
 
-Use Kubernetes as runtime state.
-
-Do not implement CRD-first without a later explicit decision.
+intent -> desired state -> reconcile into Kubernetes
 
 ## Status Notes
 
-This is draft, not accepted.
+This decision is accepted.
 
-The architecture should preserve the boundary:
-
-intent -> desired state -> reconcile into Kubernetes
+Do not implement a CRD-first, YAML-first, or GitOps-first source-of-truth model without a later ADR.

@@ -1,6 +1,6 @@
 # Controller and Reconciliation Architecture
 
-- Status: draft
+- Status: accepted
 - Date: 2026-05-17
 - Tags: controller, reconciliation, cli, api, architecture
 
@@ -17,13 +17,36 @@ Possible models include:
 - controller running inside the cluster
 - hybrid approach
 
-## Current Leaning
+## Decision
 
-Start simple, but preserve the architecture boundary:
+Use an API-owned in-process controller/reconciler for Phase 1.
+
+The reconciler reads Nephos desired state from the API/database and reconciles Nephos-owned resources into Kubernetes.
+
+The CLI talks to the Nephos API/local controller.
+
+The CLI must not become a bag of direct Kubernetes mutations.
+
+The reconciler must be implemented behind boundaries that allow later extraction into:
+
+- a separate local daemon
+- a worker process
+- an in-cluster controller
+- a scheduled reconciliation process
+
+Preserve the architecture boundary:
 
 intent -> desired state -> reconcile into Kubernetes
 
-Avoid turning the CLI into a bag of direct Kubernetes mutations.
+## Drift Policy
+
+Phase 1 should detect and report drift.
+
+Nephos may reconcile Nephos-owned resources when desired state is explicit, especially during lifecycle operations or explicit reconciliation.
+
+Nephos must not mutate Kubernetes resources it does not own.
+
+Nephos-owned runtime resources should be labeled and/or annotated so drift detection and reconciliation can identify ownership.
 
 ## Considered Options
 
@@ -68,6 +91,6 @@ Cons:
 
 ## Status Notes
 
-This is draft.
+This decision is accepted.
 
 Implementation can start pragmatic, but must not violate the conceptual boundary.
