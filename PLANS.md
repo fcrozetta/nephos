@@ -44,6 +44,7 @@ Current understanding:
 - Batch 5 upgrade/backup decisions are accepted: versions are pinned, upgrades are explicit/manual, no automatic latest, Service upgrades with persistent data are risky by default, rollback is best-effort in Phase 1, Nephos owns backup intent/policy/status while Services own data-aware implementation, no backup implementation in Phase 1, stop/remove preserve data, and destroy deletes data and requires destructive confirmation when persistent data exists.
 - Batch 6 health/status decisions are accepted: Nephos status is Nephos-aware and aggregates desired state, reconciliation, Kubernetes readiness/existence, bindings, dependencies, routes, storage, and backup status; Phase 1 implements a minimal subset; removed/destroyed are lifecycle states, not health statuses; backup participates as unsupported in Phase 1; status must include reasons/evidence; Service status includes dependent impact.
 - Batch 7 Phase 1 scope decisions are accepted: single-node K3s, minimal cluster lifecycle, App/Service install/start/stop/remove/destroy, `disable` deferred, basic ingress intent, local filesystem catalog from day one with tiny repo-shipped reference entries, no service mesh, multi-component Apps communicate through normal Kubernetes Services/networking, and Paperless + PostgreSQL is the canonical reference scenario.
+- Batch 8 runtime boundary decisions are accepted: one namespace per App instance and Service instance, `nephos-system` for control-plane/runtime support components, no default-deny NetworkPolicy in Phase 1, Traefik local ingress first, manual Cloudflare Tunnel compatibility without tunnel automation, stopped Apps keep route intent, Kubernetes Secrets for Phase 1, binding credentials materialized into App namespaces, and secret values redacted by default.
 
 Files likely to change:
 
@@ -58,6 +59,7 @@ Files likely to change:
 - `.agents/context/nephos-upgrades.md`
 - `.agents/context/nephos-backups.md`
 - `.agents/context/nephos-health-status.md`
+- `.agents/context/nephos-runtime-boundaries.md`
 - `.agents/context/nephos-phase1.md`
 - `.agents/context/nephos-non-goals.md`
 - `.agents/context/nephos-service-ownership.md`
@@ -75,6 +77,9 @@ Files likely to change:
 - `docs/adr/20260517-app-and-service-lifecycle-semantics.md`
 - `docs/adr/20260517-health-and-status-model.md`
 - `docs/adr/20260517-phase-1-scope.md`
+- `docs/adr/20260517-namespace-strategy.md`
+- `docs/adr/20260517-ingress-and-visibility-model.md`
+- `docs/adr/20260517-secrets-model.md`
 
 Proposed steps:
 
@@ -98,6 +103,10 @@ Proposed steps:
 - Add health/status context and terminology.
 - Accept the Phase 1 scope ADR.
 - Update Phase 1 and non-goal context.
+- Accept the namespace strategy ADR.
+- Accept the ingress and visibility model ADR.
+- Accept the secrets model ADR.
+- Add runtime-boundary context.
 - Continue the interview with reference scenario details or catalog trust.
 
 Risks:
@@ -120,6 +129,9 @@ Risks:
 - Showing opaque green/red status without reasons.
 - Letting Phase 1 expand into Web UI, backup implementation, service mesh, or HA before the platform model exists.
 - Hardcoding app behavior instead of exercising the local filesystem catalog/manifest path.
+- Accidentally making Cloudflare Tunnel/Tailscale foundational instead of compatible future/manual exposure options.
+- Breaking local-first App-to-Service communication by adding default-deny NetworkPolicy before a policy model exists.
+- Leaking secrets through status/logs while trying to improve operational transparency.
 
 Validation commands:
 
@@ -131,6 +143,7 @@ Validation commands:
 - `rg -n "upgrade|backup|restore|rollback|destroy|destructive confirmation|persistent data|manual|pinned" .agents/context docs/adr`
 - `rg -n "health status|lifecycle state|status reason|status evidence|Nephos-aware|not_applicable|unsupported" .agents/context docs/adr`
 - `rg -n "single-node|minimal cluster lifecycle|disable|service mesh|multi-component|Paperless|PostgreSQL|local filesystem catalog" .agents/context docs/adr`
+- `rg -n "namespace|NetworkPolicy|Traefik|Cloudflare|Tailscale|Kubernetes Secrets|redacted|route intent" .agents/context docs/adr`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -148,4 +161,7 @@ Open questions:
 - Concrete backup implementation design.
 - Health/status check implementation details.
 - Reference scenario exact flow and manifest examples.
+- Namespace label/slug details.
+- Local ingress hostname/TLS details.
+- Secret naming/rotation details.
 - Catalog source/trust beyond local filesystem and contribution workflow.

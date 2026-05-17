@@ -99,6 +99,42 @@ It owns:
 
 Nephos should use Kubernetes, not reimplement it.
 
+### Runtime Boundaries
+
+Nephos uses separate Kubernetes namespaces for App instances, Service instances, and control-plane components.
+
+Namespace pattern:
+
+- `nephos-system`
+- `app-<slug>`
+- `svc-<slug>`
+
+`remove` preserves namespaces.
+
+`destroy` deletes namespaces by default after destructive confirmation when persistent data exists.
+
+Phase 1 does not enable default-deny NetworkPolicy.
+
+Traefik is the Phase 1 default ingress controller because K3s includes it by default.
+
+Nephos owns route and visibility intent.
+
+Kubernetes owns concrete Ingress resources.
+
+Phase 1 implements local visibility.
+
+Public/private/tailnet exposure, Cloudflare Tunnel automation, Tailscale automation, DNS automation, and TLS automation are deferred.
+
+Nephos-generated local ingress should be compatible with a manually configured Cloudflare Tunnel.
+
+Phase 1 uses Kubernetes Secrets.
+
+Service-internal/admin secrets live in Service namespaces.
+
+App binding credentials are materialized into App namespaces.
+
+Secret values must be redacted in API responses, CLI output, status output, logs, and diagnostics by default.
+
 ## Catalog Layer
 
 Nephos should have two catalogs:

@@ -32,6 +32,10 @@ Runtime:
 - minimal cluster lifecycle support
 - no CRD-first model
 - no GitOps source-of-truth model
+- one namespace per App instance
+- one namespace per Service instance
+- `nephos-system` namespace for Nephos control-plane/runtime support components
+- no default-deny NetworkPolicy
 
 State:
 
@@ -67,6 +71,21 @@ Lifecycle:
 - App and Service `remove`
 - App and Service `destroy`
 - `disable` deferred
+
+Ingress and secrets:
+
+- Traefik default ingress controller
+- local visibility mode
+- Nephos-owned route intent
+- Kubernetes-owned Ingress resources
+- stopped Apps keep route intent and may keep runtime ingress
+- remove/destroy remove runtime ingress
+- Kubernetes Secrets for Phase 1
+- App binding credentials materialized into App namespaces
+- Service-internal/admin secrets in Service namespaces
+- stop/remove preserve Secrets
+- destroy deletes Secrets for the destroyed entity
+- secret values redacted by default
 
 Upgrades/backups:
 
@@ -111,9 +130,9 @@ Reference scenario:
 ## Still To Define
 
 - exact binding behavior for first reference scenario
-- namespace strategy details
-- ingress/TLS/local DNS behavior
-- secrets naming and preservation behavior
+- exact namespace slug normalization and labels
+- ingress/TLS/local DNS hostname behavior
+- secret naming and rotation behavior
 - backup guarantees
 - local development workflow
 - packaging/distribution

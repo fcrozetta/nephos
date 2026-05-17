@@ -38,6 +38,12 @@ Phase 1 does not include:
 - GitOps source of truth
 - remote catalog trust/signing
 - OCI catalog distribution
+- default-deny NetworkPolicy
+- Cloudflare Tunnel automation
+- Tailscale automation
+- DNS automation
+- TLS/cert-manager automation
+- external secret manager integration
 - automatic latest upgrades
 - guaranteed rollback
 - concrete backup/restore implementation
@@ -67,3 +73,11 @@ Phase 1 does not provide universal backup/restore.
 Phase 1 does not guarantee rollback.
 
 Phase 1 does not automatically upgrade Apps, Services, charts, catalogs, or Nephos.
+
+## Runtime Boundary Non-Goals
+
+Phase 1 does not automate public exposure.
+
+Manually configured tunnels such as Cloudflare Tunnel must be compatible with Nephos local ingress, but Nephos does not manage tunnel credentials, tunnel lifecycle, or DNS records in Phase 1.
+
+Phase 1 does not provide advanced secret management, rotation, or external vault integration.

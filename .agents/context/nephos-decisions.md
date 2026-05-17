@@ -274,3 +274,69 @@ No service mesh is required or included in Phase 1.
 ## D037: Paperless and PostgreSQL reference scenario
 
 The canonical Phase 1 reference scenario is Paperless App plus PostgreSQL Service.
+
+## D038: One namespace per App or Service instance
+
+Nephos uses separate Kubernetes namespaces for App instances and Service instances.
+
+Use `app-<slug>` for App instances, `svc-<slug>` for Service instances, and `nephos-system` for Nephos control-plane/runtime support components.
+
+Remove preserves namespaces.
+
+Destroy deletes namespaces by default after destructive confirmation when persistent data exists.
+
+## D039: No default-deny NetworkPolicy in Phase 1
+
+Phase 1 does not apply default-deny NetworkPolicy.
+
+Network policy is reserved for later design.
+
+## D040: Traefik local ingress in Phase 1
+
+Traefik is the Phase 1 default ingress controller because K3s includes it.
+
+Nephos owns route and visibility intent.
+
+Kubernetes owns concrete Ingress resources.
+
+Phase 1 implements local visibility and reserves private, public, and tailnet visibility for later.
+
+## D041: Manual tunnel compatibility without tunnel automation
+
+Cloudflare Tunnel, Tailscale, DNS automation, and TLS automation are deferred.
+
+Nephos-generated local ingress must be compatible with a manually configured Cloudflare Tunnel, but Nephos does not manage Cloudflare credentials, tunnel lifecycle, or DNS records in Phase 1.
+
+## D042: Stopped Apps keep route intent
+
+Stopping an App keeps route intent and may keep runtime ingress objects.
+
+Status must report the App as stopped or unavailable.
+
+Removing or destroying an App removes runtime ingress objects.
+
+## D043: Kubernetes Secrets are Phase 1 secret storage
+
+Phase 1 uses Kubernetes Secrets.
+
+External secret managers are deferred.
+
+Nephos owns secret policy, labels, injection, preservation, deletion, and redaction semantics.
+
+## D044: Binding credentials are materialized into App namespaces
+
+Service-internal and Service-admin secrets live in Service instance namespaces.
+
+App binding credentials are materialized into App namespaces.
+
+Apps should not read Service namespace Secrets directly.
+
+Bindings determine which App may receive which Service credentials.
+
+## D045: Secret values are redacted by default
+
+Secret values must be redacted in API responses, CLI output, status output, logs, and diagnostics by default.
+
+Stop and remove preserve Secrets.
+
+Destroy deletes Secrets for the destroyed entity after destructive confirmation when persistent data or credentials are involved.

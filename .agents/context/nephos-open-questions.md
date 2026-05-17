@@ -1,16 +1,85 @@
 # Nephos Open Questions
 
-## Namespace Strategy
+## Namespace Details
 
 Question:
 
-What namespace model should Nephos use?
+What exact namespace naming and metadata rules should Nephos use?
 
-Current leaning:
+Accepted direction:
 
-- one namespace per App
-- one namespace per Service
-- reserved nephos-system namespace for Nephos control plane
+- one namespace per App instance
+- one namespace per Service instance
+- `nephos-system` for Nephos control-plane/runtime support components
+- `app-<slug>` naming for Apps
+- `svc-<slug>` naming for Services
+- remove preserves namespaces
+- destroy deletes namespaces by default after destructive confirmation when persistent data exists
+- no default-deny NetworkPolicy in Phase 1
+
+Need to decide:
+
+- slug normalization
+- collision handling
+- required labels and annotations
+- future NetworkPolicy model
+- exact cross-namespace connection metadata in bindings
+
+## Local Ingress And Exposure Details
+
+Question:
+
+What exact local hostname, wildcard domain, DNS, and TLS strategy should Nephos use?
+
+Accepted direction:
+
+- Traefik default for Phase 1 because K3s includes it
+- Nephos owns route/visibility intent
+- Kubernetes owns Ingress resources
+- Phase 1 implements local visibility
+- private, public, and tailnet visibility are reserved
+- Cloudflare Tunnel and Tailscale automation are deferred
+- manually configured Cloudflare Tunnel must work with Nephos local ingress
+- stopped Apps keep route intent and may keep runtime ingress
+- remove/destroy remove runtime ingress
+
+Need to decide:
+
+- default local domain
+- wildcard hostname policy
+- route collision behavior
+- TLS/cert-manager strategy
+- whether Services can expose admin routes
+- future Cloudflare adapter shape
+- future Tailscale adapter shape
+
+## Secrets Details
+
+Question:
+
+What exact secret naming, labeling, rotation, and backup behavior should Nephos use?
+
+Accepted direction:
+
+- Kubernetes Secrets in Phase 1
+- external secret managers deferred
+- future secret managers may be modeled as Services
+- Service-internal/admin secrets live in Service namespaces
+- App binding credentials are materialized into App namespaces
+- Apps should not read Service namespace Secrets directly
+- stop/remove preserve Secrets
+- destroy deletes Secrets for the destroyed entity
+- secret values are redacted by default
+
+Need to decide:
+
+- exact secret naming convention
+- exact labels/annotations
+- rotation behavior
+- whether/how secrets are included in Nephos state backup
+- future explicit reveal command behavior
+- external secret manager integration model
+- exact binding credential materialization schema
 
 ## Manifest Schema Details
 
