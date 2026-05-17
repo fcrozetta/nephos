@@ -53,7 +53,16 @@ For PostgreSQL bindings, the accepted logical output fields are:
 
 Do not add a manifest `fields:` syntax for PostgreSQL binding outputs in Phase 1.
 
-The exact Secret key serialization remains open until the concrete schema is approved.
+For PostgreSQL `app-secret` outputs, use these exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+Runtime mappings may translate these keys into chart values or environment variables later.
 
 ## App Consumption
 
@@ -146,7 +155,7 @@ Need to define:
 - exact deterministic Secret naming algorithm
 - exact Secret labels and annotations
 - future optional manifest syntax for binding output payload fields, if needed
-- exact Secret key serialization
+- non-PostgreSQL Secret key serialization
 - exact runtime value mapping format
 - rebind behavior
 - credential rotation

@@ -59,6 +59,7 @@ Catalog and packaging:
 - directory-per-entry local catalog layout with `app.yaml` and `service.yaml`
 - Helm-primary runtime deployment underneath manifests
 - raw Kubernetes manifest fallback
+- raw Kubernetes manifest fallback shape deferred until first needed
 - local filesystem catalog from day one
 - repo-shipped reference catalog entries
 - user-configured local filesystem catalog paths
@@ -67,6 +68,9 @@ Catalog and packaging:
 - minimal catalog metadata carried in App/Service manifests
 - no separate catalog index
 - tiny repo-shipped reference catalog
+- Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`
+- `secret` App config option type deferred
+- unknown manifest fields rejected once canonical schemas exist
 - no schema files until Fer approves concrete validation schema
 
 Services:
@@ -100,6 +104,7 @@ Ingress and secrets:
 - remove/destroy remove runtime ingress
 - Kubernetes Secrets for Phase 1
 - App binding credentials materialized into App namespaces
+- PostgreSQL `app-secret` outputs use exact lowercase keys `host`, `port`, `database`, `username`, `password`, and `uri`
 - Service-internal/admin secrets in Service namespaces
 - stop/remove preserve Secrets
 - destroy deletes Secrets for the destroyed entity

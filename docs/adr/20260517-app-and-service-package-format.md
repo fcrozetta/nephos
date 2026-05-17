@@ -171,7 +171,12 @@ Later accepted binding/provisioning direction:
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - provisioning is a typed backend/API-owned contract
 - PostgreSQL output fields are capability-defined without a manifest `fields:` syntax in Phase 1
-- the exact Secret key serialization and provisioning execution mechanism remain open
+- PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
+- Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`
+- `secret` App config option type is deferred
+- unknown manifest fields are rejected once canonical schemas exist
+- raw Kubernetes manifest fallback shape is deferred until first needed
+- the provisioning execution mechanism remains open
 
 ## Decision Outcome
 

@@ -33,9 +33,14 @@ Accepted binding/provisioning decisions reflected in the current draft sketches:
 - Phase 1 binding output target is `app-secret`
 - PostgreSQL logical output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - PostgreSQL output fields are capability-defined; there is no Phase 1 manifest `fields:` syntax
+- PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
+- Phase 1 config option types are `string`, `integer`, `boolean`, and `enum`
+- `secret` App config option type is deferred
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `apiVersion`, `kind`, `metadata.name`, and `spec.runtime` are required for Phase 1 installable catalog entries
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists
 - Service `spec.provides[]` is required and non-empty
 - Service `spec.provisioning.mode` is required as `none` or `app-scoped-resource`
-- the exact Secret key serialization and provisioning execution mechanism remain open
+- unknown manifest fields are rejected once canonical schemas exist
+- raw Kubernetes manifest fallback shape is deferred until first needed
+- the provisioning execution mechanism remains open

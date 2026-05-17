@@ -553,7 +553,7 @@ Use `spec.runtime.type`, `spec.runtime.chart.repository`, `spec.runtime.chart.na
 
 Do not expose raw Helm values as the primary user schema.
 
-Raw Kubernetes manifest runtime reference shape remains open.
+Raw Kubernetes manifest runtime reference shape is deferred until first needed.
 
 ## D076: Phase 1 binding output target is app-secret
 
@@ -574,7 +574,7 @@ PostgreSQL bindings use these logical output fields:
 - `password`
 - `uri`
 
-The exact Kubernetes Secret key serialization remains open.
+Later accepted key serialization details are recorded in D086.
 
 ## D078: Nephos chooses deterministic binding Secret names
 
@@ -664,10 +664,48 @@ PostgreSQL binding output fields are defined by the `postgres` capability contra
 
 Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
 
-The exact Kubernetes Secret key serialization remains open.
+For PostgreSQL `app-secret` outputs, use these exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
 
 ## D087: Canonical examples wait for validation and command/status shape
 
 Keep manifest sketches under `.agents/drafts/manifests/` for now.
 
 Do not add canonical examples under `examples/` until manifest validation plus command/status shape are stable enough that examples will not immediately rot.
+
+## D088: Phase 1 App config option types are minimal
+
+Phase 1 App config option types are:
+
+- `string`
+- `integer`
+- `boolean`
+- `enum`
+
+The `secret` App config option type is deferred.
+
+App config must not become a second credential path beside bindings and generated Service credentials.
+
+Arbitrary object and array config option values are not supported in Phase 1.
+
+## D089: Unknown manifest fields are rejected once schemas exist
+
+Once canonical schemas exist, unknown manifest fields are rejected.
+
+Do not silently ignore unknown fields in canonical manifests.
+
+Before schemas exist, draft manifests remain non-canonical and must not be treated as validation contracts.
+
+## D090: Raw Kubernetes manifest fallback shape is deferred
+
+Raw Kubernetes manifests remain an accepted fallback runtime mechanism.
+
+The exact raw manifest fallback field shape is deferred until Nephos needs a raw-manifest package.
+
+Do not add raw manifest schema fields now.

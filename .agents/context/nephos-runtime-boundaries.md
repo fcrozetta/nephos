@@ -95,6 +95,15 @@ The exact naming algorithm remains open.
 
 For Phase 1, the only accepted binding output target is `app-secret`.
 
+For PostgreSQL `app-secret` outputs, use exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
 Stop preserves Secrets.
 
 Remove preserves Secrets.
@@ -118,4 +127,4 @@ Do not expose secret values unless a future explicit reveal command is designed 
 - secret labels and annotations
 - secret rotation behavior
 - whether/how secrets participate in backup
-- exact Secret key serialization
+- non-PostgreSQL Secret key serialization

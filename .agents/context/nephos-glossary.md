@@ -227,6 +227,21 @@ An App manifest focuses on user-facing workload concerns:
 - runtime deployment reference
 - health/status expectations
 
+## Config Option
+
+A user-facing App configuration input declared by an App manifest.
+
+Phase 1 config option types:
+
+- `string`
+- `integer`
+- `boolean`
+- `enum`
+
+`secret` is deferred as an App config option type.
+
+Config options must not become a second credential path beside bindings and generated Service credentials.
+
 ## Service Manifest
 
 A Nephos manifest that defines an installable Service.

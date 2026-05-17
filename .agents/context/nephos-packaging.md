@@ -82,6 +82,19 @@ Nephos derives hostnames from App instance name, route name, visibility, and con
 
 Do not put full hostnames in App manifests as the primary route model.
 
+Accepted Phase 1 config option types:
+
+- `string`
+- `integer`
+- `boolean`
+- `enum`
+
+`secret` is deferred as an App config option type.
+
+Do not use App config as a second credential path beside bindings and generated Service credentials.
+
+Do not allow arbitrary object or array config option values in Phase 1.
+
 For Phase 1 App manifests:
 
 - `spec.requires[]` is optional and defaults to an empty list.
@@ -127,7 +140,16 @@ The accepted PostgreSQL logical output fields are:
 
 Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
 
-The exact Kubernetes Secret key serialization remains open.
+For PostgreSQL `app-secret` outputs, use these exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+Runtime mappings may translate these keys into chart values or environment variables later.
 
 Accepted Phase 1 provisioning modes:
 
@@ -181,6 +203,18 @@ Accepted Helm-primary field direction:
 Do not expose raw Helm values as the primary user schema.
 
 Helm and raw Kubernetes manifests are not the product package model.
+
+The raw Kubernetes manifest fallback shape is deferred until Nephos needs a raw-manifest package.
+
+Do not add raw manifest schema fields now.
+
+## Validation Behavior
+
+Once canonical schemas exist, unknown manifest fields are rejected.
+
+Do not silently ignore unknown fields in canonical manifests.
+
+Before schemas exist, draft manifests remain non-canonical and must not be treated as validation contracts.
 
 ## Helm-Primary Policy
 

@@ -96,11 +96,16 @@ Later accepted direction:
 - Phase 1 binding output target is `app-secret`.
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`.
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1.
+- PostgreSQL `app-secret` outputs use exact lowercase Secret keys: `host`, `port`, `database`, `username`, `password`, and `uri`.
 - Other binding targets and non-PostgreSQL payload schemas remain open.
 - Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`.
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists.
+- Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`.
+- `secret` App config option type is deferred.
 - Service `spec.provides[]` is required non-empty.
 - Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`.
+- Unknown manifest fields are rejected once canonical schemas exist.
+- Raw Kubernetes manifest fallback shape is deferred until first needed.
 - Canonical examples remain blocked until manifest validation plus command/status shape are stable enough.
 
 ## Draft Sketches
@@ -120,12 +125,11 @@ Do not create canonical files under `schemas/` or `examples/` from this ADR alon
 Need to decide:
 
 - config surface format
-- accepted config option types
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
-- raw manifest runtime reference shape
-- validation rules
+- raw manifest runtime reference shape when first needed
+- validation rules beyond unknown-field rejection
 - command/status shape needed before promoting draft sketches into canonical examples
 - when to create files under `schemas/`
 

@@ -50,6 +50,17 @@ The exact binding Secret naming algorithm is not finalized.
 
 For Phase 1, `app-secret` is the only accepted binding output target.
 
+For PostgreSQL `app-secret` outputs, use these exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+Runtime mappings may translate these keys into chart values or environment variables later.
+
 ## Lifecycle Behavior
 
 Stop preserves Secrets.
@@ -92,7 +103,7 @@ Need to define:
 - whether secrets are backed up
 - future reveal/debug command behavior
 - external secret manager integration model
-- exact Secret key serialization
+- non-PostgreSQL Secret key serialization
 - binding credential materialization schemas beyond accepted PostgreSQL logical fields
 
 ## Consequences

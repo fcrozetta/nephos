@@ -237,6 +237,15 @@ These fields are capability-defined.
 
 Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
 
+For PostgreSQL `app-secret` outputs, use exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
 Phase 1 recognizes two provisioning modes:
 
 - `app-scoped-resource`
@@ -267,6 +276,17 @@ For Phase 1 App manifests, these fields default to empty lists:
 - `spec.routes[]`
 - `spec.config.options[]`
 
+Phase 1 App config option types are:
+
+- `string`
+- `integer`
+- `boolean`
+- `enum`
+
+The `secret` App config option type is deferred.
+
+App config must not become a second credential path beside bindings and generated Service credentials.
+
 For Phase 1 Service manifests:
 
 - `spec.provides[]` is required and must be non-empty.
@@ -274,6 +294,10 @@ For Phase 1 Service manifests:
 - `spec.operations[]` defaults to an empty list.
 
 For the Phase 1 PostgreSQL Service, `spec.bindings.outputs[]` must include an `app-secret` output.
+
+Once canonical schemas exist, unknown manifest fields are rejected.
+
+Raw Kubernetes manifest fallback shape is deferred until Nephos needs a raw-manifest package.
 
 ## Service Ownership Model
 

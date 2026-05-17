@@ -99,6 +99,19 @@ Use `spec.config.options[]` as the config surface.
 
 Option fields such as name, type, default, and required are reserved for later refinement.
 
+Accepted Phase 1 config option types:
+
+- `string`
+- `integer`
+- `boolean`
+- `enum`
+
+`secret` is deferred as an App config option type.
+
+Do not use App config as a second credential path beside bindings and generated Service credentials.
+
+Do not allow arbitrary object or array config option values in Phase 1.
+
 Do not model App config as arbitrary environment variables in the primary schema.
 
 For Phase 1 App manifests:
@@ -148,7 +161,16 @@ The accepted PostgreSQL logical output fields are:
 
 Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
 
-The exact Secret key serialization remains open.
+For PostgreSQL `app-secret` outputs, use these exact lowercase Kubernetes Secret keys:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+Runtime mappings may translate these keys into chart values or environment variables later.
 
 Use `spec.provisioning.mode` for Service-side binding provisioning behavior.
 
@@ -204,6 +226,18 @@ Do not expose raw Helm values as the primary user schema.
 
 Raw Kubernetes manifest runtime references remain a fallback, but their exact field shape remains open.
 
+The raw Kubernetes manifest fallback shape is deferred until Nephos needs a raw-manifest package.
+
+Do not add raw manifest schema fields now.
+
+## Validation Behavior
+
+Once canonical schemas exist, unknown manifest fields are rejected.
+
+Do not silently ignore unknown fields in canonical manifests.
+
+Before schemas exist, draft manifests remain non-canonical and must not be treated as validation contracts.
+
 ## Draft Sketches
 
 Non-canonical draft sketches live under:
@@ -222,16 +256,15 @@ Do not create files under `schemas/` or `examples/` from this ADR alone.
 Need to decide:
 
 - config option object shape
-- accepted config option types
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
-- exact Secret key serialization
+- non-PostgreSQL Secret key serialization
 - required/default behavior for Services that expose capabilities without binding outputs
 - provisioning execution mechanism
 - Service operation contract
-- raw manifest runtime reference shape
-- validation rules
+- raw manifest runtime reference shape when first needed
+- validation rules beyond unknown-field rejection
 - exact promotion path from draft sketches to canonical examples after command/status shape is stable
 - when to create schema files under `schemas/`
 

@@ -81,7 +81,7 @@ Need to decide:
 - whether/how secrets are included in Nephos state backup
 - future explicit reveal command behavior
 - external secret manager integration model
-- exact Secret key serialization
+- non-PostgreSQL Secret key serialization
 - binding credential materialization schemas beyond accepted PostgreSQL logical fields
 
 ## Manifest Schema Details
@@ -118,6 +118,11 @@ Accepted direction:
 - Apps consume bindings through symbolic aliases such as `as: database`
 - Nephos maps binding outputs into runtime values through the reserved `spec.runtime.values.mappings[]` lane
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1
+- PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
+- Phase 1 config option types are `string`, `integer`, `boolean`, and `enum`
+- `secret` App config option type is deferred
+- App config must not become a second credential path beside bindings and generated Service credentials
+- arbitrary object and array config option values are not supported in Phase 1
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance
 - `none` means no Service-side resource is created for the binding
@@ -134,21 +139,22 @@ Accepted direction:
 - Service `spec.provisioning.mode` is required and must be either `none` or `app-scoped-resource`
 - `spec.operations[]` defaults to an empty list
 - PostgreSQL Service `spec.bindings.outputs[]` must include an `app-secret` output
+- unknown manifest fields are rejected once canonical schemas exist
+- raw Kubernetes manifest fallback shape is deferred until first needed
 - canonical examples remain blocked until manifest validation plus command/status shape are stable enough
 - no schema file until Fer approves the concrete validation schema
 
 Need to decide:
 
 - config option object shape
-- accepted config option types
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
-- exact Secret key serialization
+- non-PostgreSQL Secret key serialization
 - exact deterministic Secret naming algorithm
 - required/default behavior for Services that expose capabilities without binding outputs
-- raw manifest runtime reference shape
-- validation rules
+- raw manifest runtime reference shape when first needed
+- validation rules beyond unknown-field rejection
 - command/status shape needed before promoting draft sketches into canonical examples
 
 ## Dedicated Service Sharing Policy Details

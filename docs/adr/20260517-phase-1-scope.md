@@ -35,6 +35,7 @@ Phase 1 includes:
 - separate App and Service Nephos manifests
 - Helm-primary runtime deployment
 - raw Kubernetes manifest fallback
+- raw Kubernetes manifest fallback shape deferred until first needed
 - App and Service model
 - Service instances
 - capabilities
@@ -45,6 +46,9 @@ Phase 1 includes:
 - minimal Nephos-aware health/status
 - backup intent/status only
 - pinned versions and manual upgrades
+- Phase 1 App config option types `string`, `integer`, `boolean`, and `enum`
+- `secret` App config option type deferred
+- unknown manifest fields rejected once canonical schemas exist
 
 Phase 1 lifecycle commands for Apps and Services:
 
