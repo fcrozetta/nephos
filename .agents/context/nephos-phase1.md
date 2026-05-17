@@ -11,10 +11,15 @@ Backend/control plane:
 - `nephos` repository
 - Python
 - FastAPI
+- `uv` backend workflow
 - SQLite canonical desired-state database
 - simple explicit SQL migrations
 - official Python Kubernetes client
 - API-owned in-process reconciler
+- `pytest` backend tests
+- `ruff` backend linting/formatting checks
+- mocks/fakes for unit tests
+- real K3s for Kubernetes integration tests
 
 CLI:
 
@@ -23,6 +28,8 @@ CLI:
 - Typer
 - trusted local client
 - talks to Nephos API/local controller
+- owns its own test/lint/release workflow
+- version-aware with backend but no strict compatibility blocking
 
 Runtime:
 
@@ -93,6 +100,12 @@ Ingress and secrets:
 - destroy deletes Secrets for the destroyed entity
 - secret values redacted by default
 
+Packaging/distribution:
+
+- backend local development process
+- backend container image for runtime packaging
+- full installer packaging deferred
+
 Upgrades/backups:
 
 - pinned versions
@@ -143,4 +156,7 @@ Reference scenario:
 - local development workflow
 - packaging/distribution
 - future remote catalog trust/signing/update behavior
+- exact developer commands
+- backend image layout and registry
+- cross-repo release process
 - reference scenario exact command flow

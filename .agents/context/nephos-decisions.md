@@ -368,3 +368,39 @@ For Phase 1, App and Service manifests carry minimal catalog metadata.
 A separate catalog index is deferred.
 
 Catalog metadata must not become a second source of truth for package semantics.
+
+## D050: Backend local development uses uv
+
+Use `uv` as the canonical Python workflow for backend development in this repository.
+
+## D051: Backend tests use pytest and ruff
+
+Use `pytest` for backend tests.
+
+Use `ruff` for backend linting/formatting checks.
+
+Use mocks or fakes for unit tests.
+
+Use real K3s for Kubernetes integration tests.
+
+## D052: Phase 1 backend distribution is local process plus container image
+
+Phase 1 backend distribution consists of a local development process and a backend container image for runtime packaging.
+
+Full installer packaging is deferred.
+
+## D053: CLI workflow belongs to the CLI repository
+
+The separate `nephos-cli` repository owns CLI implementation, linting, testing, packaging, and release workflow.
+
+Do not add CLI implementation code to this repository without an explicit boundary change.
+
+## D054: Phase 1 has version awareness without strict blocking
+
+The backend should expose a version endpoint.
+
+The CLI should report CLI and backend versions and may warn when backend version is unknown, older, or newer than expected.
+
+The CLI should not block state-mutating commands solely because of version mismatch in Phase 1.
+
+Strict CLI/backend compatibility blocking is deferred.

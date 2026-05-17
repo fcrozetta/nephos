@@ -47,6 +47,14 @@ The CLI talks to the Nephos API/local controller.
 
 The CLI must not become an unstructured direct Kubernetes mutation layer.
 
+Phase 1 has backend/CLI version awareness but no strict compatibility blocking.
+
+The backend should expose a version endpoint.
+
+The CLI should report CLI and backend versions and may warn on unknown/newer/older backend versions.
+
+The CLI should not block state-mutating commands solely because of version mismatch in Phase 1.
+
 It should support:
 
 - nephos cluster *
@@ -65,6 +73,13 @@ For Phase 1, the backend stack is:
 - FastAPI
 - SQLite
 - simple explicit SQL migrations
+- `uv` local development workflow
+- `pytest` backend tests
+- `ruff` backend linting/formatting checks
+
+Backend unit tests should use mocks/fakes.
+
+Kubernetes integration tests should run against real K3s.
 
 ### Controller / Reconciler
 
@@ -253,3 +268,13 @@ No login, multi-user model, roles, or RBAC are required in Phase 1.
 The Web UI is deferred.
 
 Friend, cloud, hosted, and multi-user scenarios are out of scope for Phase 1 but not forbidden forever.
+
+## Development And Distribution
+
+This repository owns backend/control-plane development workflow.
+
+The CLI repository owns CLI linting, testing, packaging, and release workflow.
+
+Phase 1 backend distribution is a local development process plus backend container image.
+
+Full installer packaging is deferred.

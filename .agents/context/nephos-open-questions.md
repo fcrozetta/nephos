@@ -194,18 +194,65 @@ Question:
 
 How should the backend and CLI be packaged and distributed?
 
-Current accepted repository boundary:
+Accepted direction:
 
 - backend/control plane lives in `nephos`
 - CLI lives in `../nephos-cli`
+- backend Phase 1 distribution is local development process plus backend container image
+- full installer packaging is deferred
+- CLI workflow belongs to the separate CLI repository
+- Phase 1 has backend/CLI version awareness without strict compatibility blocking
 
 Need to decide:
 
 - backend package layout
 - backend container image strategy
 - CLI installation path
-- version compatibility between backend and CLI
 - release process across the two repositories
+- future strict compatibility matrix
+
+## Local Development Workflow Details
+
+Question:
+
+What are the exact local development commands and conventions for Nephos?
+
+Accepted direction:
+
+- `uv` is the canonical backend Python workflow
+- CLI points at local backend/API during development
+
+Need to decide:
+
+- exact `uv` commands
+- whether to use Makefile/task runner wrappers
+- how SQLite state is initialized/reset
+- how migrations are run locally
+- how K3s is started/reset for local development
+- how `../nephos-cli` points to a local backend
+
+## Testing Details
+
+Question:
+
+What exact test commands, tags, and CI boundaries should Nephos use?
+
+Accepted direction:
+
+- `pytest` for backend tests
+- `ruff` for backend linting/formatting checks
+- mocks/fakes for unit tests
+- real K3s for Kubernetes integration tests
+- CLI tests live in the separate CLI repository
+
+Need to decide:
+
+- exact test command names
+- pytest marker names
+- integration test setup/teardown
+- whether CI runs K3s integration tests by default
+- fixture strategy for Kubernetes clients
+- coverage expectations
 
 ## Future Resource Profile Design
 
@@ -361,35 +408,3 @@ Need to decide:
 - secret names
 - ingress hostname policy
 - data preservation checks
-
-## Local Development Workflow
-
-Question:
-
-What is the canonical local development workflow for Nephos?
-
-Need to decide:
-
-- whether local backend development uses `uv`
-- how SQLite state is initialized/reset
-- how K3s is started for local development
-- whether Docker Compose is used for supporting developer services
-- how `../nephos-cli` points to a local backend
-
-## Testing Approach
-
-Question:
-
-What is the required testing baseline before implementation starts?
-
-Current default from Fer's ecosystem:
-
-- pytest
-- Ruff
-- uv
-
-Need to decide:
-
-- unit vs integration test boundaries
-- whether Kubernetes integration tests use K3s, kind, or mocks
-- whether CLI tests live only in `../nephos-cli`

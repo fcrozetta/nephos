@@ -26,6 +26,10 @@ Use simple explicit SQL migrations.
 
 Use the official Python Kubernetes client.
 
+Use `uv` as the canonical backend Python workflow.
+
+Use `pytest` and `ruff` as the backend test/lint baseline.
+
 Use an API-owned in-process reconciler for Phase 1.
 
 Defer the Web UI and frontend framework decision.
@@ -100,4 +104,12 @@ The CLI must use the Nephos API/local controller as its product boundary.
 
 The backend must expose stable enough API contracts for the CLI to operate without embedding backend internals.
 
-Packaging/distribution, local development workflow, and final test conventions still need more explicit documentation before implementation begins.
+Backend unit tests use mocks/fakes.
+
+Kubernetes integration tests use real K3s.
+
+Phase 1 backend distribution is a local development process plus backend container image.
+
+The CLI has its own test, lint, packaging, and release workflow in the separate `nephos-cli` repository.
+
+Phase 1 has backend/CLI version awareness but no strict compatibility blocking.

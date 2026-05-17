@@ -61,10 +61,34 @@ Kubernetes client:
 
 - Official Python Kubernetes client
 
+Local development:
+
+- `uv` is the canonical backend Python workflow
+- backend runs as a local process during development
+- CLI points at the local backend/API during development
+
+Testing:
+
+- `pytest` for backend tests
+- `ruff` for backend linting/formatting checks
+- mocks/fakes for backend unit tests
+- real K3s for Kubernetes integration tests
+
+Packaging/distribution:
+
+- backend container image for runtime packaging
+- full installer packaging deferred
+- CLI packaging/test/lint/release workflow lives in `../nephos-cli`
+
 CLI/API boundary:
 
 - The CLI talks to the Nephos API/local controller
 - The CLI must not become an unstructured direct Kubernetes mutation layer
+- Phase 1 has backend/CLI version awareness but no strict compatibility blocking
+- Backend should expose a version endpoint
+- CLI should report CLI and backend versions
+- CLI may warn on unknown/newer/older backend version
+- CLI should not block state-mutating commands solely because of version mismatch in Phase 1
 
 State import/export:
 
@@ -89,12 +113,14 @@ Nephos-owned runtime resources should be labeled and/or annotated so drift detec
 
 ## Still To Decide
 
-Packaging/distribution for the backend and CLI are not fully decided.
+Exact developer commands are not finalized.
 
-Local development workflow should be documented before implementation starts.
+Need to decide:
 
-Testing defaults should follow the project baseline unless Fer chooses otherwise:
-
-- pytest
-- Ruff
-- uv
+- exact `uv` commands
+- exact local SQLite initialization/reset commands
+- exact migration command
+- exact K3s startup/reset workflow
+- exact integration test markers
+- backend image layout and registry
+- cross-repo release process

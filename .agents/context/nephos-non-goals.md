@@ -53,6 +53,8 @@ Phase 1 does not include:
 - Service operation implementation
 - `disable` lifecycle operation
 - full cluster lifecycle management polish
+- full installer packaging
+- strict CLI/backend compatibility blocking
 
 ## Resource Non-Goals
 
@@ -89,3 +91,11 @@ Phase 1 does not provide advanced secret management, rotation, or external vault
 Phase 1 does not provide remote catalog distribution, catalog signing, third-party catalog trust policy, or private remote catalog credentials.
 
 Phase 1 does not provide sandboxing guarantees for catalog-provided packages.
+
+## Development And Release Non-Goals
+
+Phase 1 does not define full installer packaging.
+
+Phase 1 does not enforce strict CLI/backend compatibility blocking.
+
+CLI linting, testing, packaging, and release workflow are owned by the separate CLI repository.
