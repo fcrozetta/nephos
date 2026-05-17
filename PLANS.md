@@ -52,6 +52,7 @@ Current understanding:
 - Batch 13 manifest schema shape decisions are accepted: Nephos manifests are YAML, use a Kubernetes-like `apiVersion`/`kind`/`metadata`/`spec` envelope with Nephos semantics, accepted manifest kinds are `App` and `Service`, this does not imply CRDs, runtime references stay below Nephos manifests with Helm-primary pinned chart identity and raw manifest fallback, binding remains minimal at manifest level, and non-canonical draft sketches were added under `.agents/drafts/manifests/`.
 - Batch 14 manifest field convention decisions are accepted: manifest `apiVersion` is `nephos.pro/v1alpha1`, local catalogs use directory-per-entry layout with `catalog/apps/<app-slug>/app.yaml` and `catalog/services/<service-slug>/service.yaml`, catalogs contain available Apps/Services while installed instances live in Nephos desired state, App manifests use `spec.requires[]`, `spec.routes[]`, `spec.config.options[]`, and `spec.runtime`, Service manifests use `spec.provides[]`, `spec.bindings.outputs[]`, `spec.provisioning.mode`, `spec.runtime`, and `spec.operations[]`, routes do not carry full hostnames, and Nephos derives hostnames from App instance name, route name, visibility, and domain policy.
 - Batch 15 binding/provisioning decisions are accepted: Phase 1 binding output target is `app-secret`, PostgreSQL logical binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`, Service manifests declare logical outputs rather than final Secret names, Nephos chooses deterministic binding Secret names, App manifests consume bindings through symbolic aliases such as `as: database`, Phase 1 provisioning modes are `app-scoped-resource` and `none`, provisioning is a typed backend/API-owned contract, remove preserves provisioned Service-side resources, and destroy deletes them after destructive confirmation.
+- Batch 16 manifest field requirement decisions are accepted: Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`; App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists; Service `spec.provides[]` is required non-empty; Service `spec.provisioning.mode` is required as `none` or `app-scoped-resource`; PostgreSQL output fields are capability-defined without manifest `fields:` syntax in Phase 1; canonical examples remain blocked until manifest validation plus command/status shape are stable enough.
 
 Files likely to change:
 
@@ -138,6 +139,8 @@ Proposed steps:
 - Move draft sketches into directory-per-entry catalog layout under `.agents/drafts/manifests/`.
 - Accept the binding model ADR.
 - Update binding output and provisioning context.
+- Accept required/optional manifest field rules.
+- Record the decision not to add PostgreSQL output `fields:` syntax in Phase 1.
 - Continue the interview with manifest schema or remaining open questions.
 
 Risks:
@@ -198,6 +201,7 @@ Validation commands:
 - `rg -n "apiVersion|kind|metadata|spec|Kubernetes-like|CRD|YAML|non-canonical|catalog/apps/paperless|catalog/services/postgres" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "nephos.pro/v1alpha1|catalog/apps|catalog/services|app.yaml|service.yaml|spec.requires|spec.provides|spec.routes|app-secret|values.mappings|full hostnames|domain policy" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "app-secret|host|port|database|username|password|uri|app-scoped-resource|provisioning|deterministic Secret|Secret key serialization" .agents/context docs/adr .agents/drafts PLANS.md`
+- `rg -n "required|defaults to an empty list|fields:|canonical examples|manifest validation|command/status shape" .agents/context docs/adr .agents/drafts PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:

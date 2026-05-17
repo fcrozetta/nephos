@@ -40,6 +40,8 @@ Nephos chooses a deterministic Secret name from binding identity so reconciliati
 
 The exact naming algorithm remains open.
 
+PostgreSQL binding outputs are capability-defined.
+
 For PostgreSQL bindings, the accepted logical output fields are:
 
 - `host`
@@ -49,7 +51,9 @@ For PostgreSQL bindings, the accepted logical output fields are:
 - `password`
 - `uri`
 
-The exact manifest syntax for declaring payload fields and the exact Secret key serialization remain open until the concrete schema is approved.
+Do not add a manifest `fields:` syntax for PostgreSQL binding outputs in Phase 1.
+
+The exact Secret key serialization remains open until the concrete schema is approved.
 
 ## App Consumption
 
@@ -141,7 +145,7 @@ Need to define:
 - binding names
 - exact deterministic Secret naming algorithm
 - exact Secret labels and annotations
-- exact manifest syntax for binding output payload fields
+- future optional manifest syntax for binding output payload fields, if needed
 - exact Secret key serialization
 - exact runtime value mapping format
 - rebind behavior

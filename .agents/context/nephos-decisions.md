@@ -431,7 +431,7 @@ Low-level implementation details may be chosen pragmatically when consistent wit
 
 Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema.
 
-Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
+Do not add canonical examples under `examples/` until manifest validation plus command/status shape are stable enough and Fer approves promotion.
 
 Temporary draft manifests are allowed while designing schemas, but they must live under `.agents/drafts/manifests/`, be clearly marked non-canonical, and not be treated as source of truth.
 
@@ -574,7 +574,7 @@ PostgreSQL bindings use these logical output fields:
 - `password`
 - `uri`
 
-The exact manifest syntax for declaring payload fields and the exact Secret key serialization remain open.
+The exact Kubernetes Secret key serialization remains open.
 
 ## D078: Nephos chooses deterministic binding Secret names
 
@@ -622,3 +622,52 @@ Removing an App preserves provisioned Service-side resources created for that Ap
 Destroying an App deletes provisioned Service-side resources created for that App after destructive confirmation.
 
 Binding materialized Secrets follow the accepted secret lifecycle.
+
+## D083: Phase 1 installable catalog entries require runtime identity fields
+
+Phase 1 installable App and Service catalog entries require:
+
+- `apiVersion`
+- `kind`
+- `metadata.name`
+- `spec.runtime`
+
+This applies to catalog entries that Nephos deploys.
+
+Future imported, external, or pre-existing Services may need a different runtime shape, but that requires a later explicit decision.
+
+## D084: App requirements, routes, and config options default empty
+
+For Phase 1 App manifests:
+
+- `spec.requires[]` is optional and defaults to an empty list.
+- `spec.routes[]` is optional and defaults to an empty list.
+- `spec.config.options[]` is optional and defaults to an empty list.
+
+This keeps standalone, worker, internal, and no-route Apps valid.
+
+## D085: Service provides and provisioning mode are explicit
+
+For Phase 1 Service manifests:
+
+- `spec.provides[]` is required and must be non-empty.
+- `spec.provisioning.mode` is required and must be either `none` or `app-scoped-resource`.
+- `spec.operations[]` is optional and defaults to an empty list.
+
+For the Phase 1 PostgreSQL Service, `spec.bindings.outputs[]` must include an `app-secret` output.
+
+The broader required/default behavior for Services that expose capabilities without binding outputs remains open.
+
+## D086: PostgreSQL output fields are capability-defined
+
+PostgreSQL binding output fields are defined by the `postgres` capability contract.
+
+Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
+
+The exact Kubernetes Secret key serialization remains open.
+
+## D087: Canonical examples wait for validation and command/status shape
+
+Keep manifest sketches under `.agents/drafts/manifests/` for now.
+
+Do not add canonical examples under `examples/` until manifest validation plus command/status shape are stable enough that examples will not immediately rot.

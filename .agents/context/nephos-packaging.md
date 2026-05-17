@@ -36,6 +36,17 @@ Accepted manifest API version:
 
 This is a manifest schema/version lane, not a Nephos product version, App version, Service version, catalog version, or runtime package version.
 
+For Phase 1 installable catalog entries, every App and Service manifest requires:
+
+- `apiVersion`
+- `kind`
+- `metadata.name`
+- `spec.runtime`
+
+This requirement applies to installable catalog entries that Nephos deploys.
+
+Future imported, external, or pre-existing Services may need a different runtime shape, but that requires a later explicit decision.
+
 ## Manifest Types
 
 Use separate manifest formats for Apps and Services.
@@ -71,6 +82,14 @@ Nephos derives hostnames from App instance name, route name, visibility, and con
 
 Do not put full hostnames in App manifests as the primary route model.
 
+For Phase 1 App manifests:
+
+- `spec.requires[]` is optional and defaults to an empty list.
+- `spec.routes[]` is optional and defaults to an empty list.
+- `spec.config.options[]` is optional and defaults to an empty list.
+
+This keeps standalone, worker, internal, and no-route Apps valid.
+
 ## Service Manifest
 
 A Service manifest describes shared platform infrastructure that exposes capabilities.
@@ -95,7 +114,9 @@ Accepted initial field conventions:
 
 For Phase 1, `app-secret` is the only accepted binding output target.
 
-For PostgreSQL bindings, the accepted logical output fields are:
+PostgreSQL binding outputs are capability-defined.
+
+The accepted PostgreSQL logical output fields are:
 
 - `host`
 - `port`
@@ -104,7 +125,9 @@ For PostgreSQL bindings, the accepted logical output fields are:
 - `password`
 - `uri`
 
-The exact manifest syntax for declaring payload fields and the exact Kubernetes Secret key serialization remain open.
+Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
+
+The exact Kubernetes Secret key serialization remains open.
 
 Accepted Phase 1 provisioning modes:
 
@@ -124,6 +147,17 @@ The concrete provisioning execution mechanism remains open.
 `spec.operations[]` is reserved.
 
 The Service operation contract remains deferred.
+
+For Phase 1 Service manifests:
+
+- `spec.provides[]` is required and must be non-empty.
+- `spec.provisioning.mode` is required and must be either `none` or `app-scoped-resource`.
+- `spec.operations[]` is optional and defaults to an empty list.
+- `spec.bindings.outputs[]` is required when the provided capability contract needs binding output materialization.
+
+For the Phase 1 PostgreSQL Service, `spec.bindings.outputs[]` must include an `app-secret` output.
+
+The broader required/default behavior for Services that expose capabilities without binding outputs remains open.
 
 ## Runtime Deployment References
 
@@ -305,7 +339,7 @@ The initial field conventions have been approved, but the concrete validation sc
 
 Do not add files under `schemas/` until Fer approves the concrete validation schema.
 
-Do not add examples under `examples/` until the example shape is approved.
+Do not add examples under `examples/` until manifest validation plus command/status shape are stable enough that canonical examples will not immediately rot.
 
 Temporary draft manifest sketches may live under `.agents/drafts/manifests/`.
 

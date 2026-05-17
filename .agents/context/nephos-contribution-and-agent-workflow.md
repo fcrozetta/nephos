@@ -78,7 +78,7 @@ Changes that alter architecture or public contracts must update ADRs, context, o
 
 Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema.
 
-Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
+Do not add canonical examples under `examples/` until manifest validation plus command/status shape are stable enough and Fer approves promotion.
 
 Temporary draft manifests may be used while designing schemas.
 

@@ -17,7 +17,7 @@ spec:
       - name: connection
         target: app-secret
         # Logical output fields: host, port, database, username, password, uri.
-        # Exact payload declaration syntax and Secret key serialization are open.
+        # No Phase 1 manifest fields: syntax. Secret key serialization is open.
   provisioning:
     # Accepted Phase 1 modes: app-scoped-resource, none.
     # Exact provisioning execution mechanism is open.

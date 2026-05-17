@@ -162,11 +162,16 @@ A Service manifest declares:
 
 Later accepted binding/provisioning direction:
 
+- Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`
+- App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists
+- Service `spec.provides[]` is required non-empty
+- Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`
 - Phase 1 binding output target is `app-secret`
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - provisioning is a typed backend/API-owned contract
-- the exact payload declaration syntax and provisioning execution mechanism remain open
+- PostgreSQL output fields are capability-defined without a manifest `fields:` syntax in Phase 1
+- the exact Secret key serialization and provisioning execution mechanism remain open
 
 ## Decision Outcome
 

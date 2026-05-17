@@ -70,7 +70,7 @@ The reference scenario must use the local filesystem catalog and Nephos manifest
 
 Do not hardcode Paperless or PostgreSQL behavior in backend logic.
 
-Do not create canonical files under `examples/` until Fer approves the manifest/example shape.
+Do not create canonical files under `examples/` until manifest validation plus command/status shape are stable enough and Fer approves promotion.
 
 Draft manifest sketches may live under `.agents/drafts/manifests/` while schema design is in progress.
 

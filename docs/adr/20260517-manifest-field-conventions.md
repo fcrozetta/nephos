@@ -49,6 +49,19 @@ Use:
 
 The others are optional.
 
+## Required Field Matrix
+
+For Phase 1 installable catalog entries, every App and Service manifest requires:
+
+- `apiVersion`
+- `kind`
+- `metadata.name`
+- `spec.runtime`
+
+This requirement applies to installable catalog entries that Nephos deploys.
+
+Future imported, external, or pre-existing Services may need a different runtime shape, but that requires a later explicit decision.
+
 ## App Fields
 
 Use `spec.requires[]` for capability requirements.
@@ -88,6 +101,14 @@ Option fields such as name, type, default, and required are reserved for later r
 
 Do not model App config as arbitrary environment variables in the primary schema.
 
+For Phase 1 App manifests:
+
+- `spec.requires[]` is optional and defaults to an empty list.
+- `spec.routes[]` is optional and defaults to an empty list.
+- `spec.config.options[]` is optional and defaults to an empty list.
+
+This keeps standalone, worker, internal, and no-route Apps valid.
+
 ## Service Fields
 
 Use `spec.provides[]` for exposed capabilities.
@@ -114,7 +135,9 @@ spec:
 
 For Phase 1, `app-secret` is the only accepted binding output target.
 
-For PostgreSQL bindings, the accepted logical output fields are:
+PostgreSQL binding outputs are capability-defined.
+
+The accepted PostgreSQL logical output fields are:
 
 - `host`
 - `port`
@@ -123,7 +146,9 @@ For PostgreSQL bindings, the accepted logical output fields are:
 - `password`
 - `uri`
 
-The exact manifest syntax for declaring payload fields and the exact Secret key serialization remain open.
+Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
+
+The exact Secret key serialization remains open.
 
 Use `spec.provisioning.mode` for Service-side binding provisioning behavior.
 
@@ -143,6 +168,17 @@ The concrete provisioning execution mechanism remains open.
 Use `spec.operations: []` to reserve Service operations.
 
 The Service operation contract remains deferred.
+
+For Phase 1 Service manifests:
+
+- `spec.provides[]` is required and must be non-empty.
+- `spec.provisioning.mode` is required and must be either `none` or `app-scoped-resource`.
+- `spec.operations[]` is optional and defaults to an empty list.
+- `spec.bindings.outputs[]` is required when the provided capability contract needs binding output materialization.
+
+For the Phase 1 PostgreSQL Service, `spec.bindings.outputs[]` must include an `app-secret` output.
+
+The broader required/default behavior for Services that expose capabilities without binding outputs remains open.
 
 ## Runtime Reference
 
@@ -185,18 +221,18 @@ Do not create files under `schemas/` or `examples/` from this ADR alone.
 
 Need to decide:
 
-- exact required vs optional field matrix
 - config option object shape
 - accepted config option types
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
-- exact binding output payload declaration syntax
+- future optional binding output payload declaration syntax, if needed
 - exact Secret key serialization
+- required/default behavior for Services that expose capabilities without binding outputs
 - provisioning execution mechanism
 - Service operation contract
 - raw manifest runtime reference shape
 - validation rules
-- promotion path from draft sketches to canonical examples
+- exact promotion path from draft sketches to canonical examples after command/status shape is stable
 - when to create schema files under `schemas/`
 
 ## Consequences

@@ -95,7 +95,13 @@ Later accepted direction:
 
 - Phase 1 binding output target is `app-secret`.
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`.
+- PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1.
 - Other binding targets and non-PostgreSQL payload schemas remain open.
+- Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`.
+- App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists.
+- Service `spec.provides[]` is required non-empty.
+- Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`.
+- Canonical examples remain blocked until manifest validation plus command/status shape are stable enough.
 
 ## Draft Sketches
 
@@ -113,15 +119,14 @@ Do not create canonical files under `schemas/` or `examples/` from this ADR alon
 
 Need to decide:
 
-- required vs optional field matrix
 - config surface format
 - accepted config option types
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
-- exact binding output payload declaration syntax
+- future optional binding output payload declaration syntax, if needed
 - raw manifest runtime reference shape
 - validation rules
-- when to promote draft sketches into canonical examples
+- command/status shape needed before promoting draft sketches into canonical examples
 - when to create files under `schemas/`
 
 ## Consequences

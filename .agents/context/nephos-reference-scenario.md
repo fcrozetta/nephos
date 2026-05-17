@@ -86,7 +86,7 @@ The PostgreSQL Service instance itself must not be deleted as a side effect of s
 
 ## Draft Manifest Rule
 
-Canonical examples under `examples/` are still blocked until Fer approves manifest/example shape.
+Canonical examples under `examples/` are still blocked until manifest validation plus command/status shape are stable enough and Fer approves promotion.
 
 Draft manifest sketches may live under:
 

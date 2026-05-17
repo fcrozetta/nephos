@@ -68,7 +68,7 @@ Before writing or changing architecture context or ADR files, agents must tell F
 
 Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema.
 
-Do not add canonical examples under `examples/` until Fer approves the example or manifest shape.
+Do not add canonical examples under `examples/` until manifest validation plus command/status shape are stable enough and Fer approves promotion.
 
 Temporary draft manifests are allowed while designing schemas because examples make the target shape easier to evaluate.
 

@@ -233,6 +233,10 @@ For PostgreSQL bindings, the accepted logical output fields are:
 - `password`
 - `uri`
 
+These fields are capability-defined.
+
+Do not add a manifest `fields:` syntax for PostgreSQL outputs in Phase 1.
+
 Phase 1 recognizes two provisioning modes:
 
 - `app-scoped-resource`
@@ -245,6 +249,31 @@ Do not model provisioning as arbitrary user-facing shell scripts.
 Remove preserves provisioned Service-side resources created for an App.
 
 Destroy deletes provisioned Service-side resources created for an App after destructive confirmation.
+
+## Manifest Field Requirements
+
+For Phase 1 installable catalog entries, every App and Service manifest requires:
+
+- `apiVersion`
+- `kind`
+- `metadata.name`
+- `spec.runtime`
+
+Future imported, external, or pre-existing Services may need a different runtime shape, but that requires a later explicit decision.
+
+For Phase 1 App manifests, these fields default to empty lists:
+
+- `spec.requires[]`
+- `spec.routes[]`
+- `spec.config.options[]`
+
+For Phase 1 Service manifests:
+
+- `spec.provides[]` is required and must be non-empty.
+- `spec.provisioning.mode` is required and must be either `none` or `app-scoped-resource`.
+- `spec.operations[]` defaults to an empty list.
+
+For the Phase 1 PostgreSQL Service, `spec.bindings.outputs[]` must include an `app-secret` output.
 
 ## Service Ownership Model
 

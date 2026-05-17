@@ -117,6 +117,7 @@ Accepted direction:
 - Nephos chooses deterministic Secret names from binding identity
 - Apps consume bindings through symbolic aliases such as `as: database`
 - Nephos maps binding outputs into runtime values through the reserved `spec.runtime.values.mappings[]` lane
+- PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance
 - `none` means no Service-side resource is created for the binding
@@ -127,21 +128,28 @@ Accepted direction:
 - App says it needs a capability, Service says it provides a capability, Nephos resolves and creates bindings outside the manifest
 - routes declare identity/visibility/target, not full hostnames
 - Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy
+- Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`
+- App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists
+- Service `spec.provides[]` is required and must be non-empty
+- Service `spec.provisioning.mode` is required and must be either `none` or `app-scoped-resource`
+- `spec.operations[]` defaults to an empty list
+- PostgreSQL Service `spec.bindings.outputs[]` must include an `app-secret` output
+- canonical examples remain blocked until manifest validation plus command/status shape are stable enough
 - no schema file until Fer approves the concrete validation schema
 
 Need to decide:
 
-- required vs optional fields
 - config option object shape
 - accepted config option types
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
-- exact binding output payload declaration syntax
+- future optional binding output payload declaration syntax, if needed
 - exact Secret key serialization
 - exact deterministic Secret naming algorithm
+- required/default behavior for Services that expose capabilities without binding outputs
 - raw manifest runtime reference shape
 - validation rules
-- when to promote draft sketches into canonical examples
+- command/status shape needed before promoting draft sketches into canonical examples
 
 ## Dedicated Service Sharing Policy Details
 

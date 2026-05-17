@@ -54,7 +54,7 @@ Until the concrete validation schema is accepted, local user-created entries do 
 
 Do not create schema files under `schemas/` until Fer approves the concrete validation schema.
 
-Do not create examples under `examples/` until the example shape is approved.
+Do not create examples under `examples/` until manifest validation plus command/status shape are stable enough and Fer approves promotion.
 
 Temporary draft manifest sketches may live under `.agents/drafts/manifests/`.
 
