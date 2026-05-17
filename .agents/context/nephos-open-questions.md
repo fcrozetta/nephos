@@ -227,6 +227,33 @@ Need to decide later:
 - rollback metadata
 - backup/checkpoint requirements
 
+## Health And Status Check Implementation Details
+
+Question:
+
+How should Nephos implement concrete health/status checks after the Phase 1 minimum?
+
+Accepted Phase 1 direction:
+
+- Nephos-aware aggregate status
+- Kubernetes readiness is an input, not the whole model
+- lifecycle state is separate from health status
+- removed/destroyed are lifecycle states
+- backup status participates as `unsupported`
+- status reasons/evidence are required
+
+Need to decide later:
+
+- exact status API shape
+- status event/history model
+- app-specific probe support
+- Service-specific diagnostic support
+- route reachability checks
+- storage health checks
+- backup status transitions
+- how status affects exit codes in CLI
+- how status renders in future Web UI
+
 ## Local Development Workflow
 
 Question:

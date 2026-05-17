@@ -59,6 +59,19 @@ Upgrades/backups:
 - backup intent/status may be tracked
 - destroy requires destructive confirmation when persistent data exists
 
+Health/status:
+
+- Nephos-aware aggregate status
+- desired lifecycle state
+- reconciliation state
+- Kubernetes object existence/readiness
+- binding resolved/unresolved
+- dependency availability
+- route known/unknown
+- backup status as `unsupported`
+- Service dependent impact
+- status reasons/evidence required
+
 Resource/auth:
 
 - no Nephos resource policy system
@@ -77,7 +90,6 @@ Resource/auth:
 - ingress/TLS/local DNS behavior
 - secrets naming and preservation behavior
 - backup guarantees
-- health/status model
 - local development workflow
 - packaging/distribution
 - reference scenario

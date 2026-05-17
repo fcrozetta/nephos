@@ -114,6 +114,45 @@ A binding represents how an App receives access to a capability.
 
 Bindings are the source of dependent tracking between Apps and Service instances.
 
+## Lifecycle State
+
+The desired or historical lifecycle state of an entity.
+
+Examples:
+
+- installed
+- running
+- stopped
+- disabled
+- removed
+- destroyed
+
+Lifecycle state is separate from health status.
+
+Removed and destroyed are lifecycle states, not health statuses.
+
+## Health Status
+
+An operational status that answers whether an entity that should be operating is operating correctly.
+
+Accepted health status levels:
+
+- `unknown`
+- `pending`
+- `healthy`
+- `degraded`
+- `blocked`
+- `stopped`
+- `not_applicable`
+
+## Status Reason
+
+An explanation for why an entity has a given health status.
+
+Statuses must include reasons and/or evidence.
+
+Do not expose opaque green/red status without explaining the cause.
+
 ## Nephos Manifest
 
 A platform package definition for an App or Service.

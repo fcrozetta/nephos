@@ -224,3 +224,25 @@ Destroy deletes runtime objects and persistent data.
 Destroy must require destructive confirmation when persistent data exists.
 
 There is no separate purge lifecycle operation.
+
+## D029: Health status is Nephos-aware
+
+Nephos health/status aggregates Kubernetes runtime signals and Nephos platform signals.
+
+Kubernetes readiness is an input, not the full status model.
+
+## D030: Lifecycle state is separate from health status
+
+Removed and destroyed are lifecycle states, not health statuses.
+
+Health status levels are `unknown`, `pending`, `healthy`, `degraded`, `blocked`, `stopped`, and `not_applicable`.
+
+## D031: Status requires reasons and evidence
+
+Every status must include reasons and/or evidence.
+
+Do not expose opaque green/red status without explaining why.
+
+## D032: Phase 1 status is minimal but platform-aware
+
+Phase 1 status includes desired lifecycle state, reconciliation state, Kubernetes object existence/readiness, binding resolution, dependency availability, route known/unknown, backup status as `unsupported`, and Service dependent impact.
