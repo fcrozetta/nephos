@@ -110,3 +110,51 @@ Service operation is the canonical term for typed backend/API-owned Service mana
 Service management action may be used descriptively, but should not be the preferred architecture term.
 
 Service operations are optional in Phase 1, and their detailed contract still needs design.
+
+## D016: Installed Services are Service instances
+
+Service instance is the canonical term for an installed concrete Service.
+
+A Service manifest defines an installable Service shape.
+
+A Service instance is the installed platform/runtime instance.
+
+## D017: Services are shared by default
+
+Services are shared by default.
+
+Where a Service supports app-scoped resources inside one runtime instance, Nephos should use one shared Service instance by default.
+
+PostgreSQL should generally use one shared Service instance with separate databases/users per App by default.
+
+## D018: Dedicated Service instances are reserved
+
+Apps may request isolation from a Service provider.
+
+An isolation request creates a dedicated Service instance when required or requested.
+
+Dedicated Service instances are still first-class Services and may be explicitly bound by other Apps.
+
+Phase 1 reserves the concept but implements shared/global Service instances first.
+
+## D019: Bindings track dependents
+
+Bindings are the source of dependent tracking between Apps and Service instances.
+
+Do not maintain ad hoc dependent lists as authoritative state.
+
+## D020: Service provider selection rules
+
+Multiple Service instances may expose the same capability.
+
+If exactly one eligible Service instance exposes a required capability, Nephos may auto-bind by default.
+
+If multiple eligible Service instances expose a required capability and no default provider is configured, Nephos must require explicit selection.
+
+Nephos may support a user-configurable default provider per capability.
+
+## D021: Service lifecycle with dependents requires force
+
+Stopping, removing, or destroying a Service instance with dependents must require explicit force and show an impact list.
+
+Shared Service instances are long-lived infrastructure by default.

@@ -37,6 +37,28 @@ Need to decide:
 - runtime deployment reference syntax
 - validation rules
 
+## Dedicated Service Sharing Policy Details
+
+Question:
+
+How should explicit sharing of dedicated Service instances work?
+
+Accepted direction:
+
+- dedicated Service instances are created because an App requests or requires isolation
+- dedicated Service instances remain first-class Services
+- other Apps may explicitly bind to a dedicated Service instance for integration
+- Phase 1 reserves the concept and supports shared/global Service instances first
+
+Need to decide:
+
+- whether a dedicated Service instance has an owning/initiating App field
+- whether explicit sharing requires owner confirmation
+- whether dedicated instances advertise capabilities normally or behind a sharing flag
+- whether default provider selection may choose a dedicated instance
+- how backup/restore lifecycle works when several Apps bind to a dedicated instance
+- how destroy impact lists represent initiating App vs later dependents
+
 ## Service Operation Contract
 
 Question:

@@ -49,6 +49,44 @@ Services may:
 
 Do not call Services "plugins".
 
+## Service Instance
+
+An installed concrete Service.
+
+A Service manifest defines an installable Service shape.
+
+A Service instance is the installed platform/runtime instance of that Service.
+
+Examples:
+
+- `postgres-main`
+- `redis-main`
+- `neo4j-immich`
+
+## Shared Service Instance
+
+A Service instance intended to serve multiple Apps through separate bindings.
+
+Shared Service instances are the default.
+
+Where supported, a shared Service instance provisions app-scoped resources inside one runtime instance.
+
+Example:
+
+- one PostgreSQL Service instance with separate databases and users per App
+
+## Dedicated Service Instance
+
+A Service instance created because an App requests or requires isolation from a Service provider.
+
+Dedicated Service instances are still first-class Services.
+
+They may be explicitly bound by other Apps for integration.
+
+Do not model dedicated Service instances as hidden App internals, embedded dependency containers, or Helm subcharts.
+
+Use dedicated Service instance instead of app-private Service as the architecture term.
+
 ## Capability
 
 A typed platform feature exposed by a Service and consumed by an App.
@@ -73,6 +111,8 @@ Apps should depend on capabilities rather than concrete infrastructure whenever 
 A relationship between an App and a Service capability.
 
 A binding represents how an App receives access to a capability.
+
+Bindings are the source of dependent tracking between Apps and Service instances.
 
 ## Nephos Manifest
 

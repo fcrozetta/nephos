@@ -132,6 +132,44 @@ Service manifests may expose optional Service operations.
 
 Service operation is the canonical term for typed Service management actions.
 
+## Service Ownership Model
+
+Installed concrete Services are Service instances.
+
+Services are shared by default.
+
+Shared Service instances are expected to serve multiple Apps through bindings.
+
+Where supported, a shared Service instance should provision app-scoped resources inside one runtime instance.
+
+Example:
+
+- one PostgreSQL Service instance
+- separate database/user per App
+- separate binding per App requirement
+
+Apps may request isolation from a Service provider.
+
+An isolation request creates a dedicated Service instance when required or explicitly requested.
+
+Dedicated Service instances are still first-class Services.
+
+Dedicated Service instances may be explicitly bound by other Apps when integration between Apps requires access to the same provider.
+
+Phase 1 supports shared/global Service instances first and reserves dedicated Service instances as a concept.
+
+Multiple Service instances may expose the same capability.
+
+If exactly one eligible Service instance exposes a required capability, Nephos may auto-bind by default.
+
+If multiple eligible Service instances expose a required capability and no default provider is configured, Nephos must require explicit selection.
+
+Nephos may support a user-configurable default provider per capability.
+
+Bindings are the source of dependent tracking.
+
+Stopping, removing, or destroying a Service instance with dependents must require explicit force and show an impact list.
+
 ## State Model
 
 Nephos owns desired platform state.
