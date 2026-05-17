@@ -174,6 +174,10 @@ The envelope is for file structure and versioning.
 
 It does not mean Nephos manifests are Kubernetes CRDs.
 
+Accepted manifest API version:
+
+- `nephos.pro/v1alpha1`
+
 ## App Manifest
 
 A Nephos manifest that defines an installable App.
@@ -219,6 +223,17 @@ Accepted Phase 1 deployment reference types:
 - raw Kubernetes manifests
 
 Runtime deployment references are implementation details below the Nephos platform model.
+
+## Catalog Entry
+
+An available App or Service definition in a catalog.
+
+Catalog entries are not installed instances.
+
+Accepted local catalog layout:
+
+- `catalog/apps/<app-slug>/app.yaml`
+- `catalog/services/<service-slug>/service.yaml`
 
 ## Service Operation
 

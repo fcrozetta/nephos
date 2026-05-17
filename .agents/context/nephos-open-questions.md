@@ -90,30 +90,39 @@ What are the concrete App and Service manifest schemas?
 Accepted direction:
 
 - YAML manifests
+- `apiVersion: nephos.pro/v1alpha1`
 - Kubernetes-like envelope with Nephos semantics:
   - `apiVersion`
   - `kind`
   - `metadata`
   - `spec`
 - accepted manifest kinds are `App` and `Service`
+- directory-per-entry catalog layout:
+  - `catalog/apps/<app-slug>/app.yaml`
+  - `catalog/services/<service-slug>/service.yaml`
 - separate App and Service Nephos manifest formats
 - Helm-primary runtime deployment references
 - raw Kubernetes manifest fallback
-- App manifests declare required capabilities, route intent, config surface, and runtime deployment reference
-- Service manifests declare exposed capabilities, binding outputs, optional/deferred provisioning behavior, runtime deployment reference, and optional/deferred Service operations
+- App manifests use `metadata.name`, optional `metadata.displayName`, optional `metadata.description`, optional `metadata.version`, `spec.requires[]`, `spec.routes[]`, `spec.config.options[]`, and `spec.runtime`
+- `spec.requires[]` supports `capability`, optional `as`, and optional `provider`
+- Service manifests use `metadata.name`, optional `metadata.displayName`, optional `metadata.description`, optional `metadata.version`, `spec.provides[]`, `spec.bindings.outputs[]`, `spec.provisioning.mode`, `spec.runtime`, and `spec.operations[]`
+- `spec.provides[]` supports `capability`, optional `as`, and optional `version`
+- `spec.bindings.outputs[]` starts with `target: app-secret`
+- `spec.provisioning.mode: app-scoped-resource` is reserved
+- `spec.operations[]` is reserved
 - App says it needs a capability, Service says it provides a capability, Nephos resolves and creates bindings outside the manifest
-- no schema file until Fer approves the concrete field schema
+- routes declare identity/visibility/target, not full hostnames
+- Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy
+- no schema file until Fer approves the concrete validation schema
 
 Need to decide:
 
-- exact `apiVersion` value
-- exact field names
-- manifest filenames
 - required vs optional fields
-- config surface format
-- capability requirement syntax
-- exposed capability syntax
-- runtime deployment reference syntax
+- config option object shape
+- accepted config option types
+- complete binding output target set
+- binding output payload schema
+- raw manifest runtime reference shape
 - validation rules
 - when to promote draft sketches into canonical examples
 
@@ -434,10 +443,8 @@ Accepted direction:
 
 Need to decide:
 
-- exact catalog directory layout
-- exact manifest filenames
-- exact App manifest fields
-- exact Service manifest fields
+- exact App manifest examples
+- exact Service manifest examples
 - exact commands
 - expected status outputs
 - namespace names

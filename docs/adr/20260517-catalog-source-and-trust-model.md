@@ -34,7 +34,7 @@ Even the reference scenario should exercise the catalog and manifest path.
 
 User-created local catalog entries are allowed in Phase 1.
 
-Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
+Until the concrete validation schema is accepted, local user-created entries do not carry a schema stability promise.
 
 ## Trust Model
 
@@ -92,4 +92,4 @@ Remote catalog UX, private catalogs, and signed distribution remain unresolved f
 
 Do not introduce remote catalog fetching, signing, or OCI distribution without a new decision.
 
-Do not create schema files under `schemas/` until Fer approves the concrete manifest field schema.
+Do not create schema files under `schemas/` until Fer approves the concrete validation schema.

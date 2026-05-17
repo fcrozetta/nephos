@@ -48,6 +48,10 @@ Accepted manifest kinds:
 - `App`
 - `Service`
 
+Accepted manifest API version:
+
+- `nephos.pro/v1alpha1`
+
 This does not mean Nephos manifests are Kubernetes CRDs.
 
 It speaks in Nephos concepts:
@@ -72,6 +76,10 @@ A Nephos manifest may point to runtime deployment implementation:
 
 - Helm chart
 - raw Kubernetes manifests
+
+Helm-primary runtime references use `spec.runtime` with chart repository, name, and version.
+
+`spec.runtime.values.mappings[]` is reserved for Nephos-owned mapping from Nephos semantics into Helm values.
 
 Helm and raw Kubernetes manifests stay below the Nephos product model.
 
@@ -129,23 +137,28 @@ The detailed Service operation contract still needs design.
 
 An App manifest declares:
 
-- metadata
-- required capabilities
-- runtime deployment reference
-- ingress needs
-- storage needs
-- secret/environment mapping
+- `metadata.name`
+- optional `metadata.displayName`
+- optional `metadata.description`
+- optional `metadata.version`
+- `spec.requires[]`
+- `spec.routes[]`
+- `spec.config.options[]`
+- `spec.runtime`
 
 ## Example Service Concept
 
 A Service manifest declares:
 
-- metadata
-- exposed capabilities
-- runtime deployment reference
-- optional provisioning contracts
-- optional Service operations
-- health checks
+- `metadata.name`
+- optional `metadata.displayName`
+- optional `metadata.description`
+- optional `metadata.version`
+- `spec.provides[]`
+- `spec.bindings.outputs[]`
+- `spec.provisioning.mode`
+- `spec.runtime`
+- `spec.operations[]`
 
 ## Decision Outcome
 

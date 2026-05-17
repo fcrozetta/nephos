@@ -43,7 +43,7 @@ If architecture is unclear, ask Fer or record an open question before implementi
 
 Low-level implementation details may be chosen pragmatically when consistent with accepted ADRs and context.
 
-Do not add canonical schema files under `schemas/` until Fer approves the concrete field schema, or canonical examples under `examples/` until Fer approves the manifest/example shape.
+Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema, or canonical examples under `examples/` until Fer approves the manifest/example shape.
 
 Temporary draft manifests are allowed during schema design, but they must live in `.agents/drafts/manifests/`, be labeled non-canonical, and not be treated as source of truth.
 

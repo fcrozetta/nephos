@@ -1,14 +1,17 @@
 # NON-CANONICAL DRAFT.
 # This sketch is for schema discussion only.
 # Do not implement against this file as a stable contract.
-apiVersion: nephos.dev/v1alpha1
+apiVersion: nephos.pro/v1alpha1
 kind: Service
 metadata:
   name: postgres
   displayName: PostgreSQL
+  description: Relational database Service exposing the postgres capability.
+  version: 0.0.1
 spec:
   provides:
     - capability: postgres
+      as: database
   bindings:
     outputs:
       - name: connection
@@ -22,6 +25,7 @@ spec:
       repository: https://charts.example.invalid/postgres
       name: postgresql
       version: <pinned-chart-version>
-  operations:
-    # Service operation contract is deferred.
-    optional: []
+    values:
+      # Reserved for Nephos-owned mapping, not raw user-facing Helm values.
+      mappings: []
+  operations: []

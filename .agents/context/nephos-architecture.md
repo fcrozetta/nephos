@@ -167,7 +167,7 @@ Phase 1 catalog source is local filesystem first.
 
 Supported Phase 1 catalog sources are repo-shipped reference entries and user-configured local filesystem paths.
 
-User-created local catalog entries are allowed in Phase 1, but there is no schema stability promise until the manifest schema is accepted.
+User-created local catalog entries are allowed in Phase 1, but there is no schema stability promise until the concrete validation schema is accepted.
 
 Phase 1 treats local catalog files as trusted local-owner input.
 
@@ -191,6 +191,8 @@ Nephos manifests are YAML documents using a Kubernetes-like envelope with Nephos
 - `spec`
 
 Accepted manifest kinds are `App` and `Service`.
+
+Accepted manifest API version is `nephos.pro/v1alpha1`.
 
 This does not make Nephos manifests Kubernetes CRDs.
 

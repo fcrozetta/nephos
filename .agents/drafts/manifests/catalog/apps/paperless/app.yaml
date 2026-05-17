@@ -1,24 +1,30 @@
 # NON-CANONICAL DRAFT.
 # This sketch is for schema discussion only.
 # Do not implement against this file as a stable contract.
-apiVersion: nephos.dev/v1alpha1
+apiVersion: nephos.pro/v1alpha1
 kind: App
 metadata:
   name: paperless
   displayName: Paperless
+  description: Document management for scanned and digital documents.
+  version: 0.0.1
 spec:
   requires:
     - capability: postgres
+      as: database
   routes:
     - name: web
       visibility: local
-      host: paperless.<local-domain>
+      target:
+        port: http
   runtime:
     type: helm
     chart:
       repository: https://charts.example.invalid/paperless
       name: paperless
       version: <pinned-chart-version>
+    values:
+      # Reserved for Nephos-owned mapping, not raw user-facing Helm values.
+      mappings: []
   config:
-    # Nephos-level config surface, not raw Helm values.
-    values: {}
+    options: []

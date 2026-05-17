@@ -21,6 +21,10 @@ Use a Kubernetes-like document envelope with Nephos semantics:
 - `metadata`
 - `spec`
 
+Accepted `apiVersion`:
+
+- `nephos.pro/v1alpha1`
+
 This is a manifest-file shape decision only.
 
 It does not mean Nephos manifests are Kubernetes CRDs.
@@ -85,7 +89,7 @@ The initial direction is:
 - Service manifests declare exposed capabilities such as `postgres`
 - Nephos resolves and creates bindings outside the manifest
 
-Concrete binding field names remain open.
+Concrete binding output payload fields remain open.
 
 ## Draft Sketches
 
@@ -103,14 +107,12 @@ Do not create canonical files under `schemas/` or `examples/` from this ADR alon
 
 Need to decide:
 
-- exact `apiVersion` value
-- exact manifest filenames
-- exact field names
-- required vs optional fields
+- required vs optional field matrix
 - config surface format
-- capability requirement syntax
-- exposed capability syntax
-- runtime deployment reference syntax
+- accepted config option types
+- complete binding output target set
+- binding output payload schema
+- raw manifest runtime reference shape
 - validation rules
 - when to promote draft sketches into canonical examples
 - when to create files under `schemas/`

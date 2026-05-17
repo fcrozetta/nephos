@@ -344,7 +344,7 @@ Low-level implementation details may be chosen pragmatically when they are consi
 
 ### Schema And Example Workflow
 
-Do not add canonical schema files under `schemas/` until Fer approves the concrete field schema.
+Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema.
 
 Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
 

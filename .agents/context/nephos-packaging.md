@@ -30,6 +30,12 @@ Accepted manifest kinds:
 - `App`
 - `Service`
 
+Accepted manifest API version:
+
+- `nephos.pro/v1alpha1`
+
+This is a manifest schema/version lane, not a Nephos product version, App version, Service version, catalog version, or runtime package version.
+
 ## Manifest Types
 
 Use separate manifest formats for Apps and Services.
@@ -46,35 +52,56 @@ Do not collapse App and Service package definitions into one generic deployment 
 
 An App manifest describes a user-facing workload/product.
 
-It should eventually include:
+Accepted initial field conventions:
 
-- metadata
-- required capabilities
-- optional capability preferences
-- runtime deployment reference
-- ingress or visibility intent
-- storage intent
-- config surface
-- secret/environment mapping
-- health/status expectations
-- lifecycle behavior
+- `metadata.name`
+- optional `metadata.displayName`
+- optional `metadata.description`
+- optional `metadata.version`
+- `spec.requires[]`
+- `spec.routes[]`
+- `spec.config.options[]`
+- `spec.runtime`
+
+`spec.requires[]` entries should support `capability`, optional `as`, and optional `provider`.
+
+`spec.routes[]` entries declare route identity and visibility, not final hostnames.
+
+Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
+
+Do not put full hostnames in App manifests as the primary route model.
 
 ## Service Manifest
 
 A Service manifest describes shared platform infrastructure that exposes capabilities.
 
-It should eventually include:
+Accepted initial field conventions:
 
-- metadata
-- exposed capabilities
-- runtime deployment reference
-- optional provisioning contracts
-- optional Service operations
-- backup/restore hooks or intent
-- health/status expectations
-- secret outputs
-- supported binding types
-- lifecycle behavior
+- `metadata.name`
+- optional `metadata.displayName`
+- optional `metadata.description`
+- optional `metadata.version`
+- `spec.provides[]`
+- `spec.bindings.outputs[]`
+- `spec.provisioning.mode`
+- `spec.runtime`
+- `spec.operations[]`
+
+`spec.provides[]` entries should support `capability`, optional `as`, and optional `version`.
+
+`spec.bindings.outputs[]` starts with `target: app-secret`.
+
+`app-secret` means Nephos materializes binding credentials into the consuming App namespace.
+
+The complete binding output target set and payload shape remain open.
+
+`spec.provisioning.mode: app-scoped-resource` is reserved.
+
+The provisioning contract remains deferred.
+
+`spec.operations[]` is reserved.
+
+The Service operation contract remains deferred.
 
 ## Runtime Deployment References
 
@@ -84,6 +111,18 @@ Accepted Phase 1 deployment mechanisms:
 
 - Helm chart reference as primary
 - raw Kubernetes manifest reference as fallback
+
+Accepted Helm-primary field direction:
+
+- `spec.runtime.type: helm`
+- `spec.runtime.chart.repository`
+- `spec.runtime.chart.name`
+- `spec.runtime.chart.version`
+- `spec.runtime.values.mappings[]`
+
+`values.mappings` is reserved for Nephos-owned mapping from Nephos semantics into Helm values.
+
+Do not expose raw Helm values as the primary user schema.
 
 Helm and raw Kubernetes manifests are not the product package model.
 
@@ -129,7 +168,7 @@ Supported Phase 1 sources:
 
 User-created local catalog entries are allowed in Phase 1.
 
-Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
+Until the concrete validation schema is accepted, local user-created entries do not carry a schema stability promise.
 
 Phase 1 treats local catalog files as trusted local-owner input.
 
@@ -157,6 +196,22 @@ Catalog entries should reinforce:
 - bindings
 - lifecycle semantics
 - dependency awareness
+
+Accepted catalog entry layout:
+
+```text
+catalog/
+  apps/
+    <app-slug>/
+      app.yaml
+  services/
+    <service-slug>/
+      service.yaml
+```
+
+The catalog stores available Apps and Services.
+
+Installed App and Service instances live in Nephos desired state, not in the catalog.
 
 ## Service Operations
 
@@ -194,10 +249,12 @@ The high-level manifest envelope has been approved:
 - `metadata`
 - `spec`
 - separate `App` and `Service` kinds
+- `apiVersion: nephos.pro/v1alpha1`
+- directory-per-entry catalog layout with `app.yaml` and `service.yaml`
 
-The concrete field schema has not been approved yet.
+The initial field conventions have been approved, but the concrete validation schema has not.
 
-Do not add files under `schemas/` until Fer approves the concrete manifest field schema.
+Do not add files under `schemas/` until Fer approves the concrete validation schema.
 
 Do not add examples under `examples/` until the example shape is approved.
 

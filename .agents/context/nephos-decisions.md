@@ -353,7 +353,7 @@ Reference scenarios should exercise the catalog and manifest path.
 
 User-created local catalog entries are allowed in Phase 1.
 
-Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
+Until the concrete validation schema is accepted, local user-created entries do not carry a schema stability promise.
 
 ## D048: Local catalog files are trusted local-owner input
 
@@ -429,7 +429,7 @@ Low-level implementation details may be chosen pragmatically when consistent wit
 
 ## D058: Canonical schemas and examples require Fer approval
 
-Do not add canonical schema files under `schemas/` until Fer approves the concrete field schema.
+Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema.
 
 Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
 
@@ -503,4 +503,54 @@ Service manifests declare exposed capabilities.
 
 Nephos resolves and creates bindings outside the manifest.
 
-Concrete binding field names remain open.
+Concrete binding output payload fields remain open.
+
+## D070: Manifest apiVersion is nephos.pro/v1alpha1
+
+Use `apiVersion: nephos.pro/v1alpha1` for Nephos manifests.
+
+This is a manifest schema/version lane, not a Nephos product version, App version, Service version, catalog version, or runtime package version.
+
+## D071: Catalog entries use directory-per-entry layout
+
+Use `catalog/apps/<app-slug>/app.yaml` for App catalog entries.
+
+Use `catalog/services/<service-slug>/service.yaml` for Service catalog entries.
+
+Catalog entries are available Apps and Services.
+
+Installed App and Service instances live in Nephos desired state, not catalog files.
+
+## D072: Routes declare identity and visibility, not full hostnames
+
+App manifests use `spec.routes[]` with route `name`, `visibility`, and `target`.
+
+Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
+
+Do not put full hostnames in App manifests as the primary route model.
+
+## D073: Initial App manifest field conventions
+
+App manifests use `metadata.name`, optional `metadata.displayName`, optional `metadata.description`, optional `metadata.version`, `spec.requires[]`, `spec.routes[]`, `spec.config.options[]`, and `spec.runtime`.
+
+`spec.requires[]` entries support `capability`, optional `as`, and optional `provider`.
+
+## D074: Initial Service manifest field conventions
+
+Service manifests use `metadata.name`, optional `metadata.displayName`, optional `metadata.description`, optional `metadata.version`, `spec.provides[]`, `spec.bindings.outputs[]`, `spec.provisioning.mode`, `spec.runtime`, and `spec.operations[]`.
+
+`spec.provides[]` entries support `capability`, optional `as`, and optional `version`.
+
+`spec.bindings.outputs[]` starts with `target: app-secret`.
+
+The complete binding output target set and payload shape remain open.
+
+## D075: Runtime field convention is spec.runtime
+
+Use `spec.runtime.type`, `spec.runtime.chart.repository`, `spec.runtime.chart.name`, `spec.runtime.chart.version`, and reserved `spec.runtime.values.mappings[]` for Helm-primary runtime references.
+
+`values.mappings` is reserved for Nephos-owned mapping from Nephos semantics into Helm values.
+
+Do not expose raw Helm values as the primary user schema.
+
+Raw Kubernetes manifest runtime reference shape remains open.

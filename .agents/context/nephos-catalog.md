@@ -30,13 +30,29 @@ The backend must not hardcode App or Service behavior.
 
 Reference scenarios should exercise the catalog and manifest path.
 
+The catalog stores available Apps and Services.
+
+Installed App and Service instances live in Nephos desired state, not in catalog files.
+
+Accepted local catalog layout:
+
+```text
+catalog/
+  apps/
+    <app-slug>/
+      app.yaml
+  services/
+    <service-slug>/
+      service.yaml
+```
+
 ## User-Created Entries
 
 User-created local catalog entries are allowed in Phase 1.
 
-Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
+Until the concrete validation schema is accepted, local user-created entries do not carry a schema stability promise.
 
-Do not create schema files under `schemas/` until Fer approves the concrete manifest field schema.
+Do not create schema files under `schemas/` until Fer approves the concrete validation schema.
 
 Do not create examples under `examples/` until the example shape is approved.
 
