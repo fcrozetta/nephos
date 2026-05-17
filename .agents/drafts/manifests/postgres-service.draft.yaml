@@ -1,0 +1,27 @@
+# NON-CANONICAL DRAFT.
+# This sketch is for schema discussion only.
+# Do not implement against this file as a stable contract.
+apiVersion: nephos.dev/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+  displayName: PostgreSQL
+spec:
+  provides:
+    - capability: postgres
+  bindings:
+    outputs:
+      - name: connection
+        target: app-secret
+  provisioning:
+    # Exact provisioning contract is deferred.
+    mode: app-scoped-resource
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.invalid/postgres
+      name: postgresql
+      version: <pinned-chart-version>
+  operations:
+    # Service operation contract is deferred.
+    optional: []

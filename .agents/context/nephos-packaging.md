@@ -10,6 +10,26 @@ Nephos manifests own platform semantics.
 
 Helm charts and raw Kubernetes manifests are runtime deployment implementation details underneath the Nephos manifest layer.
 
+## Manifest Envelope
+
+Nephos manifests use YAML.
+
+Nephos manifests use a Kubernetes-like document envelope with Nephos semantics:
+
+- `apiVersion`
+- `kind`
+- `metadata`
+- `spec`
+
+This does not mean Nephos manifests are Kubernetes CRDs.
+
+This does not make Kubernetes the source of truth.
+
+Accepted manifest kinds:
+
+- `App`
+- `Service`
+
 ## Manifest Types
 
 Use separate manifest formats for Apps and Services.
@@ -166,9 +186,18 @@ The Service operation contract needs later design before schemas are created.
 
 ## Schema Status
 
-No package schema has been approved yet.
+The high-level manifest envelope has been approved:
 
-Do not add files under `schemas/` until Fer approves the manifest shape.
+- YAML
+- `apiVersion`
+- `kind`
+- `metadata`
+- `spec`
+- separate `App` and `Service` kinds
+
+The concrete field schema has not been approved yet.
+
+Do not add files under `schemas/` until Fer approves the concrete manifest field schema.
 
 Do not add examples under `examples/` until the example shape is approved.
 

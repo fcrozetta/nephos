@@ -89,22 +89,33 @@ What are the concrete App and Service manifest schemas?
 
 Accepted direction:
 
+- YAML manifests
+- Kubernetes-like envelope with Nephos semantics:
+  - `apiVersion`
+  - `kind`
+  - `metadata`
+  - `spec`
+- accepted manifest kinds are `App` and `Service`
 - separate App and Service Nephos manifest formats
 - Helm-primary runtime deployment references
 - raw Kubernetes manifest fallback
-- no schema file until Fer approves the shape
+- App manifests declare required capabilities, route intent, config surface, and runtime deployment reference
+- Service manifests declare exposed capabilities, binding outputs, optional/deferred provisioning behavior, runtime deployment reference, and optional/deferred Service operations
+- App says it needs a capability, Service says it provides a capability, Nephos resolves and creates bindings outside the manifest
+- no schema file until Fer approves the concrete field schema
 
 Need to decide:
 
+- exact `apiVersion` value
 - exact field names
 - manifest filenames
-- versioning scheme
 - required vs optional fields
 - config surface format
 - capability requirement syntax
 - exposed capability syntax
 - runtime deployment reference syntax
 - validation rules
+- when to promote draft sketches into canonical examples
 
 ## Dedicated Service Sharing Policy Details
 

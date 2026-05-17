@@ -36,7 +36,7 @@ User-created local catalog entries are allowed in Phase 1.
 
 Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
 
-Do not create schema files under `schemas/` until Fer approves the manifest shape.
+Do not create schema files under `schemas/` until Fer approves the concrete manifest field schema.
 
 Do not create examples under `examples/` until the example shape is approved.
 

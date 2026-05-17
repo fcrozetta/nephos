@@ -92,4 +92,4 @@ Remote catalog UX, private catalogs, and signed distribution remain unresolved f
 
 Do not introduce remote catalog fetching, signing, or OCI distribution without a new decision.
 
-Do not create schema files under `schemas/` until Fer approves the manifest shape.
+Do not create schema files under `schemas/` until Fer approves the concrete manifest field schema.

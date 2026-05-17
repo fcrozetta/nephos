@@ -1,0 +1,24 @@
+# NON-CANONICAL DRAFT.
+# This sketch is for schema discussion only.
+# Do not implement against this file as a stable contract.
+apiVersion: nephos.dev/v1alpha1
+kind: App
+metadata:
+  name: paperless
+  displayName: Paperless
+spec:
+  requires:
+    - capability: postgres
+  routes:
+    - name: web
+      visibility: local
+      host: paperless.<local-domain>
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.invalid/paperless
+      name: paperless
+      version: <pinned-chart-version>
+  config:
+    # Nephos-level config surface, not raw Helm values.
+    values: {}

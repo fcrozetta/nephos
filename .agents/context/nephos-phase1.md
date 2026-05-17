@@ -52,6 +52,9 @@ State:
 Catalog and packaging:
 
 - separate App and Service Nephos manifests
+- YAML Nephos manifests
+- Kubernetes-like `apiVersion`/`kind`/`metadata`/`spec` envelope with Nephos semantics
+- accepted manifest kinds `App` and `Service`
 - Helm-primary runtime deployment underneath manifests
 - raw Kubernetes manifest fallback
 - local filesystem catalog from day one
@@ -62,7 +65,7 @@ Catalog and packaging:
 - minimal catalog metadata carried in App/Service manifests
 - no separate catalog index
 - tiny repo-shipped reference catalog
-- no schema files until Fer approves shape
+- no schema files until Fer approves concrete field schema
 
 Services:
 

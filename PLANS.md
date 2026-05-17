@@ -47,8 +47,9 @@ Current understanding:
 - Batch 8 runtime boundary decisions are accepted: one namespace per App instance and Service instance, `nephos-system` for control-plane/runtime support components, no default-deny NetworkPolicy in Phase 1, Traefik local ingress first, manual Cloudflare Tunnel compatibility without tunnel automation, stopped Apps keep route intent, Kubernetes Secrets for Phase 1, binding credentials materialized into App namespaces, and secret values redacted by default.
 - Batch 9 catalog decisions are accepted: Phase 1 supports repo-shipped reference catalog entries and user-configured local filesystem catalog paths, user-created local entries are allowed without schema stability promise until manifest schema acceptance, local catalog files are trusted local-owner input, remote trust/signing/sandboxing are deferred, and minimal catalog metadata lives in App/Service manifests rather than a separate index.
 - Batch 10 development/testing/distribution decisions are accepted: backend local dev uses `uv`, backend tests use `pytest`, lint/format checks use `ruff`, unit tests use mocks/fakes, Kubernetes integration tests use real K3s, Phase 1 backend distribution is local process plus container image, full installer packaging is deferred, CLI workflow belongs to `../nephos-cli`, and Phase 1 has backend/CLI version awareness without strict compatibility blocking.
-- Batch 11 contribution/agent workflow decisions are accepted: ADRs are required for architecture-significant changes, ADR statuses have explicit meanings, agents must ask or record open questions before implementing through architectural ambiguity, canonical schemas/examples require Fer approval, temporary draft manifests are allowed only in a clearly marked non-canonical draft workspace outside `schemas/` and `examples/`, architecture-changing work updates ADR/context/open questions in the same change, and architecture decision batches should be committed separately when feasible.
+- Batch 11 contribution/agent workflow decisions are accepted: ADRs are required for architecture-significant changes, ADR statuses have explicit meanings, agents must ask or record open questions before implementing through architectural ambiguity, canonical schemas/examples require Fer approval, temporary draft manifests are allowed only as non-canonical drafts under `.agents/drafts/manifests/`, architecture-changing work updates ADR/context/open questions in the same change, and architecture decision batches should be committed separately when feasible.
 - Batch 12 reference scenario decisions are accepted: `.agents/drafts/manifests/` is the non-canonical draft manifest workspace, Paperless plus PostgreSQL is the canonical Phase 1 reference scenario, Paperless requires only PostgreSQL in the reference scenario, the flow includes install/bind/local route/stop/start/remove/destroy, Service dependency impact is included by attempting to stop PostgreSQL while Paperless depends on it, and route examples stay illustrative with placeholders such as `paperless.<local-domain>`.
+- Batch 13 manifest schema shape decisions are accepted: Nephos manifests are YAML, use a Kubernetes-like `apiVersion`/`kind`/`metadata`/`spec` envelope with Nephos semantics, accepted manifest kinds are `App` and `Service`, this does not imply CRDs, runtime references stay below Nephos manifests with Helm-primary pinned chart identity and raw manifest fallback, binding remains minimal at manifest level, and non-canonical draft sketches were added under `.agents/drafts/manifests/`.
 
 Files likely to change:
 
@@ -92,6 +93,7 @@ Files likely to change:
 - `docs/adr/20260517-local-development-testing-and-distribution.md`
 - `docs/adr/20260517-architecture-decision-and-agent-workflow.md`
 - `docs/adr/20260517-reference-scenario.md`
+- `docs/adr/20260517-nephos-manifest-schema-shape.md`
 
 Proposed steps:
 
@@ -127,6 +129,8 @@ Proposed steps:
 - Add contribution and agent workflow context.
 - Accept the reference scenario ADR.
 - Add reference scenario context and draft manifest workspace README.
+- Accept the manifest schema shape ADR.
+- Add non-canonical draft manifest sketches under `.agents/drafts/manifests/`.
 - Continue the interview with manifest schema or remaining open questions.
 
 Risks:
@@ -162,6 +166,8 @@ Risks:
 - Rewriting accepted ADR history instead of superseding/amending decisions.
 - Accidentally inferring concrete manifest schema from the reference scenario.
 - Letting the Paperless reference scenario expand with Redis/object storage before Phase 1 proves the minimal model.
+- Mistaking the Kubernetes-like manifest envelope for CRD-first source of truth.
+- Treating draft manifest field names as accepted schema fields.
 
 Validation commands:
 
@@ -178,6 +184,7 @@ Validation commands:
 - `rg -n "uv|pytest|ruff|mocks|fakes|K3s integration|container image|version endpoint|strict compatibility|nephos-cli" .agents/context docs/adr`
 - `rg -n "ADR|required|draft|proposed|accepted|superseded|open question|schemas|examples|temporary draft|non-canonical|same change|separate commits" AGENTS.md .agents/AGENTS.md .agents/context docs/adr`
 - `rg -n "Paperless|PostgreSQL|postgres|reference scenario|paperless.<local-domain>|impact list|draft manifests|.agents/drafts/manifests" AGENTS.md .agents/AGENTS.md .agents/context docs/adr .agents/drafts PLANS.md`
+- `rg -n "apiVersion|kind|metadata|spec|Kubernetes-like|CRD|YAML|non-canonical|paperless-app.draft|postgres-service.draft" .agents/context docs/adr .agents/drafts PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -187,7 +194,7 @@ Rollback notes:
 
 Open questions:
 
-- Manifest schema details.
+- Manifest concrete field details.
 - Service operation contract design.
 - Dedicated Service sharing policy details.
 - Future resource profile design.

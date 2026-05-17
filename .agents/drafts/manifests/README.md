@@ -7,7 +7,8 @@ Rules:
 - draft manifests here are not source of truth
 - draft manifests here are not accepted examples
 - draft manifests here do not define schema compatibility
-- canonical schemas must not be added under `schemas/` until Fer approves the shape
+- draft manifest field names are tentative until Fer accepts the schema
+- canonical schemas must not be added under `schemas/` until Fer approves the concrete manifest field schema
 - canonical examples must not be added under `examples/` until Fer approves the manifest/example shape
 - draft manifests should be deleted, moved, or converted after the schema/example shape is accepted
 

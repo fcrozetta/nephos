@@ -183,6 +183,17 @@ Nephos uses separate Nephos manifest formats for Apps and Services.
 
 Nephos manifests own platform semantics.
 
+Nephos manifests are YAML documents using a Kubernetes-like envelope with Nephos semantics:
+
+- `apiVersion`
+- `kind`
+- `metadata`
+- `spec`
+
+Accepted manifest kinds are `App` and `Service`.
+
+This does not make Nephos manifests Kubernetes CRDs.
+
 Helm charts are the primary Phase 1 runtime deployment mechanism underneath Nephos manifests.
 
 Raw Kubernetes manifests are a fallback runtime deployment mechanism.

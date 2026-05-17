@@ -84,6 +84,11 @@ Draft manifest sketches may live under:
 
 - `.agents/drafts/manifests/`
 
+Current draft sketches:
+
+- `.agents/drafts/manifests/paperless-app.draft.yaml`
+- `.agents/drafts/manifests/postgres-service.draft.yaml`
+
 Draft manifests are non-canonical.
 
 Draft manifests must not be treated as source of truth.

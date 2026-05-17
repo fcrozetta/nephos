@@ -163,9 +163,24 @@ They are not Helm charts and are not raw Kubernetes manifests.
 
 Nephos manifests may reference Helm charts or raw Kubernetes manifests as runtime deployment implementation details.
 
+Nephos manifests are YAML documents with a Kubernetes-like envelope:
+
+- `apiVersion`
+- `kind`
+- `metadata`
+- `spec`
+
+The envelope is for file structure and versioning.
+
+It does not mean Nephos manifests are Kubernetes CRDs.
+
 ## App Manifest
 
 A Nephos manifest that defines an installable App.
+
+Accepted manifest `kind`:
+
+- `App`
 
 An App manifest focuses on user-facing workload concerns:
 
@@ -179,6 +194,10 @@ An App manifest focuses on user-facing workload concerns:
 ## Service Manifest
 
 A Nephos manifest that defines an installable Service.
+
+Accepted manifest `kind`:
+
+- `Service`
 
 A Service manifest focuses on shared infrastructure concerns:
 

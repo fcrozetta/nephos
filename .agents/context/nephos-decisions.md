@@ -429,11 +429,11 @@ Low-level implementation details may be chosen pragmatically when consistent wit
 
 ## D058: Canonical schemas and examples require Fer approval
 
-Do not add canonical schema files under `schemas/` until Fer approves the shape.
+Do not add canonical schema files under `schemas/` until Fer approves the concrete field schema.
 
 Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
 
-Temporary draft manifests are allowed while designing schemas, but they must be clearly marked non-canonical and live outside `schemas/` and `examples/`.
+Temporary draft manifests are allowed while designing schemas, but they must live under `.agents/drafts/manifests/`, be clearly marked non-canonical, and not be treated as source of truth.
 
 ## D059: Architecture-changing work updates documentation in the same change
 
@@ -466,3 +466,41 @@ Nephos should block the Service stop unless forced and show an impact list.
 Use an illustrative local route such as `paperless.<local-domain>`.
 
 The exact local domain, wildcard behavior, DNS behavior, and TLS behavior remain open.
+
+## D065: Nephos manifests use YAML
+
+Nephos manifests are YAML documents.
+
+## D066: Nephos manifests use a Kubernetes-like envelope
+
+Nephos manifests use `apiVersion`, `kind`, `metadata`, and `spec`.
+
+The envelope is for Nephos manifest structure and versioning.
+
+It does not mean Nephos manifests are Kubernetes CRDs.
+
+## D067: App and Service are accepted manifest kinds
+
+Accepted manifest kinds are `App` and `Service`.
+
+Apps and Services remain separate because they have different roles and authors.
+
+## D068: Runtime references remain below Nephos manifests
+
+Phase 1 remains Helm-primary underneath Nephos manifests.
+
+Helm runtime references should carry pinned chart identity such as repository, chart name, and chart version.
+
+Raw Kubernetes manifest references remain an allowed fallback.
+
+Raw Helm values and Kubernetes object specs must not become the primary Nephos manifest schema.
+
+## D069: Binding schema remains minimal at manifest level
+
+App manifests declare required capabilities.
+
+Service manifests declare exposed capabilities.
+
+Nephos resolves and creates bindings outside the manifest.
+
+Concrete binding field names remain open.

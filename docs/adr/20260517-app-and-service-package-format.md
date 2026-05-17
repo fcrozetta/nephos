@@ -34,6 +34,22 @@ Git, OCI, remote indexes, private catalogs, and signed catalogs are deferred.
 
 A Nephos manifest describes platform intent.
 
+Nephos manifests use YAML.
+
+Nephos manifests use a Kubernetes-like envelope with Nephos semantics:
+
+- `apiVersion`
+- `kind`
+- `metadata`
+- `spec`
+
+Accepted manifest kinds:
+
+- `App`
+- `Service`
+
+This does not mean Nephos manifests are Kubernetes CRDs.
+
 It speaks in Nephos concepts:
 
 - Apps
@@ -139,6 +155,8 @@ Chosen option: "Separate App and Service Nephos manifests with Helm-primary runt
 
 This decision is accepted.
 
-Do not invent package schema silently in implementation without updating this ADR or adding a schema file.
+Do not invent concrete package fields silently in implementation without updating ADR/context or adding an approved schema file.
 
-No schema file is approved yet.
+The high-level manifest envelope is approved.
+
+No concrete schema file is approved yet.
