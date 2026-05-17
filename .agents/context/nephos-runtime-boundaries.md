@@ -87,6 +87,14 @@ Apps should not read Service namespace Secrets directly.
 
 Bindings are the source of truth for which App may receive which Service credentials.
 
+Service manifests declare logical binding outputs, not final consuming Secret names.
+
+Nephos chooses deterministic Secret names from binding identity.
+
+The exact naming algorithm remains open.
+
+For Phase 1, the only accepted binding output target is `app-secret`.
+
 Stop preserves Secrets.
 
 Remove preserves Secrets.
@@ -106,7 +114,8 @@ Do not expose secret values unless a future explicit reveal command is designed 
 - TLS and cert-manager strategy
 - route collision handling
 - whether Services can expose admin routes
-- secret naming convention
+- binding Secret naming algorithm
 - secret labels and annotations
 - secret rotation behavior
 - whether/how secrets participate in backup
+- exact Secret key serialization

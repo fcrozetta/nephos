@@ -89,7 +89,13 @@ The initial direction is:
 - Service manifests declare exposed capabilities such as `postgres`
 - Nephos resolves and creates bindings outside the manifest
 
-Concrete binding output payload fields remain open.
+Concrete binding output payload fields are accepted only for the initial PostgreSQL case.
+
+Later accepted direction:
+
+- Phase 1 binding output target is `app-secret`.
+- PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`.
+- Other binding targets and non-PostgreSQL payload schemas remain open.
 
 ## Draft Sketches
 
@@ -110,8 +116,9 @@ Need to decide:
 - required vs optional field matrix
 - config surface format
 - accepted config option types
-- complete binding output target set
-- binding output payload schema
+- binding output targets beyond `app-secret`
+- non-PostgreSQL binding output payload schemas
+- exact binding output payload declaration syntax
 - raw manifest runtime reference shape
 - validation rules
 - when to promote draft sketches into canonical examples

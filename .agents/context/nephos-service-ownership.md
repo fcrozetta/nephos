@@ -41,6 +41,28 @@ Examples:
 - Object storage Service with one bucket or prefix per App
 - Redis instance with app-specific credentials, logical databases, or prefixes where appropriate
 
+## App-Scoped Resource
+
+An app-scoped resource is a Service-side resource created for a consuming App inside a Service instance.
+
+Examples:
+
+- PostgreSQL database and user
+- object storage bucket or prefix
+- Redis logical database, prefix, or credential scope where supported
+
+App-scoped resources are created through a typed provisioning contract.
+
+They are not separate Apps.
+
+They are not hidden Service instances.
+
+Phase 1 recognizes `app-scoped-resource` and `none` as provisioning modes.
+
+Remove preserves app-scoped resources created for an App.
+
+Destroy deletes app-scoped resources created for an App after destructive confirmation.
+
 ## Dedicated Service Instance
 
 A dedicated Service instance exists because an App requested or required isolation from a Service provider.

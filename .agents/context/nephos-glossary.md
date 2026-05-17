@@ -114,6 +114,38 @@ A binding represents how an App receives access to a capability.
 
 Bindings are the source of dependent tracking between Apps and Service instances.
 
+## Binding Output
+
+A logical output produced by a Service binding and delivered to a consuming App.
+
+Phase 1 supports one concrete binding output target:
+
+- `app-secret`
+
+`app-secret` means Nephos materializes binding credentials into the consuming App namespace as a Kubernetes Secret.
+
+Service manifests declare logical binding outputs, not final consuming Secret names.
+
+Nephos chooses deterministic Secret names from binding identity.
+
+## App-Scoped Resource
+
+A Service-side resource created for a consuming App inside a Service instance.
+
+Examples:
+
+- PostgreSQL database and user
+- object storage bucket or prefix
+- Redis logical database, prefix, or credential scope where supported
+
+App-scoped resources are created through a typed provisioning contract.
+
+They are not separate Apps or hidden Service instances.
+
+Remove preserves app-scoped resources.
+
+Destroy deletes app-scoped resources after destructive confirmation.
+
 ## Lifecycle State
 
 The desired or historical lifecycle state of an entity.

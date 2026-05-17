@@ -93,11 +93,33 @@ Accepted initial field conventions:
 
 `app-secret` means Nephos materializes binding credentials into the consuming App namespace.
 
-The complete binding output target set and payload shape remain open.
+For Phase 1, `app-secret` is the only accepted binding output target.
 
-`spec.provisioning.mode: app-scoped-resource` is reserved.
+For PostgreSQL bindings, the accepted logical output fields are:
 
-The provisioning contract remains deferred.
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+The exact manifest syntax for declaring payload fields and the exact Kubernetes Secret key serialization remain open.
+
+Accepted Phase 1 provisioning modes:
+
+- `app-scoped-resource`
+- `none`
+
+`app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance.
+
+`none` means no Service-side resource is created for the binding.
+
+The provisioning contract is typed and backend/API-owned.
+
+Do not model provisioning as arbitrary user-facing shell scripts or as Helm hooks exposed as product semantics.
+
+The concrete provisioning execution mechanism remains open.
 
 `spec.operations[]` is reserved.
 
@@ -238,6 +260,33 @@ Service operations are optional in Phase 1.
 Do not treat Service operations as arbitrary user-facing shell scripts.
 
 The Service operation contract needs later design before schemas are created.
+
+## Binding Output And Provisioning
+
+App manifests use symbolic binding aliases.
+
+Example:
+
+```yaml
+spec:
+  requires:
+    - capability: postgres
+      as: database
+```
+
+The alias gives the App a stable semantic name for the binding.
+
+Nephos maps binding outputs into runtime deployment values through the reserved `spec.runtime.values.mappings[]` lane.
+
+Service manifests declare logical binding outputs, not final consuming Secret names.
+
+Nephos chooses deterministic Secret names from binding identity.
+
+The exact naming algorithm remains open.
+
+Remove preserves provisioned Service-side resources created for an App.
+
+Destroy deletes provisioned Service-side resources created for an App after destructive confirmation.
 
 ## Schema Status
 

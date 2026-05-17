@@ -35,16 +35,20 @@ The canonical flow is:
 1. Install PostgreSQL Service from a local filesystem catalog entry.
 2. Install Paperless App from a local filesystem catalog entry.
 3. Bind Paperless to the `postgres` capability exposed by PostgreSQL.
-4. Expose Paperless through local ingress intent.
-5. Start Paperless.
-6. Verify Paperless has a known route and binding status.
-7. Stop Paperless.
-8. Start Paperless again.
-9. Verify Paperless data is preserved across stop/start.
-10. Attempt to stop PostgreSQL while Paperless depends on it.
-11. Nephos blocks the Service stop unless forced and shows an impact list.
-12. Remove Paperless while preserving persistent data and metadata.
-13. Destroy Paperless with destructive confirmation, deleting App-owned persistent data.
+4. PostgreSQL provisions an app-scoped database/user for Paperless.
+5. Nephos materializes PostgreSQL binding outputs into the Paperless App namespace.
+6. Expose Paperless through local ingress intent.
+7. Start Paperless.
+8. Verify Paperless has a known route and binding status.
+9. Verify the binding exposes PostgreSQL logical fields `host`, `port`, `database`, `username`, `password`, and `uri`.
+10. Stop Paperless.
+11. Start Paperless again.
+12. Verify Paperless data is preserved across stop/start.
+13. Attempt to stop PostgreSQL while Paperless depends on it.
+14. Nephos blocks the Service stop unless forced and shows an impact list.
+15. Remove Paperless while preserving persistent data and metadata.
+16. Verify remove preserves the app-scoped PostgreSQL resource and binding metadata.
+17. Destroy Paperless with destructive confirmation, deleting persistent data and app-scoped PostgreSQL resources associated with Paperless.
 
 Command spelling and status output are not finalized yet.
 
@@ -72,9 +76,13 @@ Stop/start must preserve data.
 
 Remove must preserve persistent data and metadata.
 
-Destroy deletes App-owned persistent data and requires destructive confirmation when persistent data exists.
+Destroy deletes persistent data associated with the App lifecycle and requires destructive confirmation when persistent data exists.
 
-PostgreSQL Service data must not be deleted as a side effect of stopping, removing, or destroying Paperless unless a later explicit Service lifecycle decision says otherwise.
+Removing Paperless must preserve PostgreSQL app-scoped resources created for Paperless.
+
+Destroying Paperless deletes PostgreSQL app-scoped resources created for Paperless after destructive confirmation.
+
+The PostgreSQL Service instance itself must not be deleted as a side effect of stopping, removing, or destroying Paperless.
 
 ## Draft Manifest Rule
 

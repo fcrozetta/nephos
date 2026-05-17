@@ -67,19 +67,22 @@ Accepted direction:
 - Service-internal/admin secrets live in Service namespaces
 - App binding credentials are materialized into App namespaces
 - Apps should not read Service namespace Secrets directly
+- Service manifests declare logical binding outputs, not final consuming Secret names
+- Nephos chooses deterministic Secret names from binding identity
 - stop/remove preserve Secrets
 - destroy deletes Secrets for the destroyed entity
 - secret values are redacted by default
 
 Need to decide:
 
-- exact secret naming convention
+- exact binding Secret naming algorithm
 - exact labels/annotations
 - rotation behavior
 - whether/how secrets are included in Nephos state backup
 - future explicit reveal command behavior
 - external secret manager integration model
-- exact binding credential materialization schema
+- exact Secret key serialization
+- binding credential materialization schemas beyond accepted PostgreSQL logical fields
 
 ## Manifest Schema Details
 
@@ -108,7 +111,18 @@ Accepted direction:
 - Service manifests use `metadata.name`, optional `metadata.displayName`, optional `metadata.description`, optional `metadata.version`, `spec.provides[]`, `spec.bindings.outputs[]`, `spec.provisioning.mode`, `spec.runtime`, and `spec.operations[]`
 - `spec.provides[]` supports `capability`, optional `as`, and optional `version`
 - `spec.bindings.outputs[]` starts with `target: app-secret`
-- `spec.provisioning.mode: app-scoped-resource` is reserved
+- Phase 1 supports only `app-secret` as the binding output target
+- PostgreSQL binding outputs use logical fields `host`, `port`, `database`, `username`, `password`, and `uri`
+- Service manifests declare logical binding outputs, not final consuming Secret names
+- Nephos chooses deterministic Secret names from binding identity
+- Apps consume bindings through symbolic aliases such as `as: database`
+- Nephos maps binding outputs into runtime values through the reserved `spec.runtime.values.mappings[]` lane
+- Phase 1 provisioning modes are `app-scoped-resource` and `none`
+- `app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance
+- `none` means no Service-side resource is created for the binding
+- provisioning is a typed backend/API-owned contract, not arbitrary user-facing shell
+- remove preserves provisioned Service-side resources created for an App
+- destroy deletes provisioned Service-side resources created for an App after destructive confirmation
 - `spec.operations[]` is reserved
 - App says it needs a capability, Service says it provides a capability, Nephos resolves and creates bindings outside the manifest
 - routes declare identity/visibility/target, not full hostnames
@@ -120,8 +134,11 @@ Need to decide:
 - required vs optional fields
 - config option object shape
 - accepted config option types
-- complete binding output target set
-- binding output payload schema
+- binding output targets beyond `app-secret`
+- non-PostgreSQL binding output payload schemas
+- exact binding output payload declaration syntax
+- exact Secret key serialization
+- exact deterministic Secret naming algorithm
 - raw manifest runtime reference shape
 - validation rules
 - when to promote draft sketches into canonical examples
@@ -433,9 +450,14 @@ Accepted direction:
 - Nephos manifests
 - Paperless requires only PostgreSQL in Phase 1 reference scenario
 - capability binding
+- PostgreSQL provisions an app-scoped database/user for Paperless
+- Nephos materializes PostgreSQL binding outputs into Paperless App namespace
+- PostgreSQL binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - basic ingress intent
 - lifecycle install/start/stop/remove/destroy
 - data preserved on stop/remove
+- remove preserves app-scoped PostgreSQL resources and binding metadata
+- destroy deletes app-scoped PostgreSQL resources created for Paperless after destructive confirmation
 - destroy requires destructive confirmation when persistent data exists
 - include Service dependency impact
 - attempting to stop PostgreSQL while Paperless depends on it is blocked unless forced and shows an impact list
@@ -448,6 +470,6 @@ Need to decide:
 - exact commands
 - expected status outputs
 - namespace names
-- secret names
+- binding Secret naming algorithm
 - exact ingress hostname policy
 - data preservation checks

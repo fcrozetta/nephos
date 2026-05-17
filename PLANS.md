@@ -51,6 +51,7 @@ Current understanding:
 - Batch 12 reference scenario decisions are accepted: `.agents/drafts/manifests/` is the non-canonical draft manifest workspace, Paperless plus PostgreSQL is the canonical Phase 1 reference scenario, Paperless requires only PostgreSQL in the reference scenario, the flow includes install/bind/local route/stop/start/remove/destroy, Service dependency impact is included by attempting to stop PostgreSQL while Paperless depends on it, and route examples stay illustrative with placeholders such as `paperless.<local-domain>`.
 - Batch 13 manifest schema shape decisions are accepted: Nephos manifests are YAML, use a Kubernetes-like `apiVersion`/`kind`/`metadata`/`spec` envelope with Nephos semantics, accepted manifest kinds are `App` and `Service`, this does not imply CRDs, runtime references stay below Nephos manifests with Helm-primary pinned chart identity and raw manifest fallback, binding remains minimal at manifest level, and non-canonical draft sketches were added under `.agents/drafts/manifests/`.
 - Batch 14 manifest field convention decisions are accepted: manifest `apiVersion` is `nephos.pro/v1alpha1`, local catalogs use directory-per-entry layout with `catalog/apps/<app-slug>/app.yaml` and `catalog/services/<service-slug>/service.yaml`, catalogs contain available Apps/Services while installed instances live in Nephos desired state, App manifests use `spec.requires[]`, `spec.routes[]`, `spec.config.options[]`, and `spec.runtime`, Service manifests use `spec.provides[]`, `spec.bindings.outputs[]`, `spec.provisioning.mode`, `spec.runtime`, and `spec.operations[]`, routes do not carry full hostnames, and Nephos derives hostnames from App instance name, route name, visibility, and domain policy.
+- Batch 15 binding/provisioning decisions are accepted: Phase 1 binding output target is `app-secret`, PostgreSQL logical binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`, Service manifests declare logical outputs rather than final Secret names, Nephos chooses deterministic binding Secret names, App manifests consume bindings through symbolic aliases such as `as: database`, Phase 1 provisioning modes are `app-scoped-resource` and `none`, provisioning is a typed backend/API-owned contract, remove preserves provisioned Service-side resources, and destroy deletes them after destructive confirmation.
 
 Files likely to change:
 
@@ -135,6 +136,8 @@ Proposed steps:
 - Add non-canonical draft manifest sketches under `.agents/drafts/manifests/`.
 - Accept the manifest field conventions ADR.
 - Move draft sketches into directory-per-entry catalog layout under `.agents/drafts/manifests/`.
+- Accept the binding model ADR.
+- Update binding output and provisioning context.
 - Continue the interview with manifest schema or remaining open questions.
 
 Risks:
@@ -174,6 +177,8 @@ Risks:
 - Treating draft manifest field names as accepted schema fields.
 - Confusing catalog entries with installed App/Service instances.
 - Baking full hostnames into App manifests before domain policy is decided.
+- Letting binding output details accidentally become raw Secret templates.
+- Treating provisioning as arbitrary shell or Helm hooks instead of a typed Nephos contract.
 
 Validation commands:
 
@@ -192,6 +197,7 @@ Validation commands:
 - `rg -n "Paperless|PostgreSQL|postgres|reference scenario|paperless.<local-domain>|impact list|draft manifests|.agents/drafts/manifests" AGENTS.md .agents/AGENTS.md .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "apiVersion|kind|metadata|spec|Kubernetes-like|CRD|YAML|non-canonical|catalog/apps/paperless|catalog/services/postgres" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "nephos.pro/v1alpha1|catalog/apps|catalog/services|app.yaml|service.yaml|spec.requires|spec.provides|spec.routes|app-secret|values.mappings|full hostnames|domain policy" .agents/context docs/adr .agents/drafts PLANS.md`
+- `rg -n "app-secret|host|port|database|username|password|uri|app-scoped-resource|provisioning|deterministic Secret|Secret key serialization" .agents/context docs/adr .agents/drafts PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:

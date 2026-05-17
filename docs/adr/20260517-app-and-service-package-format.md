@@ -160,6 +160,14 @@ A Service manifest declares:
 - `spec.runtime`
 - `spec.operations[]`
 
+Later accepted binding/provisioning direction:
+
+- Phase 1 binding output target is `app-secret`
+- PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
+- Phase 1 provisioning modes are `app-scoped-resource` and `none`
+- provisioning is a typed backend/API-owned contract
+- the exact payload declaration syntax and provisioning execution mechanism remain open
+
 ## Decision Outcome
 
 Chosen option: "Separate App and Service Nephos manifests with Helm-primary runtime deployment and raw manifest fallback", because it preserves Nephos platform semantics while using existing Kubernetes packaging where that gives leverage.

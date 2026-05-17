@@ -152,17 +152,22 @@ Reference scenario:
 - reference catalog should exercise local filesystem catalog/manifest flow
 - Paperless requires only PostgreSQL in the Phase 1 reference scenario
 - bind Paperless to the `postgres` capability exposed by PostgreSQL
+- PostgreSQL provisions an app-scoped database/user for Paperless
+- Nephos materializes PostgreSQL binding outputs into the Paperless App namespace
+- PostgreSQL binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - expose Paperless through local route intent using a placeholder like `paperless.<local-domain>`
 - stop/start preserves data
 - remove preserves persistent data and metadata
-- destroy deletes App-owned persistent data after destructive confirmation
+- remove preserves app-scoped PostgreSQL resources and binding metadata
+- destroy deletes persistent data associated with the App lifecycle after destructive confirmation
+- destroy deletes app-scoped PostgreSQL resources created for Paperless after destructive confirmation
 - attempting to stop PostgreSQL while Paperless depends on it is blocked unless forced and shows an impact list
 
 ## Still To Define
 
 - exact namespace slug normalization and labels
 - ingress/TLS/local DNS hostname behavior
-- secret naming and rotation behavior
+- binding Secret naming and rotation behavior
 - backup guarantees
 - local development workflow
 - packaging/distribution

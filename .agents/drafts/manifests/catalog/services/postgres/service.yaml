@@ -16,8 +16,11 @@ spec:
     outputs:
       - name: connection
         target: app-secret
+        # Logical output fields: host, port, database, username, password, uri.
+        # Exact payload declaration syntax and Secret key serialization are open.
   provisioning:
-    # Exact provisioning contract is deferred.
+    # Accepted Phase 1 modes: app-scoped-resource, none.
+    # Exact provisioning execution mechanism is open.
     mode: app-scoped-resource
   runtime:
     type: helm

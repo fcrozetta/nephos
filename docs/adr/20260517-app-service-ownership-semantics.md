@@ -30,6 +30,16 @@ Example:
 - multiple app-scoped databases and users
 - one binding per App requirement
 
+An app-scoped resource is a Service-side resource created for a consuming App inside a Service instance.
+
+App-scoped resources are created through typed provisioning.
+
+They are not separate Apps, hidden Service instances, or embedded dependency containers.
+
+Removing an App preserves app-scoped resources created for that App.
+
+Destroying an App deletes app-scoped resources created for that App after destructive confirmation.
+
 Apps may request isolation from a Service provider.
 
 An App isolation request creates a dedicated Service instance when required by the Service or requested by the App.

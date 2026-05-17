@@ -112,15 +112,33 @@ spec:
 
 `app-secret` means Nephos materializes binding credentials into the consuming App namespace.
 
-The complete set of possible binding output targets and payload shapes remains open.
+For Phase 1, `app-secret` is the only accepted binding output target.
 
-Use `spec.provisioning.mode` to reserve provisioning behavior.
+For PostgreSQL bindings, the accepted logical output fields are:
 
-Initial reserved mode:
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+The exact manifest syntax for declaring payload fields and the exact Secret key serialization remain open.
+
+Use `spec.provisioning.mode` for Service-side binding provisioning behavior.
+
+Accepted Phase 1 modes:
 
 - `app-scoped-resource`
+- `none`
 
-The provisioning contract remains deferred.
+`app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance.
+
+`none` means no Service-side resource is created for the binding.
+
+The provisioning contract is typed and backend/API-owned.
+
+The concrete provisioning execution mechanism remains open.
 
 Use `spec.operations: []` to reserve Service operations.
 
@@ -170,9 +188,11 @@ Need to decide:
 - exact required vs optional field matrix
 - config option object shape
 - accepted config option types
-- complete binding output target set
-- binding output payload schema
-- provisioning contract
+- binding output targets beyond `app-secret`
+- non-PostgreSQL binding output payload schemas
+- exact binding output payload declaration syntax
+- exact Secret key serialization
+- provisioning execution mechanism
 - Service operation contract
 - raw manifest runtime reference shape
 - validation rules

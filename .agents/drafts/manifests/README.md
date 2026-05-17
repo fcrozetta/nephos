@@ -27,3 +27,10 @@ catalog/
 ```
 
 This mirrors the accepted directory-per-entry catalog layout, but remains non-canonical until Fer approves canonical examples.
+
+Accepted binding/provisioning decisions reflected in the current draft sketches:
+
+- Phase 1 binding output target is `app-secret`
+- PostgreSQL logical output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
+- Phase 1 provisioning modes are `app-scoped-resource` and `none`
+- the exact payload declaration syntax, Secret key serialization, and provisioning execution mechanism remain open

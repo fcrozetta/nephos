@@ -206,6 +206,46 @@ Service manifests may expose optional Service operations.
 
 Service operation is the canonical term for typed Service management actions.
 
+## Binding And Provisioning Model
+
+Apps declare required capabilities.
+
+Services declare exposed capabilities and binding output behavior.
+
+Bindings connect App requirements to Service instance capabilities.
+
+Bindings live in Nephos desired state and are the source of dependent tracking.
+
+Phase 1 supports `app-secret` as the only binding output target.
+
+`app-secret` means Nephos materializes binding credentials into the consuming App namespace as a Kubernetes Secret.
+
+Service manifests declare logical binding outputs, not final consuming Secret names.
+
+Nephos chooses deterministic Secret names from binding identity.
+
+For PostgreSQL bindings, the accepted logical output fields are:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+Phase 1 recognizes two provisioning modes:
+
+- `app-scoped-resource`
+- `none`
+
+Provisioning is a typed backend/API-owned contract.
+
+Do not model provisioning as arbitrary user-facing shell scripts.
+
+Remove preserves provisioned Service-side resources created for an App.
+
+Destroy deletes provisioned Service-side resources created for an App after destructive confirmation.
+
 ## Service Ownership Model
 
 Installed concrete Services are Service instances.

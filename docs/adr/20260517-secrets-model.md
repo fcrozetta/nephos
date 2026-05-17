@@ -42,7 +42,13 @@ Do not require Apps to read Secrets across namespace boundaries.
 
 Bindings are the source of truth for which App may receive which Service credentials.
 
-The exact secret naming convention is not finalized, but names must be deterministic enough for reconciliation and debugging.
+Service manifests declare logical binding outputs, not final consuming Secret names.
+
+Nephos chooses deterministic Secret names from binding identity.
+
+The exact binding Secret naming algorithm is not finalized.
+
+For Phase 1, `app-secret` is the only accepted binding output target.
 
 ## Lifecycle Behavior
 
@@ -80,13 +86,14 @@ Nephos owns the policy of:
 
 Need to define:
 
-- secret naming
+- binding Secret naming algorithm
 - secret ownership labels
 - rotation behavior
 - whether secrets are backed up
 - future reveal/debug command behavior
 - external secret manager integration model
-- exact binding credential materialization schema
+- exact Secret key serialization
+- binding credential materialization schemas beyond accepted PostgreSQL logical fields
 
 ## Consequences
 

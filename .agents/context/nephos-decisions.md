@@ -503,7 +503,7 @@ Service manifests declare exposed capabilities.
 
 Nephos resolves and creates bindings outside the manifest.
 
-Concrete binding output payload fields remain open.
+Later accepted binding output details are recorded in D076-D082.
 
 ## D070: Manifest apiVersion is nephos.pro/v1alpha1
 
@@ -543,7 +543,7 @@ Service manifests use `metadata.name`, optional `metadata.displayName`, optional
 
 `spec.bindings.outputs[]` starts with `target: app-secret`.
 
-The complete binding output target set and payload shape remain open.
+For Phase 1, `app-secret` is the only accepted binding output target.
 
 ## D075: Runtime field convention is spec.runtime
 
@@ -554,3 +554,71 @@ Use `spec.runtime.type`, `spec.runtime.chart.repository`, `spec.runtime.chart.na
 Do not expose raw Helm values as the primary user schema.
 
 Raw Kubernetes manifest runtime reference shape remains open.
+
+## D076: Phase 1 binding output target is app-secret
+
+Phase 1 supports `app-secret` as the only binding output target.
+
+`app-secret` means Nephos materializes binding credentials into the consuming App namespace as a Kubernetes Secret.
+
+Future binding output targets are deferred.
+
+## D077: PostgreSQL binding output fields
+
+PostgreSQL bindings use these logical output fields:
+
+- `host`
+- `port`
+- `database`
+- `username`
+- `password`
+- `uri`
+
+The exact manifest syntax for declaring payload fields and the exact Secret key serialization remain open.
+
+## D078: Nephos chooses deterministic binding Secret names
+
+Service manifests declare logical binding outputs.
+
+They do not hardcode final consuming Secret names.
+
+Nephos chooses deterministic Secret names from binding identity.
+
+The exact naming algorithm remains open.
+
+## D079: App binding aliases are symbolic
+
+App manifests use symbolic binding aliases such as `as: database`.
+
+Nephos maps binding outputs into runtime deployment values through the reserved `spec.runtime.values.mappings[]` lane.
+
+Do not make Apps depend on Service namespace Secrets or raw Kubernetes Secret templates.
+
+## D080: Phase 1 provisioning modes are app-scoped-resource and none
+
+Phase 1 recognizes two provisioning modes:
+
+- `app-scoped-resource`
+- `none`
+
+`app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance.
+
+`none` means no Service-side resource is created for the binding.
+
+## D081: Provisioning is a typed backend-owned contract
+
+Provisioning is a typed Nephos backend/API-owned contract.
+
+Do not model provisioning as arbitrary user-facing shell scripts.
+
+Do not make Helm hooks the product-level provisioning contract.
+
+The concrete execution mechanism remains open.
+
+## D082: Remove preserves provisioned resources and destroy deletes them
+
+Removing an App preserves provisioned Service-side resources created for that App.
+
+Destroying an App deletes provisioned Service-side resources created for that App after destructive confirmation.
+
+Binding materialized Secrets follow the accepted secret lifecycle.
