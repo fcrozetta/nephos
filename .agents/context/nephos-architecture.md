@@ -181,3 +181,29 @@ intent -> API/database desired state -> reconciler -> Kubernetes runtime state
 YAML is import/export only.
 
 Kubernetes CRDs and GitOps-as-source-of-truth are deferred until explicit future decisions.
+
+## Resource Policy
+
+Phase 1 does not implement a Nephos resource policy system.
+
+Running Apps and Services use replicas `1`.
+
+Stopped or disabled Apps and Services use replicas `0`.
+
+Resource profiles are reserved for future design but not defined.
+
+Nephos does not expose raw Kubernetes CPU/memory requests and limits as primary UX in Phase 1.
+
+No HA, autoscaling, affinity, anti-affinity, quotas, or scheduling policy are supported in Phase 1.
+
+## Auth Model
+
+Phase 1 is single-owner and local-first.
+
+The CLI is a trusted local client.
+
+No login, multi-user model, roles, or RBAC are required in Phase 1.
+
+The Web UI is deferred.
+
+Friend, cloud, hosted, and multi-user scenarios are out of scope for Phase 1 but not forbidden forever.

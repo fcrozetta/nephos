@@ -40,6 +40,7 @@ Current understanding:
 - Batch 1 decisions are accepted: Python/FastAPI backend, Python/Typer CLI, SQLite canonical desired-state DB, simple SQL migrations, YAML import/export, CRDs/GitOps deferred, API-owned in-process reconciler for Phase 1, official Python Kubernetes client, Web UI deferred, state backup deferred.
 - Batch 2 packaging decisions are accepted: separate App and Service Nephos manifest formats, Helm-primary runtime deployment underneath, raw Kubernetes manifests as fallback, local filesystem catalog first, optional Phase 1 Service provisioning contracts, and `Service operation` as the canonical term for typed Service management actions.
 - Batch 3 Service ownership decisions are accepted: installed concrete Services are Service instances, Services are shared by default, shared providers provision app-scoped resources in one instance by default where supported, App-requested isolation creates dedicated Service instances, dedicated instances remain first-class Services and may be explicitly shared with other Apps, bindings are the source of dependent tracking, provider defaults are supported, and destructive Service lifecycle operations with dependents require force plus impact list.
+- Batch 4 resource/auth decisions are accepted: Phase 1 has no Nephos resource policy system, replicas are 1 when running and 0 when stopped/disabled, resource profiles are reserved but not defined, CPU/memory requests and limits are not exposed as primary UX, no HA/autoscaling/affinity/quotas in Phase 1, single-owner/local-first auth model, trusted local CLI, Web UI deferred, and multi-user/friend/cloud scenarios are Phase 1 non-goals.
 
 Files likely to change:
 
@@ -49,6 +50,10 @@ Files likely to change:
 - `.agents/context/nephos-decisions.md`
 - `.agents/context/nephos-glossary.md`
 - `.agents/context/nephos-open-questions.md`
+- `.agents/context/nephos-auth.md`
+- `.agents/context/nephos-resource-policy.md`
+- `.agents/context/nephos-phase1.md`
+- `.agents/context/nephos-non-goals.md`
 - `.agents/context/nephos-service-ownership.md`
 - `.agents/context/nephos-packaging.md`
 - `.agents/context/nephos-stack.md`
@@ -57,6 +62,8 @@ Files likely to change:
 - `docs/adr/20260517-initial-implementation-stack.md`
 - `docs/adr/20260517-app-and-service-package-format.md`
 - `docs/adr/20260517-app-service-ownership-semantics.md`
+- `docs/adr/20260517-resource-policy-philosophy.md`
+- `docs/adr/20260517-auth-and-user-model.md`
 
 Proposed steps:
 
@@ -69,7 +76,10 @@ Proposed steps:
 - Add packaging context and Service operation terminology.
 - Accept the App/Service ownership semantics ADR.
 - Add Service instance, shared Service instance, and dedicated Service instance terminology.
-- Continue the interview with resource policy.
+- Accept the resource policy ADR.
+- Accept the auth and user model ADR.
+- Add Phase 1 and non-goal context for resource/auth scope.
+- Continue the interview with upgrades, health/status, or backup semantics.
 
 Risks:
 
@@ -80,6 +90,9 @@ Risks:
 - Pretending Service operation design is finished before real Services prove the contract.
 - Reintroducing hidden per-App infrastructure by failing to model dedicated Service instances as Services.
 - Duplicating dependent tracking outside bindings.
+- Accidentally implying Phase 1 has production-grade resource isolation.
+- Designing resource profiles before real workload data exists.
+- Designing auth around future multi-user scenarios before the local-first core exists.
 
 Validation commands:
 
@@ -87,6 +100,7 @@ Validation commands:
 - `rg -n "CRD|SQLite|Typer|FastAPI|source of truth|reconciler|nephos-cli" .agents/context docs/adr AGENTS.md .agents/AGENTS.md`
 - `rg -n "Nephos manifest|Service operation|Helm|raw Kubernetes|local filesystem catalog" .agents/context docs/adr`
 - `rg -n "Service instance|dedicated Service instance|shared Service instance|dependent|impact list|default provider" .agents/context docs/adr`
+- `rg -n "resource policy|replicas|BestEffort|single-owner|trusted local CLI|RBAC|autoscaling|HA|Phase 1" .agents/context docs/adr`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -99,4 +113,6 @@ Open questions:
 - Manifest schema details.
 - Service operation contract design.
 - Dedicated Service sharing policy details.
-- Resource policy, auth, upgrades, catalog source/trust beyond local filesystem, health/status, backups, Phase 1 scope, non-goals, contribution workflow, and reference scenario.
+- Future resource profile design.
+- Future auth/RBAC model.
+- Upgrades, catalog source/trust beyond local filesystem, health/status, backups, remaining Phase 1 scope, contribution workflow, and reference scenario.

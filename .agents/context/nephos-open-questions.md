@@ -130,6 +130,53 @@ Need to decide:
 - version compatibility between backend and CLI
 - release process across the two repositories
 
+## Future Resource Profile Design
+
+Question:
+
+How should Nephos model resource profiles after Phase 1?
+
+Accepted Phase 1 direction:
+
+- no Nephos resource policy system
+- replicas are `1` when running and `0` when stopped/disabled
+- resource profiles are reserved but not defined
+- raw Kubernetes CPU/memory knobs are not primary UX
+- no HA/autoscaling/affinity/quotas
+
+Need to decide later:
+
+- profile names and semantics
+- CPU/memory request and limit mapping
+- Service-specific defaults
+- App-specific defaults
+- capacity warnings
+- override model
+- validation behavior
+
+## Future Auth and RBAC Model
+
+Question:
+
+What auth model is needed after Phase 1?
+
+Accepted Phase 1 direction:
+
+- single-owner local-first
+- trusted local CLI
+- Web UI deferred
+- no login/RBAC in Phase 1
+- friend/cloud/multi-user scenarios are Phase 1 non-goals
+
+Need to decide later:
+
+- local-owner Web UI auth
+- API bind/listen policy
+- token model
+- remote access model
+- whether multi-user is ever needed
+- whether roles/RBAC are needed
+
 ## Local Development Workflow
 
 Question:

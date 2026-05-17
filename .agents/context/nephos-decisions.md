@@ -158,3 +158,31 @@ Nephos may support a user-configurable default provider per capability.
 Stopping, removing, or destroying a Service instance with dependents must require explicit force and show an impact list.
 
 Shared Service instances are long-lived infrastructure by default.
+
+## D022: No Phase 1 resource policy system
+
+Phase 1 does not implement a Nephos resource policy system.
+
+Running Apps and Services use replicas `1`.
+
+Stopped or disabled Apps and Services use replicas `0`.
+
+Resource profiles are reserved for future design but not defined.
+
+Raw Kubernetes CPU/memory knobs are not primary UX.
+
+## D023: No Phase 1 HA or autoscaling
+
+Phase 1 does not support HA, autoscaling, affinity, anti-affinity, quotas, or scheduling policy.
+
+## D024: Phase 1 auth is single-owner local-first
+
+Phase 1 is single-owner and local-first.
+
+The CLI is a trusted local client.
+
+No login, multi-user model, roles, or RBAC are required in Phase 1.
+
+The Web UI is deferred.
+
+Friend, cloud, hosted, and multi-user scenarios are out of scope for Phase 1 but not forbidden forever.
