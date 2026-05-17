@@ -48,6 +48,12 @@ Catalog and packaging:
 - Helm-primary runtime deployment underneath manifests
 - raw Kubernetes manifest fallback
 - local filesystem catalog from day one
+- repo-shipped reference catalog entries
+- user-configured local filesystem catalog paths
+- user-created local catalog entries allowed
+- local catalog files trusted as local-owner input
+- minimal catalog metadata carried in App/Service manifests
+- no separate catalog index
 - tiny repo-shipped reference catalog
 - no schema files until Fer approves shape
 
@@ -136,4 +142,5 @@ Reference scenario:
 - backup guarantees
 - local development workflow
 - packaging/distribution
+- future remote catalog trust/signing/update behavior
 - reference scenario exact command flow

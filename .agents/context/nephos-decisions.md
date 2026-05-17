@@ -340,3 +340,31 @@ Secret values must be redacted in API responses, CLI output, status output, logs
 Stop and remove preserve Secrets.
 
 Destroy deletes Secrets for the destroyed entity after destructive confirmation when persistent data or credentials are involved.
+
+## D046: Phase 1 catalog sources are local filesystem paths
+
+Phase 1 supports repo-shipped reference catalog entries and user-configured local filesystem catalog paths.
+
+The backend must not hardcode App or Service behavior.
+
+Reference scenarios should exercise the catalog and manifest path.
+
+## D047: User-created local catalog entries are allowed
+
+User-created local catalog entries are allowed in Phase 1.
+
+Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
+
+## D048: Local catalog files are trusted local-owner input
+
+Phase 1 treats local catalog files as trusted local-owner input.
+
+Remote catalog trust, signing, verification, private catalog credentials, and package sandboxing guarantees are deferred.
+
+## D049: Catalog metadata lives in manifests for Phase 1
+
+For Phase 1, App and Service manifests carry minimal catalog metadata.
+
+A separate catalog index is deferred.
+
+Catalog metadata must not become a second source of truth for package semantics.

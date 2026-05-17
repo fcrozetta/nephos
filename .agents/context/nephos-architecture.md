@@ -150,7 +150,17 @@ Nephos resolves App requirements to installed or installable Services.
 
 Phase 1 catalog source is local filesystem first.
 
-Git, OCI, remote indexes, signed catalogs, and private remote catalogs are deferred.
+Supported Phase 1 catalog sources are repo-shipped reference entries and user-configured local filesystem paths.
+
+User-created local catalog entries are allowed in Phase 1, but there is no schema stability promise until the manifest schema is accepted.
+
+Phase 1 treats local catalog files as trusted local-owner input.
+
+Git, OCI, remote indexes, signed catalogs, private remote catalogs, and remote trust policy are deferred.
+
+For Phase 1, App and Service manifests carry minimal catalog metadata.
+
+A separate catalog index is deferred.
 
 ## Packaging Layer
 

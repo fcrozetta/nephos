@@ -153,15 +153,20 @@ Need to decide:
 - relationship to binding lifecycle
 - relationship to backup/restore lifecycle
 
-## Catalog Source and Trust Beyond Phase 1
+## Future Catalog Source and Trust
 
 Question:
 
 How should non-local catalogs work after Phase 1?
 
-Accepted Phase 1 direction:
+Accepted direction:
 
-- local filesystem catalog first
+- Phase 1 supports repo-shipped reference catalog entries
+- Phase 1 supports user-configured local filesystem catalog paths
+- user-created local catalog entries are allowed
+- local catalog files are trusted local-owner input
+- App and Service manifests carry minimal catalog metadata in Phase 1
+- a separate catalog index is deferred
 
 Deferred:
 
@@ -170,15 +175,18 @@ Deferred:
 - remote indexes
 - signed catalogs
 - private remote catalogs
+- remote catalog trust policy
+- package sandboxing guarantees
 
 Need to decide:
 
-- trust model
 - signing/verifying catalog entries
 - private catalog credentials
 - catalog versioning
 - catalog update behavior
-- how catalog metadata relates to package manifests
+- remote catalog source format
+- future separate catalog index format, if needed
+- compatibility metadata
 
 ## Backend and CLI Packaging
 

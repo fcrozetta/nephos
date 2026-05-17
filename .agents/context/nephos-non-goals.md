@@ -37,7 +37,9 @@ Phase 1 does not include:
 - CRD-first source of truth
 - GitOps source of truth
 - remote catalog trust/signing
+- remote catalog fetching
 - OCI catalog distribution
+- separate catalog index
 - default-deny NetworkPolicy
 - Cloudflare Tunnel automation
 - Tailscale automation
@@ -81,3 +83,9 @@ Phase 1 does not automate public exposure.
 Manually configured tunnels such as Cloudflare Tunnel must be compatible with Nephos local ingress, but Nephos does not manage tunnel credentials, tunnel lifecycle, or DNS records in Phase 1.
 
 Phase 1 does not provide advanced secret management, rotation, or external vault integration.
+
+## Catalog Non-Goals
+
+Phase 1 does not provide remote catalog distribution, catalog signing, third-party catalog trust policy, or private remote catalog credentials.
+
+Phase 1 does not provide sandboxing guarantees for catalog-provided packages.

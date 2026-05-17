@@ -45,6 +45,7 @@ Current understanding:
 - Batch 6 health/status decisions are accepted: Nephos status is Nephos-aware and aggregates desired state, reconciliation, Kubernetes readiness/existence, bindings, dependencies, routes, storage, and backup status; Phase 1 implements a minimal subset; removed/destroyed are lifecycle states, not health statuses; backup participates as unsupported in Phase 1; status must include reasons/evidence; Service status includes dependent impact.
 - Batch 7 Phase 1 scope decisions are accepted: single-node K3s, minimal cluster lifecycle, App/Service install/start/stop/remove/destroy, `disable` deferred, basic ingress intent, local filesystem catalog from day one with tiny repo-shipped reference entries, no service mesh, multi-component Apps communicate through normal Kubernetes Services/networking, and Paperless + PostgreSQL is the canonical reference scenario.
 - Batch 8 runtime boundary decisions are accepted: one namespace per App instance and Service instance, `nephos-system` for control-plane/runtime support components, no default-deny NetworkPolicy in Phase 1, Traefik local ingress first, manual Cloudflare Tunnel compatibility without tunnel automation, stopped Apps keep route intent, Kubernetes Secrets for Phase 1, binding credentials materialized into App namespaces, and secret values redacted by default.
+- Batch 9 catalog decisions are accepted: Phase 1 supports repo-shipped reference catalog entries and user-configured local filesystem catalog paths, user-created local entries are allowed without schema stability promise until manifest schema acceptance, local catalog files are trusted local-owner input, remote trust/signing/sandboxing are deferred, and minimal catalog metadata lives in App/Service manifests rather than a separate index.
 
 Files likely to change:
 
@@ -64,6 +65,7 @@ Files likely to change:
 - `.agents/context/nephos-non-goals.md`
 - `.agents/context/nephos-service-ownership.md`
 - `.agents/context/nephos-packaging.md`
+- `.agents/context/nephos-catalog.md`
 - `.agents/context/nephos-stack.md`
 - `docs/adr/20260517-source-of-truth-for-desired-state.md`
 - `docs/adr/20260517-controller-and-reconciliation-architecture.md`
@@ -80,6 +82,7 @@ Files likely to change:
 - `docs/adr/20260517-namespace-strategy.md`
 - `docs/adr/20260517-ingress-and-visibility-model.md`
 - `docs/adr/20260517-secrets-model.md`
+- `docs/adr/20260517-catalog-source-and-trust-model.md`
 
 Proposed steps:
 
@@ -107,7 +110,9 @@ Proposed steps:
 - Accept the ingress and visibility model ADR.
 - Accept the secrets model ADR.
 - Add runtime-boundary context.
-- Continue the interview with reference scenario details or catalog trust.
+- Accept the catalog source and trust model ADR.
+- Add catalog context.
+- Continue the interview with reference scenario details, local dev workflow, testing, or contribution workflow.
 
 Risks:
 
@@ -132,6 +137,8 @@ Risks:
 - Accidentally making Cloudflare Tunnel/Tailscale foundational instead of compatible future/manual exposure options.
 - Breaking local-first App-to-Service communication by adding default-deny NetworkPolicy before a policy model exists.
 - Leaking secrets through status/logs while trying to improve operational transparency.
+- Treating local catalog trust as permission to execute arbitrary shell from catalog entries.
+- Creating a separate catalog index before manifest metadata proves insufficient.
 
 Validation commands:
 
@@ -144,6 +151,7 @@ Validation commands:
 - `rg -n "health status|lifecycle state|status reason|status evidence|Nephos-aware|not_applicable|unsupported" .agents/context docs/adr`
 - `rg -n "single-node|minimal cluster lifecycle|disable|service mesh|multi-component|Paperless|PostgreSQL|local filesystem catalog" .agents/context docs/adr`
 - `rg -n "namespace|NetworkPolicy|Traefik|Cloudflare|Tailscale|Kubernetes Secrets|redacted|route intent" .agents/context docs/adr`
+- `rg -n "local filesystem catalog|repo-shipped reference|user-configured|user-created|trusted local-owner|catalog index|remote catalog|signing|sandbox" .agents/context docs/adr`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -164,4 +172,5 @@ Open questions:
 - Namespace label/slug details.
 - Local ingress hostname/TLS details.
 - Secret naming/rotation details.
-- Catalog source/trust beyond local filesystem and contribution workflow.
+- Catalog source/trust beyond local filesystem.
+- Contribution workflow.

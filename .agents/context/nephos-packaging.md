@@ -100,7 +100,22 @@ Do not expose arbitrary Kubernetes YAML as the primary package UX.
 
 Phase 1 catalog source:
 
-- local filesystem
+- local filesystem catalogs
+
+Supported Phase 1 sources:
+
+- repo-shipped reference catalog entries
+- user-configured local filesystem catalog paths
+
+User-created local catalog entries are allowed in Phase 1.
+
+Until the manifest schema is accepted, local user-created entries do not carry a schema stability promise.
+
+Phase 1 treats local catalog files as trusted local-owner input.
+
+For Phase 1, App and Service manifests carry minimal catalog metadata.
+
+A separate catalog index is deferred.
 
 Deferred catalog sources:
 
@@ -109,6 +124,8 @@ Deferred catalog sources:
 - remote indexes
 - signed catalogs
 - private remote catalogs
+
+Remote catalog trust, signing, verification, private catalog credentials, and catalog update behavior are deferred.
 
 Catalogs exist to support composition, not app-store behavior.
 
