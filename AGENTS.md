@@ -310,6 +310,54 @@ Do not silently add, accept, or reshape architectural decisions in `.agents/cont
 
 If Fer has not selected a decision, keep it in `.agents/context/nephos-open-questions.md` or in a draft ADR.
 
+### ADR Requirements
+
+Create or update an ADR when a change affects:
+
+- architecture structure
+- lifecycle semantics
+- source of truth
+- manifest or schema shape
+- runtime boundaries
+- auth or security model
+- backup or data lifecycle semantics
+- public API or CLI contract
+- catalog behavior
+- Phase 1 scope
+
+Use ADR statuses consistently:
+
+- `draft`: unresolved or exploratory
+- `proposed`: candidate direction awaiting Fer confirmation
+- `accepted`: Fer confirmed the decision
+- `rejected`: explicitly not chosen
+- `deprecated`: no longer recommended
+- `superseded`: replaced by a later ADR
+
+Accepted ADRs are durable. Material changes to accepted decisions should normally create a new ADR that supersedes or amends the earlier decision.
+
+### Agent Uncertainty Rule
+
+If architecture is unclear, ask Fer or record an open question before implementing.
+
+Low-level implementation details may be chosen pragmatically when they are consistent with accepted ADRs and context.
+
+### Schema And Example Workflow
+
+Do not add canonical schema files under `schemas/` until Fer approves the shape.
+
+Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
+
+Temporary draft manifests are allowed while designing schemas, but they must live in a clearly marked draft workspace outside `schemas/` and `examples/`, be labeled non-canonical, and not be treated as source of truth.
+
+The exact draft workspace path is not selected yet.
+
+### Change Discipline
+
+Any PR, commit, or agent change that alters architecture or public contracts must update ADRs, context, or open questions in the same change.
+
+Keep architecture decision batches in separate commits when feasible.
+
 ---
 
 ## Documentation

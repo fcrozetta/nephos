@@ -47,6 +47,7 @@ Current understanding:
 - Batch 8 runtime boundary decisions are accepted: one namespace per App instance and Service instance, `nephos-system` for control-plane/runtime support components, no default-deny NetworkPolicy in Phase 1, Traefik local ingress first, manual Cloudflare Tunnel compatibility without tunnel automation, stopped Apps keep route intent, Kubernetes Secrets for Phase 1, binding credentials materialized into App namespaces, and secret values redacted by default.
 - Batch 9 catalog decisions are accepted: Phase 1 supports repo-shipped reference catalog entries and user-configured local filesystem catalog paths, user-created local entries are allowed without schema stability promise until manifest schema acceptance, local catalog files are trusted local-owner input, remote trust/signing/sandboxing are deferred, and minimal catalog metadata lives in App/Service manifests rather than a separate index.
 - Batch 10 development/testing/distribution decisions are accepted: backend local dev uses `uv`, backend tests use `pytest`, lint/format checks use `ruff`, unit tests use mocks/fakes, Kubernetes integration tests use real K3s, Phase 1 backend distribution is local process plus container image, full installer packaging is deferred, CLI workflow belongs to `../nephos-cli`, and Phase 1 has backend/CLI version awareness without strict compatibility blocking.
+- Batch 11 contribution/agent workflow decisions are accepted: ADRs are required for architecture-significant changes, ADR statuses have explicit meanings, agents must ask or record open questions before implementing through architectural ambiguity, canonical schemas/examples require Fer approval, temporary draft manifests are allowed only in a clearly marked non-canonical draft workspace outside `schemas/` and `examples/`, architecture-changing work updates ADR/context/open questions in the same change, and architecture decision batches should be committed separately when feasible.
 
 Files likely to change:
 
@@ -69,6 +70,7 @@ Files likely to change:
 - `.agents/context/nephos-catalog.md`
 - `.agents/context/nephos-stack.md`
 - `.agents/context/nephos-dev-workflow.md`
+- `.agents/context/nephos-contribution-and-agent-workflow.md`
 - `docs/adr/20260517-source-of-truth-for-desired-state.md`
 - `docs/adr/20260517-controller-and-reconciliation-architecture.md`
 - `docs/adr/20260517-initial-implementation-stack.md`
@@ -86,6 +88,7 @@ Files likely to change:
 - `docs/adr/20260517-secrets-model.md`
 - `docs/adr/20260517-catalog-source-and-trust-model.md`
 - `docs/adr/20260517-local-development-testing-and-distribution.md`
+- `docs/adr/20260517-architecture-decision-and-agent-workflow.md`
 
 Proposed steps:
 
@@ -117,7 +120,9 @@ Proposed steps:
 - Add catalog context.
 - Accept the local development, testing, and distribution ADR.
 - Add development workflow context.
-- Continue the interview with reference scenario details, local dev workflow, testing, or contribution workflow.
+- Accept the architecture decision and agent workflow ADR.
+- Add contribution and agent workflow context.
+- Continue the interview with reference scenario details, manifest schema, or remaining open questions.
 
 Risks:
 
@@ -147,6 +152,9 @@ Risks:
 - Prematurely enforcing strict backend/CLI compatibility before the API, manifest schema, and release matrix stabilize.
 - Letting unit tests require a Kubernetes cluster.
 - Letting this repository quietly become responsible for CLI implementation workflow.
+- Letting agents silently create architecture by implementation.
+- Treating draft manifests as accepted schemas or examples.
+- Rewriting accepted ADR history instead of superseding/amending decisions.
 
 Validation commands:
 
@@ -161,6 +169,7 @@ Validation commands:
 - `rg -n "namespace|NetworkPolicy|Traefik|Cloudflare|Tailscale|Kubernetes Secrets|redacted|route intent" .agents/context docs/adr`
 - `rg -n "local filesystem catalog|repo-shipped reference|user-configured|user-created|trusted local-owner|catalog index|remote catalog|signing|sandbox" .agents/context docs/adr`
 - `rg -n "uv|pytest|ruff|mocks|fakes|K3s integration|container image|version endpoint|strict compatibility|nephos-cli" .agents/context docs/adr`
+- `rg -n "ADR|required|draft|proposed|accepted|superseded|open question|schemas|examples|temporary draft|non-canonical|same change|separate commits" AGENTS.md .agents/AGENTS.md .agents/context docs/adr`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -185,4 +194,4 @@ Open questions:
 - Local development command details.
 - Testing command/marker/CI details.
 - Backend/CLI release process and future compatibility matrix.
-- Contribution workflow.
+- Temporary draft manifest workspace path.

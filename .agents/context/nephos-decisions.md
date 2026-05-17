@@ -404,3 +404,41 @@ The CLI should report CLI and backend versions and may warn when backend version
 The CLI should not block state-mutating commands solely because of version mismatch in Phase 1.
 
 Strict CLI/backend compatibility blocking is deferred.
+
+## D055: ADRs are required for architecture-significant changes
+
+Create or update ADRs for changes affecting architecture structure, lifecycle semantics, source of truth, manifest/schema shape, runtime boundaries, auth/security, backup/data lifecycle semantics, public API/CLI contract, catalog behavior, or Phase 1 scope.
+
+Minor implementation details inside accepted architecture do not require a new ADR.
+
+## D056: ADR statuses have explicit meanings
+
+Use `draft`, `proposed`, `accepted`, `rejected`, `deprecated`, and `superseded`.
+
+`accepted` means Fer confirmed the decision.
+
+Accepted ADRs are durable.
+
+Material changes to accepted decisions should normally use a new superseding/amending ADR.
+
+## D057: Agents must not implement through architectural ambiguity
+
+If architecture is unclear, agents must ask Fer or record an open question before implementing.
+
+Low-level implementation details may be chosen pragmatically when consistent with accepted ADRs and context.
+
+## D058: Canonical schemas and examples require Fer approval
+
+Do not add canonical schema files under `schemas/` until Fer approves the shape.
+
+Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
+
+Temporary draft manifests are allowed while designing schemas, but they must be clearly marked non-canonical and live outside `schemas/` and `examples/`.
+
+## D059: Architecture-changing work updates documentation in the same change
+
+Any PR, commit, or agent change that alters architecture or public contracts must update ADRs, context, or open questions in the same change.
+
+## D060: Keep architecture decision batches separate when feasible
+
+Keep architecture decision batches in separate commits when feasible.

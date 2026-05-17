@@ -188,6 +188,27 @@ Need to decide:
 - future separate catalog index format, if needed
 - compatibility metadata
 
+## Temporary Draft Manifest Workspace
+
+Question:
+
+Where should temporary draft manifests live while Nephos is designing manifest schemas?
+
+Accepted direction:
+
+- temporary draft manifests are allowed during schema design
+- they must be clearly marked non-canonical
+- they must not live under `schemas/`
+- they must not live under `examples/`
+- they must not be treated as source of truth
+- they must be deleted, moved, or converted after shape approval
+
+Need to decide:
+
+- exact draft workspace path
+- naming convention
+- cleanup policy after schema acceptance
+
 ## Backend and CLI Packaging
 
 Question:
