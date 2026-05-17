@@ -145,10 +145,16 @@ Reference scenario:
 - Paperless App
 - PostgreSQL Service
 - reference catalog should exercise local filesystem catalog/manifest flow
+- Paperless requires only PostgreSQL in the Phase 1 reference scenario
+- bind Paperless to the `postgres` capability exposed by PostgreSQL
+- expose Paperless through local route intent using a placeholder like `paperless.<local-domain>`
+- stop/start preserves data
+- remove preserves persistent data and metadata
+- destroy deletes App-owned persistent data after destructive confirmation
+- attempting to stop PostgreSQL while Paperless depends on it is blocked unless forced and shows an impact list
 
 ## Still To Define
 
-- exact binding behavior for first reference scenario
 - exact namespace slug normalization and labels
 - ingress/TLS/local DNS hostname behavior
 - secret naming and rotation behavior
@@ -159,4 +165,4 @@ Reference scenario:
 - exact developer commands
 - backend image layout and registry
 - cross-repo release process
-- reference scenario exact command flow
+- exact reference scenario command spelling and status output

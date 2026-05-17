@@ -442,3 +442,27 @@ Any PR, commit, or agent change that alters architecture or public contracts mus
 ## D060: Keep architecture decision batches separate when feasible
 
 Keep architecture decision batches in separate commits when feasible.
+
+## D061: Draft manifest workspace is .agents/drafts/manifests
+
+Temporary draft manifest sketches may live under `.agents/drafts/manifests/`.
+
+Draft manifests are non-canonical, must not live under `schemas/` or `examples/`, and must not be treated as source of truth.
+
+## D062: Paperless plus PostgreSQL is the canonical reference scenario flow
+
+The canonical Phase 1 reference scenario installs PostgreSQL Service, installs Paperless App, binds Paperless to the `postgres` capability, exposes Paperless through local route intent, exercises stop/start data preservation, removes Paperless preserving data, and destroys Paperless with destructive confirmation.
+
+Paperless requires only PostgreSQL in the Phase 1 reference scenario.
+
+## D063: Reference scenario includes Service dependency impact
+
+The reference scenario must include attempting to stop PostgreSQL while Paperless depends on it.
+
+Nephos should block the Service stop unless forced and show an impact list.
+
+## D064: Reference scenario route is illustrative
+
+Use an illustrative local route such as `paperless.<local-domain>`.
+
+The exact local domain, wildcard behavior, DNS behavior, and TLS behavior remain open.

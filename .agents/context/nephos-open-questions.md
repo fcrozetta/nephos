@@ -188,15 +188,16 @@ Need to decide:
 - future separate catalog index format, if needed
 - compatibility metadata
 
-## Temporary Draft Manifest Workspace
+## Draft Manifest Naming Details
 
 Question:
 
-Where should temporary draft manifests live while Nephos is designing manifest schemas?
+What naming and cleanup conventions should temporary draft manifests use while Nephos is designing manifest schemas?
 
 Accepted direction:
 
 - temporary draft manifests are allowed during schema design
+- temporary draft manifests live under `.agents/drafts/manifests/`
 - they must be clearly marked non-canonical
 - they must not live under `schemas/`
 - they must not live under `examples/`
@@ -205,7 +206,6 @@ Accepted direction:
 
 Need to decide:
 
-- exact draft workspace path
 - naming convention
 - cleanup policy after schema acceptance
 
@@ -403,7 +403,7 @@ Need to decide later:
 
 Question:
 
-What exact command flow and manifest examples should define the Paperless + PostgreSQL reference scenario?
+What exact command spelling, status output, and manifest sketches should define the Paperless + PostgreSQL reference scenario?
 
 Accepted direction:
 
@@ -411,11 +411,15 @@ Accepted direction:
 - PostgreSQL Service
 - local filesystem catalog
 - Nephos manifests
+- Paperless requires only PostgreSQL in Phase 1 reference scenario
 - capability binding
 - basic ingress intent
 - lifecycle install/start/stop/remove/destroy
 - data preserved on stop/remove
 - destroy requires destructive confirmation when persistent data exists
+- include Service dependency impact
+- attempting to stop PostgreSQL while Paperless depends on it is blocked unless forced and shows an impact list
+- use illustrative route placeholder such as `paperless.<local-domain>`
 
 Need to decide:
 
@@ -427,5 +431,5 @@ Need to decide:
 - expected status outputs
 - namespace names
 - secret names
-- ingress hostname policy
+- exact ingress hostname policy
 - data preservation checks

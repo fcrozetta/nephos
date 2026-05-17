@@ -40,6 +40,10 @@ Do not create schema files under `schemas/` until Fer approves the manifest shap
 
 Do not create examples under `examples/` until the example shape is approved.
 
+Temporary draft manifest sketches may live under `.agents/drafts/manifests/`.
+
+Draft manifests are non-canonical and do not define schema compatibility.
+
 ## Trust Model
 
 Phase 1 treats local catalog files as trusted local-owner input.

@@ -45,7 +45,9 @@ Low-level implementation details may be chosen pragmatically when consistent wit
 
 Do not add canonical schema files under `schemas/` or canonical examples under `examples/` until Fer approves the shape.
 
-Temporary draft manifests are allowed during schema design, but they must live in a clearly marked draft workspace outside `schemas/` and `examples/`, be labeled non-canonical, and not be treated as source of truth.
+Temporary draft manifests are allowed during schema design, but they must live in `.agents/drafts/manifests/`, be labeled non-canonical, and not be treated as source of truth.
+
+Draft manifests must be deleted, moved, or converted after Fer accepts the schema/example shape.
 
 Any change that alters architecture or public contracts must update ADRs, context, or open questions in the same change.
 

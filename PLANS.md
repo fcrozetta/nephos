@@ -48,6 +48,7 @@ Current understanding:
 - Batch 9 catalog decisions are accepted: Phase 1 supports repo-shipped reference catalog entries and user-configured local filesystem catalog paths, user-created local entries are allowed without schema stability promise until manifest schema acceptance, local catalog files are trusted local-owner input, remote trust/signing/sandboxing are deferred, and minimal catalog metadata lives in App/Service manifests rather than a separate index.
 - Batch 10 development/testing/distribution decisions are accepted: backend local dev uses `uv`, backend tests use `pytest`, lint/format checks use `ruff`, unit tests use mocks/fakes, Kubernetes integration tests use real K3s, Phase 1 backend distribution is local process plus container image, full installer packaging is deferred, CLI workflow belongs to `../nephos-cli`, and Phase 1 has backend/CLI version awareness without strict compatibility blocking.
 - Batch 11 contribution/agent workflow decisions are accepted: ADRs are required for architecture-significant changes, ADR statuses have explicit meanings, agents must ask or record open questions before implementing through architectural ambiguity, canonical schemas/examples require Fer approval, temporary draft manifests are allowed only in a clearly marked non-canonical draft workspace outside `schemas/` and `examples/`, architecture-changing work updates ADR/context/open questions in the same change, and architecture decision batches should be committed separately when feasible.
+- Batch 12 reference scenario decisions are accepted: `.agents/drafts/manifests/` is the non-canonical draft manifest workspace, Paperless plus PostgreSQL is the canonical Phase 1 reference scenario, Paperless requires only PostgreSQL in the reference scenario, the flow includes install/bind/local route/stop/start/remove/destroy, Service dependency impact is included by attempting to stop PostgreSQL while Paperless depends on it, and route examples stay illustrative with placeholders such as `paperless.<local-domain>`.
 
 Files likely to change:
 
@@ -71,6 +72,7 @@ Files likely to change:
 - `.agents/context/nephos-stack.md`
 - `.agents/context/nephos-dev-workflow.md`
 - `.agents/context/nephos-contribution-and-agent-workflow.md`
+- `.agents/context/nephos-reference-scenario.md`
 - `docs/adr/20260517-source-of-truth-for-desired-state.md`
 - `docs/adr/20260517-controller-and-reconciliation-architecture.md`
 - `docs/adr/20260517-initial-implementation-stack.md`
@@ -89,6 +91,7 @@ Files likely to change:
 - `docs/adr/20260517-catalog-source-and-trust-model.md`
 - `docs/adr/20260517-local-development-testing-and-distribution.md`
 - `docs/adr/20260517-architecture-decision-and-agent-workflow.md`
+- `docs/adr/20260517-reference-scenario.md`
 
 Proposed steps:
 
@@ -122,7 +125,9 @@ Proposed steps:
 - Add development workflow context.
 - Accept the architecture decision and agent workflow ADR.
 - Add contribution and agent workflow context.
-- Continue the interview with reference scenario details, manifest schema, or remaining open questions.
+- Accept the reference scenario ADR.
+- Add reference scenario context and draft manifest workspace README.
+- Continue the interview with manifest schema or remaining open questions.
 
 Risks:
 
@@ -155,6 +160,8 @@ Risks:
 - Letting agents silently create architecture by implementation.
 - Treating draft manifests as accepted schemas or examples.
 - Rewriting accepted ADR history instead of superseding/amending decisions.
+- Accidentally inferring concrete manifest schema from the reference scenario.
+- Letting the Paperless reference scenario expand with Redis/object storage before Phase 1 proves the minimal model.
 
 Validation commands:
 
@@ -170,6 +177,7 @@ Validation commands:
 - `rg -n "local filesystem catalog|repo-shipped reference|user-configured|user-created|trusted local-owner|catalog index|remote catalog|signing|sandbox" .agents/context docs/adr`
 - `rg -n "uv|pytest|ruff|mocks|fakes|K3s integration|container image|version endpoint|strict compatibility|nephos-cli" .agents/context docs/adr`
 - `rg -n "ADR|required|draft|proposed|accepted|superseded|open question|schemas|examples|temporary draft|non-canonical|same change|separate commits" AGENTS.md .agents/AGENTS.md .agents/context docs/adr`
+- `rg -n "Paperless|PostgreSQL|postgres|reference scenario|paperless.<local-domain>|impact list|draft manifests|.agents/drafts/manifests" AGENTS.md .agents/AGENTS.md .agents/context docs/adr .agents/drafts PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -186,7 +194,7 @@ Open questions:
 - Future auth/RBAC model.
 - Concrete backup implementation design.
 - Health/status check implementation details.
-- Reference scenario exact flow and manifest examples.
+- Reference scenario manifest sketches and data preservation checks.
 - Namespace label/slug details.
 - Local ingress hostname/TLS details.
 - Secret naming/rotation details.
@@ -194,4 +202,5 @@ Open questions:
 - Local development command details.
 - Testing command/marker/CI details.
 - Backend/CLI release process and future compatibility matrix.
-- Temporary draft manifest workspace path.
+- Reference scenario exact command spelling and status output.
+- Draft manifest naming and cleanup conventions.

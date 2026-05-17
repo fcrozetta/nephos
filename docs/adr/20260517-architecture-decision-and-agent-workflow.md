@@ -74,14 +74,14 @@ Temporary draft manifests are allowed while designing schemas because examples m
 
 Temporary draft manifests must:
 
-- live in a clearly marked draft workspace
+- live in `.agents/drafts/manifests/`
 - not live under `schemas/`
 - not live under `examples/`
 - be labeled as non-canonical
 - not be treated as source of truth
 - be deleted, moved, or converted after the schema/example shape is accepted
 
-The exact draft workspace path is not selected yet.
+Do not infer concrete schema fields from draft manifests without a later schema decision.
 
 ## Commit Discipline
 

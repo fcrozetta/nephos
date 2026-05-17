@@ -171,3 +171,7 @@ No package schema has been approved yet.
 Do not add files under `schemas/` until Fer approves the manifest shape.
 
 Do not add examples under `examples/` until the example shape is approved.
+
+Temporary draft manifest sketches may live under `.agents/drafts/manifests/`.
+
+Draft manifests are non-canonical and must not be treated as schema or example source of truth.

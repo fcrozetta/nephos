@@ -348,9 +348,9 @@ Do not add canonical schema files under `schemas/` until Fer approves the shape.
 
 Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
 
-Temporary draft manifests are allowed while designing schemas, but they must live in a clearly marked draft workspace outside `schemas/` and `examples/`, be labeled non-canonical, and not be treated as source of truth.
+Temporary draft manifests are allowed while designing schemas, but they must live in `.agents/drafts/manifests/`, be labeled non-canonical, and not be treated as source of truth.
 
-The exact draft workspace path is not selected yet.
+Draft manifests must be deleted, moved, or converted after Fer accepts the schema/example shape.
 
 ### Change Discipline
 
