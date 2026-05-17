@@ -48,6 +48,17 @@ Services:
 - dedicated Service instances reserved as concept
 - Service operations optional and contract deferred
 
+Upgrades/backups:
+
+- pinned versions
+- explicit/manual upgrades
+- no automatic latest
+- Service upgrades with persistent data are risky by default
+- rollback best-effort, not guaranteed
+- no concrete backup/restore implementation
+- backup intent/status may be tracked
+- destroy requires destructive confirmation when persistent data exists
+
 Resource/auth:
 
 - no Nephos resource policy system
@@ -67,7 +78,6 @@ Resource/auth:
 - secrets naming and preservation behavior
 - backup guarantees
 - health/status model
-- upgrade behavior
 - local development workflow
 - packaging/distribution
 - reference scenario

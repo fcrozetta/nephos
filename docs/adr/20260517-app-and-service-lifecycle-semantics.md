@@ -65,13 +65,19 @@ Removing an App removes deployed runtime objects while optionally preserving per
 
 Destroying an App deletes runtime objects and persistent data.
 
+Destroy must require destructive confirmation when persistent data exists.
+
+There is no separate purge lifecycle operation.
+
 ## Service Lifecycle Semantics
 
 Services require dependency-aware lifecycle behavior.
 
-Stopping or destroying a Service must check dependent Apps.
+Stopping, removing, or destroying a Service must check dependent Apps.
 
 If dependent Apps exist, Nephos should warn and require explicit force.
+
+Destroying a Service deletes persistent data and must require destructive confirmation when persistent data exists.
 
 ## Rationale
 

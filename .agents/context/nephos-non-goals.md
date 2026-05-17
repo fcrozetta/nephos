@@ -37,6 +37,9 @@ Phase 1 does not include:
 - GitOps source of truth
 - remote catalog trust/signing
 - OCI catalog distribution
+- automatic latest upgrades
+- guaranteed rollback
+- concrete backup/restore implementation
 
 ## Resource Non-Goals
 
@@ -51,3 +54,11 @@ Phase 1 does not expose raw Kubernetes CPU/memory knobs as the primary UX.
 Phase 1 does not design for enterprise IAM or SaaS tenancy.
 
 Future multi-user or hosted scenarios are not forbidden, but they are not the Phase 1 design center.
+
+## Backup And Upgrade Non-Goals
+
+Phase 1 does not provide universal backup/restore.
+
+Phase 1 does not guarantee rollback.
+
+Phase 1 does not automatically upgrade Apps, Services, charts, catalogs, or Nephos.

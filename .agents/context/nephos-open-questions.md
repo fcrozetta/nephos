@@ -177,6 +177,56 @@ Need to decide later:
 - whether multi-user is ever needed
 - whether roles/RBAC are needed
 
+## Concrete Backup Implementation Design
+
+Question:
+
+What concrete backup/restore implementations should Nephos support after Phase 1?
+
+Accepted Phase 1 direction:
+
+- no concrete backup/restore implementation
+- Nephos owns backup intent/policy/status
+- Services own or provide data-aware implementations
+- PVC snapshots are not universally sufficient for databases
+- destroy requires destructive confirmation when persistent data exists
+
+Need to decide later:
+
+- first backup target
+- database-native dump strategy
+- object storage backup strategy
+- PVC snapshot support
+- filesystem/local storage backup strategy
+- retention policy
+- restore workflow
+- backup status model
+- backup-before-upgrade flow
+
+## Upgrade Compatibility Design
+
+Question:
+
+How should Nephos validate upgrade compatibility after Phase 1?
+
+Accepted Phase 1 direction:
+
+- versions are pinned
+- upgrades are explicit/manual
+- no automatic latest
+- Service upgrades with persistent data are risky by default
+- rollback is best-effort, not guaranteed
+
+Need to decide later:
+
+- catalog compatibility metadata
+- App/Service version constraints
+- Service capability compatibility
+- chart version compatibility
+- preflight checks
+- rollback metadata
+- backup/checkpoint requirements
+
 ## Local Development Workflow
 
 Question:

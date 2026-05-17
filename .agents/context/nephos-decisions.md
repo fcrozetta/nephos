@@ -186,3 +186,41 @@ No login, multi-user model, roles, or RBAC are required in Phase 1.
 The Web UI is deferred.
 
 Friend, cloud, hosted, and multi-user scenarios are out of scope for Phase 1 but not forbidden forever.
+
+## D025: Versions are pinned and upgrades are manual
+
+App, Service, catalog, Helm chart, runtime deployment reference, and Nephos versions are pinned.
+
+Upgrades are explicit and manual.
+
+No automatic latest behavior is allowed by default.
+
+## D026: Service upgrades with persistent data are risky by default
+
+Services are higher-risk upgrade targets than Apps because they commonly own persistent infrastructure state.
+
+Risky Service upgrades should require backup/checkpoint confirmation once the Service declares backup support.
+
+Until backup support exists, Nephos must warn that no supported backup exists.
+
+Rollback is best-effort in Phase 1, not guaranteed.
+
+## D027: Nephos owns backup intent but not universal implementation
+
+Nephos owns backup intent, policy, and status.
+
+Services own or provide data-aware backup/restore implementation where data semantics matter.
+
+Phase 1 does not implement concrete backup/restore and must not promise universal backup guarantees.
+
+## D028: Destroy is the data-deleting lifecycle operation
+
+Stop preserves persistent data.
+
+Remove removes runtime objects while preserving persistent data by default.
+
+Destroy deletes runtime objects and persistent data.
+
+Destroy must require destructive confirmation when persistent data exists.
+
+There is no separate purge lifecycle operation.

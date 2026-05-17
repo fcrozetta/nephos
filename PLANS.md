@@ -41,6 +41,7 @@ Current understanding:
 - Batch 2 packaging decisions are accepted: separate App and Service Nephos manifest formats, Helm-primary runtime deployment underneath, raw Kubernetes manifests as fallback, local filesystem catalog first, optional Phase 1 Service provisioning contracts, and `Service operation` as the canonical term for typed Service management actions.
 - Batch 3 Service ownership decisions are accepted: installed concrete Services are Service instances, Services are shared by default, shared providers provision app-scoped resources in one instance by default where supported, App-requested isolation creates dedicated Service instances, dedicated instances remain first-class Services and may be explicitly shared with other Apps, bindings are the source of dependent tracking, provider defaults are supported, and destructive Service lifecycle operations with dependents require force plus impact list.
 - Batch 4 resource/auth decisions are accepted: Phase 1 has no Nephos resource policy system, replicas are 1 when running and 0 when stopped/disabled, resource profiles are reserved but not defined, CPU/memory requests and limits are not exposed as primary UX, no HA/autoscaling/affinity/quotas in Phase 1, single-owner/local-first auth model, trusted local CLI, Web UI deferred, and multi-user/friend/cloud scenarios are Phase 1 non-goals.
+- Batch 5 upgrade/backup decisions are accepted: versions are pinned, upgrades are explicit/manual, no automatic latest, Service upgrades with persistent data are risky by default, rollback is best-effort in Phase 1, Nephos owns backup intent/policy/status while Services own data-aware implementation, no backup implementation in Phase 1, stop/remove preserve data, and destroy deletes data and requires destructive confirmation when persistent data exists.
 
 Files likely to change:
 
@@ -52,6 +53,8 @@ Files likely to change:
 - `.agents/context/nephos-open-questions.md`
 - `.agents/context/nephos-auth.md`
 - `.agents/context/nephos-resource-policy.md`
+- `.agents/context/nephos-upgrades.md`
+- `.agents/context/nephos-backups.md`
 - `.agents/context/nephos-phase1.md`
 - `.agents/context/nephos-non-goals.md`
 - `.agents/context/nephos-service-ownership.md`
@@ -64,6 +67,9 @@ Files likely to change:
 - `docs/adr/20260517-app-service-ownership-semantics.md`
 - `docs/adr/20260517-resource-policy-philosophy.md`
 - `docs/adr/20260517-auth-and-user-model.md`
+- `docs/adr/20260517-upgrade-policy.md`
+- `docs/adr/20260517-storage-and-backup-semantics.md`
+- `docs/adr/20260517-app-and-service-lifecycle-semantics.md`
 
 Proposed steps:
 
@@ -79,7 +85,11 @@ Proposed steps:
 - Accept the resource policy ADR.
 - Accept the auth and user model ADR.
 - Add Phase 1 and non-goal context for resource/auth scope.
-- Continue the interview with upgrades, health/status, or backup semantics.
+- Accept the upgrade policy ADR.
+- Accept the storage and backup semantics ADR.
+- Update lifecycle semantics for destructive confirmation.
+- Add upgrade and backup context.
+- Continue the interview with health/status or remaining Phase 1 scope.
 
 Risks:
 
@@ -93,6 +103,9 @@ Risks:
 - Accidentally implying Phase 1 has production-grade resource isolation.
 - Designing resource profiles before real workload data exists.
 - Designing auth around future multi-user scenarios before the local-first core exists.
+- Implying Phase 1 has working backup/restore when it only tracks semantics.
+- Treating Kubernetes PVC snapshots as sufficient for database correctness.
+- Making Service upgrades look safe without backup support.
 
 Validation commands:
 
@@ -101,6 +114,7 @@ Validation commands:
 - `rg -n "Nephos manifest|Service operation|Helm|raw Kubernetes|local filesystem catalog" .agents/context docs/adr`
 - `rg -n "Service instance|dedicated Service instance|shared Service instance|dependent|impact list|default provider" .agents/context docs/adr`
 - `rg -n "resource policy|replicas|BestEffort|single-owner|trusted local CLI|RBAC|autoscaling|HA|Phase 1" .agents/context docs/adr`
+- `rg -n "upgrade|backup|restore|rollback|destroy|destructive confirmation|persistent data|manual|pinned" .agents/context docs/adr`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -115,4 +129,5 @@ Open questions:
 - Dedicated Service sharing policy details.
 - Future resource profile design.
 - Future auth/RBAC model.
-- Upgrades, catalog source/trust beyond local filesystem, health/status, backups, remaining Phase 1 scope, contribution workflow, and reference scenario.
+- Concrete backup implementation design.
+- Catalog source/trust beyond local filesystem, health/status, remaining Phase 1 scope, contribution workflow, and reference scenario.
