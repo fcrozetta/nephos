@@ -1,20 +1,5 @@
 # Nephos Open Questions
 
-## App Package Format
-
-Question:
-
-What format defines installable Apps?
-
-Candidates:
-
-- nephos.yml
-- Helm chart wrapper
-- catalog entry referencing Helm/manifests
-- OCI artifact
-
-Need to define schema.
-
 ## Namespace Strategy
 
 Question:
@@ -26,6 +11,83 @@ Current leaning:
 - one namespace per App
 - one namespace per Service
 - reserved nephos-system namespace for Nephos control plane
+
+## Manifest Schema Details
+
+Question:
+
+What are the concrete App and Service manifest schemas?
+
+Accepted direction:
+
+- separate App and Service Nephos manifest formats
+- Helm-primary runtime deployment references
+- raw Kubernetes manifest fallback
+- no schema file until Fer approves the shape
+
+Need to decide:
+
+- exact field names
+- manifest filenames
+- versioning scheme
+- required vs optional fields
+- config surface format
+- capability requirement syntax
+- exposed capability syntax
+- runtime deployment reference syntax
+- validation rules
+
+## Service Operation Contract
+
+Question:
+
+What is the concrete contract for Service operations?
+
+Accepted direction:
+
+- Service operation is the canonical term
+- Service management action is only a descriptive phrase
+- Service operations are optional in Phase 1
+- Service operations must be backend/API-owned and typed
+- Service operations must not be arbitrary user-facing shell scripts
+
+Need to decide:
+
+- operation declaration format
+- input/output schema
+- execution model
+- audit/status model
+- permissions and safety prompts
+- idempotency expectations
+- relationship to binding lifecycle
+- relationship to backup/restore lifecycle
+
+## Catalog Source and Trust Beyond Phase 1
+
+Question:
+
+How should non-local catalogs work after Phase 1?
+
+Accepted Phase 1 direction:
+
+- local filesystem catalog first
+
+Deferred:
+
+- Git repositories
+- OCI artifacts or registries
+- remote indexes
+- signed catalogs
+- private remote catalogs
+
+Need to decide:
+
+- trust model
+- signing/verifying catalog entries
+- private catalog credentials
+- catalog versioning
+- catalog update behavior
+- how catalog metadata relates to package manifests
 
 ## Backend and CLI Packaging
 

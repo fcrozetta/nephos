@@ -74,3 +74,39 @@ Use an API-owned in-process reconciler for Phase 1.
 Keep module boundaries clear enough to later extract the reconciler into a daemon, worker, scheduled process, or in-cluster controller.
 
 Phase 1 drift handling should detect and report drift and reconcile only Nephos-owned resources when desired state is explicit.
+
+## D011: Nephos manifests are the package boundary
+
+Installable Apps and Services are defined by Nephos manifests.
+
+Nephos manifests own platform semantics.
+
+Helm charts and raw Kubernetes manifests are runtime deployment implementation details underneath the Nephos manifest layer.
+
+## D012: App and Service manifests are separate
+
+Apps and Services use separate manifest formats because they have different roles and authors.
+
+App authors should not need to understand Service internals.
+
+Service authors need to model capability exposure, provisioning behavior, and Service operations.
+
+## D013: Helm-primary runtime packaging
+
+Helm charts are the primary Phase 1 runtime deployment mechanism underneath Nephos manifests.
+
+Raw Kubernetes manifests are an allowed fallback when no credible chart exists, a chart is too leaky or unstable, the workload is simple, Nephos deploys its own support components, or a curated Nephos-native deployment is clearer.
+
+## D014: Local filesystem catalog first
+
+Phase 1 catalogs start as local filesystem catalogs.
+
+Git repositories, OCI registries, remote indexes, signed catalogs, and private remote catalogs are deferred.
+
+## D015: Service operation terminology
+
+Service operation is the canonical term for typed backend/API-owned Service management actions.
+
+Service management action may be used descriptively, but should not be the preferred architecture term.
+
+Service operations are optional in Phase 1, and their detailed contract still needs design.

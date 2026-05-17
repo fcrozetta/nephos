@@ -73,3 +73,70 @@ Apps should depend on capabilities rather than concrete infrastructure whenever 
 A relationship between an App and a Service capability.
 
 A binding represents how an App receives access to a capability.
+
+## Nephos Manifest
+
+A platform package definition for an App or Service.
+
+Nephos manifests describe platform intent and relationships.
+
+They are not Helm charts and are not raw Kubernetes manifests.
+
+Nephos manifests may reference Helm charts or raw Kubernetes manifests as runtime deployment implementation details.
+
+## App Manifest
+
+A Nephos manifest that defines an installable App.
+
+An App manifest focuses on user-facing workload concerns:
+
+- required capabilities
+- ingress or visibility intent
+- storage intent
+- config surface
+- runtime deployment reference
+- health/status expectations
+
+## Service Manifest
+
+A Nephos manifest that defines an installable Service.
+
+A Service manifest focuses on shared infrastructure concerns:
+
+- exposed capabilities
+- supported binding types
+- optional provisioning contracts
+- optional Service operations
+- backup/restore hooks or intent
+- runtime deployment reference
+- health/status expectations
+
+## Runtime Deployment Reference
+
+A reference from a Nephos manifest to the lower-level runtime deployment implementation.
+
+Accepted Phase 1 deployment reference types:
+
+- Helm chart
+- raw Kubernetes manifests
+
+Runtime deployment references are implementation details below the Nephos platform model.
+
+## Service Operation
+
+A typed backend/API-owned management action exposed by a Service.
+
+Examples:
+
+- provision app-scoped resource
+- deprovision app-scoped resource
+- rotate credentials
+- backup
+- restore
+- run health diagnostic
+- create database
+- create bucket or prefix
+
+Service management action is an acceptable descriptive phrase, but Service operation is the canonical term.
+
+Do not model Service operations as arbitrary user-facing shell scripts.

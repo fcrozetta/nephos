@@ -1,6 +1,6 @@
 # App and Service Package Format
 
-- Status: draft
+- Status: accepted
 - Date: 2026-05-17
 - Tags: catalog, manifests, apps, services, schema
 
@@ -8,42 +8,110 @@
 
 Nephos needs a format for defining installable Apps and Services.
 
-The format must support catalog entries, runtime deployment, capability requirements, exposed capabilities, provisioning contracts, health checks, and lifecycle behavior.
+The format must support catalog entries, runtime deployment, capability requirements, exposed capabilities, provisioning contracts, Service operations, health checks, and lifecycle behavior.
 
-## Open Questions
+## Decision
 
-What format defines installable Apps?
+Use Nephos manifests as the package boundary for Apps and Services.
 
-Candidate options:
+Use separate manifest formats for Apps and Services because they have different roles, authors, and internal concerns.
 
-- nephos.yml
-- Helm chart wrapper
-- catalog entry referencing Helm/manifests
-- OCI artifact
+App creators should not need to understand Service internals.
 
-What format defines installable Services?
+Service creators should model infrastructure capabilities, provisioning behavior, and Service operations.
 
-A Service package likely needs:
+The Nephos manifest layer owns platform semantics.
 
-- capabilities exposed
-- runtime deployment method
-- provisioning contract
-- backup/restore contract
-- default health checks
-- secret outputs
-- supported binding types
+Helm charts are the primary Phase 1 runtime deployment mechanism underneath Nephos manifests.
 
-## Current Leaning
+Raw Kubernetes manifests are allowed as a fallback runtime deployment mechanism.
 
-Use a Nephos manifest layer that can reference Helm charts or Kubernetes manifests.
+The local filesystem is the first catalog source.
 
-The Nephos manifest should own platform semantics.
+Git, OCI, remote indexes, private catalogs, and signed catalogs are deferred.
 
-Helm or raw manifests should own runtime deployment details.
+## Nephos Manifest
+
+A Nephos manifest describes platform intent.
+
+It speaks in Nephos concepts:
+
+- Apps
+- Services
+- capabilities
+- bindings
+- ingress or visibility intent
+- storage intent
+- config surface
+- health and status intent
+- lifecycle semantics
+- Service operations
+- runtime deployment references
+
+A Nephos manifest is not a Helm chart and is not raw Kubernetes YAML.
+
+## Runtime Deployment References
+
+A Nephos manifest may point to runtime deployment implementation:
+
+- Helm chart
+- raw Kubernetes manifests
+
+Helm and raw Kubernetes manifests stay below the Nephos product model.
+
+Users should not normally interact with Helm values or Kubernetes object specs as the primary Nephos UX.
+
+## Helm-Primary Deployment
+
+Use Helm as the primary underlying deployment mechanism when a credible chart exists or when Helm lifecycle/versioning gives leverage.
+
+Nephos should pin chart versions and map Nephos-level config, bindings, storage intent, and visibility intent into Helm values.
+
+Do not expose arbitrary Helm values as the primary product model.
+
+## Raw Kubernetes Manifest Fallback
+
+Use raw Kubernetes manifests when:
+
+- no credible Helm chart exists
+- the available Helm chart is abandoned, too leaky, or too unstable
+- the deployment is simple enough that Helm adds noise
+- Nephos deploys its own control-plane or support components
+- Nephos needs a curated deployment where direct ownership of runtime objects is clearer
+
+Raw manifests are fallback runtime plumbing.
+
+They are not the Nephos package model.
+
+## Service Operations
+
+The canonical term is Service operation.
+
+Service management action is an acceptable descriptive phrase, but not the preferred term.
+
+A Service operation is a typed backend/API-owned management action exposed by a Service.
+
+Examples:
+
+- provision app-scoped resource
+- deprovision app-scoped resource
+- rotate credentials
+- backup
+- restore
+- run health diagnostic
+- create database
+- create bucket or prefix
+- compact, vacuum, reindex, or similar Service-specific maintenance
+
+Service operations are optional in Phase 1.
+
+Do not model Service operations as arbitrary user-facing shell scripts.
+
+The detailed Service operation contract still needs design.
 
 ## Example App Concept
 
-An App declares:
+An App manifest declares:
 
 - metadata
 - required capabilities
@@ -54,18 +122,23 @@ An App declares:
 
 ## Example Service Concept
 
-A Service declares:
+A Service manifest declares:
 
 - metadata
 - exposed capabilities
 - runtime deployment reference
-- provisioning operations
-- backup operations
-- restore operations
+- optional provisioning contracts
+- optional Service operations
 - health checks
+
+## Decision Outcome
+
+Chosen option: "Separate App and Service Nephos manifests with Helm-primary runtime deployment and raw manifest fallback", because it preserves Nephos platform semantics while using existing Kubernetes packaging where that gives leverage.
 
 ## Status Notes
 
-This is draft.
+This decision is accepted.
 
 Do not invent package schema silently in implementation without updating this ADR or adding a schema file.
+
+No schema file is approved yet.

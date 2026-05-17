@@ -112,6 +112,26 @@ Services declare exposed capabilities.
 
 Nephos resolves App requirements to installed or installable Services.
 
+Phase 1 catalog source is local filesystem first.
+
+Git, OCI, remote indexes, signed catalogs, and private remote catalogs are deferred.
+
+## Packaging Layer
+
+Nephos uses separate Nephos manifest formats for Apps and Services.
+
+Nephos manifests own platform semantics.
+
+Helm charts are the primary Phase 1 runtime deployment mechanism underneath Nephos manifests.
+
+Raw Kubernetes manifests are a fallback runtime deployment mechanism.
+
+Helm values and Kubernetes object specs must not become the primary Nephos UX.
+
+Service manifests may expose optional Service operations.
+
+Service operation is the canonical term for typed Service management actions.
+
 ## State Model
 
 Nephos owns desired platform state.
