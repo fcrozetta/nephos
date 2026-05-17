@@ -254,6 +254,37 @@ Need to decide later:
 - how status affects exit codes in CLI
 - how status renders in future Web UI
 
+## Reference Scenario Exact Flow
+
+Question:
+
+What exact command flow and manifest examples should define the Paperless + PostgreSQL reference scenario?
+
+Accepted direction:
+
+- Paperless App
+- PostgreSQL Service
+- local filesystem catalog
+- Nephos manifests
+- capability binding
+- basic ingress intent
+- lifecycle install/start/stop/remove/destroy
+- data preserved on stop/remove
+- destroy requires destructive confirmation when persistent data exists
+
+Need to decide:
+
+- exact catalog directory layout
+- exact manifest filenames
+- exact App manifest fields
+- exact Service manifest fields
+- exact commands
+- expected status outputs
+- namespace names
+- secret names
+- ingress hostname policy
+- data preservation checks
+
 ## Local Development Workflow
 
 Question:

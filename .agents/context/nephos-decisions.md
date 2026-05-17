@@ -246,3 +246,31 @@ Do not expose opaque green/red status without explaining why.
 ## D032: Phase 1 status is minimal but platform-aware
 
 Phase 1 status includes desired lifecycle state, reconciliation state, Kubernetes object existence/readiness, binding resolution, dependency availability, route known/unknown, backup status as `unsupported`, and Service dependent impact.
+
+## D033: Phase 1 targets single-node K3s
+
+Phase 1 targets single-node K3s as the default real runtime backend.
+
+Cluster lifecycle support is minimal in Phase 1.
+
+## D034: Phase 1 App and Service lifecycle commands
+
+Phase 1 includes App and Service install, start, stop, remove, and destroy.
+
+The disable lifecycle operation is deferred.
+
+## D035: Phase 1 uses local filesystem catalog from day one
+
+Phase 1 should load a local filesystem catalog from day one.
+
+The repo may ship a tiny reference catalog, but App behavior must not be hardcoded in backend logic.
+
+## D036: No service mesh in Phase 1
+
+Multi-component Apps communicate through normal Kubernetes Services/networking.
+
+No service mesh is required or included in Phase 1.
+
+## D037: Paperless and PostgreSQL reference scenario
+
+The canonical Phase 1 reference scenario is Paperless App plus PostgreSQL Service.

@@ -4,6 +4,8 @@
 
 Phase 1 is local-first and single-owner.
 
+Phase 1 targets single-node K3s.
+
 Backend/control plane:
 
 - `nephos` repository
@@ -25,7 +27,9 @@ CLI:
 Runtime:
 
 - K3s default real backend
+- single-node K3s target
 - Kubernetes runtime substrate
+- minimal cluster lifecycle support
 - no CRD-first model
 - no GitOps source-of-truth model
 
@@ -39,7 +43,8 @@ Catalog and packaging:
 - separate App and Service Nephos manifests
 - Helm-primary runtime deployment underneath manifests
 - raw Kubernetes manifest fallback
-- local filesystem catalog first
+- local filesystem catalog from day one
+- tiny repo-shipped reference catalog
 - no schema files until Fer approves shape
 
 Services:
@@ -47,6 +52,21 @@ Services:
 - shared/global Service instances first
 - dedicated Service instances reserved as concept
 - Service operations optional and contract deferred
+
+Apps:
+
+- multi-component Apps are allowed conceptually
+- internal App component communication uses normal Kubernetes Services/networking
+- no service mesh
+
+Lifecycle:
+
+- App and Service `install`
+- App and Service `start`
+- App and Service `stop`
+- App and Service `remove`
+- App and Service `destroy`
+- `disable` deferred
 
 Upgrades/backups:
 
@@ -82,9 +102,14 @@ Resource/auth:
 - no Phase 1 login/RBAC
 - Web UI deferred
 
+Reference scenario:
+
+- Paperless App
+- PostgreSQL Service
+- reference catalog should exercise local filesystem catalog/manifest flow
+
 ## Still To Define
 
-- exact Phase 1 App/Service command subset
 - exact binding behavior for first reference scenario
 - namespace strategy details
 - ingress/TLS/local DNS behavior
@@ -92,4 +117,4 @@ Resource/auth:
 - backup guarantees
 - local development workflow
 - packaging/distribution
-- reference scenario
+- reference scenario exact command flow

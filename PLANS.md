@@ -43,6 +43,7 @@ Current understanding:
 - Batch 4 resource/auth decisions are accepted: Phase 1 has no Nephos resource policy system, replicas are 1 when running and 0 when stopped/disabled, resource profiles are reserved but not defined, CPU/memory requests and limits are not exposed as primary UX, no HA/autoscaling/affinity/quotas in Phase 1, single-owner/local-first auth model, trusted local CLI, Web UI deferred, and multi-user/friend/cloud scenarios are Phase 1 non-goals.
 - Batch 5 upgrade/backup decisions are accepted: versions are pinned, upgrades are explicit/manual, no automatic latest, Service upgrades with persistent data are risky by default, rollback is best-effort in Phase 1, Nephos owns backup intent/policy/status while Services own data-aware implementation, no backup implementation in Phase 1, stop/remove preserve data, and destroy deletes data and requires destructive confirmation when persistent data exists.
 - Batch 6 health/status decisions are accepted: Nephos status is Nephos-aware and aggregates desired state, reconciliation, Kubernetes readiness/existence, bindings, dependencies, routes, storage, and backup status; Phase 1 implements a minimal subset; removed/destroyed are lifecycle states, not health statuses; backup participates as unsupported in Phase 1; status must include reasons/evidence; Service status includes dependent impact.
+- Batch 7 Phase 1 scope decisions are accepted: single-node K3s, minimal cluster lifecycle, App/Service install/start/stop/remove/destroy, `disable` deferred, basic ingress intent, local filesystem catalog from day one with tiny repo-shipped reference entries, no service mesh, multi-component Apps communicate through normal Kubernetes Services/networking, and Paperless + PostgreSQL is the canonical reference scenario.
 
 Files likely to change:
 
@@ -73,6 +74,7 @@ Files likely to change:
 - `docs/adr/20260517-storage-and-backup-semantics.md`
 - `docs/adr/20260517-app-and-service-lifecycle-semantics.md`
 - `docs/adr/20260517-health-and-status-model.md`
+- `docs/adr/20260517-phase-1-scope.md`
 
 Proposed steps:
 
@@ -94,7 +96,9 @@ Proposed steps:
 - Add upgrade and backup context.
 - Accept the health and status model ADR.
 - Add health/status context and terminology.
-- Continue the interview with remaining Phase 1 scope or catalog trust.
+- Accept the Phase 1 scope ADR.
+- Update Phase 1 and non-goal context.
+- Continue the interview with reference scenario details or catalog trust.
 
 Risks:
 
@@ -114,6 +118,8 @@ Risks:
 - Flattening health into raw Kubernetes readiness and losing Nephos-specific relationship failures.
 - Mixing lifecycle state with health status.
 - Showing opaque green/red status without reasons.
+- Letting Phase 1 expand into Web UI, backup implementation, service mesh, or HA before the platform model exists.
+- Hardcoding app behavior instead of exercising the local filesystem catalog/manifest path.
 
 Validation commands:
 
@@ -124,6 +130,7 @@ Validation commands:
 - `rg -n "resource policy|replicas|BestEffort|single-owner|trusted local CLI|RBAC|autoscaling|HA|Phase 1" .agents/context docs/adr`
 - `rg -n "upgrade|backup|restore|rollback|destroy|destructive confirmation|persistent data|manual|pinned" .agents/context docs/adr`
 - `rg -n "health status|lifecycle state|status reason|status evidence|Nephos-aware|not_applicable|unsupported" .agents/context docs/adr`
+- `rg -n "single-node|minimal cluster lifecycle|disable|service mesh|multi-component|Paperless|PostgreSQL|local filesystem catalog" .agents/context docs/adr`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -140,4 +147,5 @@ Open questions:
 - Future auth/RBAC model.
 - Concrete backup implementation design.
 - Health/status check implementation details.
-- Catalog source/trust beyond local filesystem, remaining Phase 1 scope, contribution workflow, and reference scenario.
+- Reference scenario exact flow and manifest examples.
+- Catalog source/trust beyond local filesystem and contribution workflow.

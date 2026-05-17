@@ -33,6 +33,7 @@ Phase 1 does not include:
 - user accounts
 - friend/cloud/hosted multi-user scenarios
 - Web UI
+- service mesh
 - CRD-first source of truth
 - GitOps source of truth
 - remote catalog trust/signing
@@ -40,6 +41,10 @@ Phase 1 does not include:
 - automatic latest upgrades
 - guaranteed rollback
 - concrete backup/restore implementation
+- dedicated Service instance implementation
+- Service operation implementation
+- `disable` lifecycle operation
+- full cluster lifecycle management polish
 
 ## Resource Non-Goals
 
