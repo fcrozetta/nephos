@@ -297,6 +297,7 @@ Before making architectural changes, read:
 - `.agents/context/nephos-api-resource-model.md`
 - `.agents/context/nephos-database-state.md`
 - `.agents/context/nephos-catalog-loading.md`
+- `.agents/context/nephos-reconciliation.md`
 - `.agents/context/nephos-decisions.md`
 - `.agents/context/nephos-naming-and-metadata.md`
 - `.agents/context/nephos-open-questions.md`

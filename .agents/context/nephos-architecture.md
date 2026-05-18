@@ -85,7 +85,11 @@ Ingress root domains are platform configuration resources at `/platform/config/d
 
 Status is separate from lifecycle state and should persist the latest status snapshot with reasons and evidence.
 
-Mutating API calls update desired state and trigger or enqueue reconciliation.
+Mutating API calls update desired state and create a persisted reconciliation request.
+
+Mutating API calls return after the desired-state transaction and reconciliation request commit.
+
+The API should not wait for Kubernetes convergence before returning.
 
 The backend may start with an empty database.
 
@@ -118,11 +122,33 @@ The controller reconciles Nephos desired state into Kubernetes resources.
 
 For Phase 1, the controller/reconciler is API-owned and in-process.
 
+API 0.0.1 uses a background reconciler worker over persisted SQLite reconciliation requests.
+
+Each reconciliation request targets one App instance, Service instance, binding, or platform domain configuration target.
+
+Accepted reconciliation request states are:
+
+- `pending`
+- `running`
+- `succeeded`
+- `failed`
+- `blocked`
+
+The first implementation uses one serialized worker.
+
+Reconciliation handlers must be idempotent and safe to retry.
+
+Simple capped retry is the intended model, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight.
+
+Failures do not roll back desired state.
+
+The reconciler writes latest status snapshots with reasons and evidence.
+
 The reconciler should be isolated behind module boundaries so it can later move to a daemon, worker, or in-cluster controller.
 
 Phase 1 should detect and report drift.
 
-Nephos may reconcile Nephos-owned resources when desired state is explicit, but must not mutate Kubernetes resources it does not own.
+Nephos may reconcile Nephos-owned resources when desired state is explicit or manual reconciliation is requested, but must not mutate Kubernetes resources it does not own.
 
 ### Kubernetes Runtime
 

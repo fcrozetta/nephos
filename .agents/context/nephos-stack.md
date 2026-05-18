@@ -56,7 +56,7 @@ Persistence:
 - Installed Apps are internal `AppInstance` records and may be exposed under `/apps`
 - Installed Services are internal `ServiceInstance` records and may be exposed under `/services`
 - Ingress root domains are exposed at `/platform/config/domains`
-- Mutating API calls update desired state and trigger or enqueue reconciliation
+- Mutating API calls update desired state and create a persisted reconciliation request
 
 Migrations:
 
@@ -69,6 +69,13 @@ Migrations:
 Controller/reconciler:
 
 - API-owned in-process reconciler for Phase 1
+- background worker over persisted SQLite reconciliation requests
+- one serialized worker initially
+- request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
+- request targets are App instances, Service instances, bindings, or platform domain configuration
+- reconciliation handlers must be idempotent and safe to retry
+- simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if implementation weight is too high
+- failures update request/status state without rolling back desired state
 - The reconciler must be isolated behind module boundaries so it can later move to a daemon, worker, or in-cluster controller
 
 Kubernetes client:

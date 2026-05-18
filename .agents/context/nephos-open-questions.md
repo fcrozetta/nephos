@@ -130,8 +130,16 @@ Accepted direction:
 - API 0.0.1 should persist the latest status snapshot with reasons and evidence
 - API reads local filesystem catalog manifests
 - installed records store catalog identity, version when available, source, and manifest digest information
-- mutating API calls update desired state and trigger or enqueue reconciliation
+- mutating API calls update desired state and create a persisted reconciliation request
+- mutating API calls return after desired state and the reconciliation request commit
+- API does not wait for Kubernetes convergence before returning
 - manual reconcile endpoint is allowed for debugging
+- reconciliation requests target one App instance, Service instance, binding, or platform domain configuration
+- request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
+- the reconciler writes latest status snapshots with reasons and evidence
+- failures do not roll back desired state
+- one serialized background worker is accepted initially
+- simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight
 - API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
 
 Need to decide:
@@ -183,7 +191,45 @@ Need to decide:
 - whether `schema_migrations` exists in `0000_initial.sql` or is created by the migration runner
 - transaction retry and SQLite locking behavior
 - status snapshot JSON shape
-- reconciliation request state machine
+- exact reconciliation request column definitions
+- exact request claiming and locking behavior
+- exact retry count, backoff, and polling/wakeup behavior
+
+## Reconciliation Execution Model
+
+Question:
+
+How should API 0.0.1 execute reconciliation requests?
+
+Accepted direction:
+
+- API 0.0.1 uses an API-owned in-process background reconciler
+- mutating API calls write desired-state changes and a reconciliation request in one database transaction
+- API calls return after that transaction commits
+- API calls do not wait for Kubernetes convergence
+- reconciliation requests are persisted in SQLite
+- each request targets one App instance, Service instance, binding, or platform domain configuration target
+- request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
+- handlers must be idempotent and safe to retry
+- one serialized background worker is the initial model
+- serialized queueing is acceptable for the single-user local-first model beyond API 0.0.1 until real usage proves concurrency is needed
+- simple capped retry is intended
+- automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight
+- the reconciler writes latest status snapshots with reasons and evidence
+- failures do not roll back desired state
+- drift is detected and reported for Nephos-owned resources
+- Nephos reconciles drift only when desired state is explicit or manual reconciliation is requested
+- Nephos does not mutate resources it does not own
+
+Need to decide:
+
+- exact `reconciliation_requests` column definitions
+- exact request claiming and locking behavior in SQLite
+- exact polling/wakeup mechanism
+- exact retry count and backoff behavior
+- whether automatic retry lands in API 0.0.1 or immediately after
+- exact manual reconcile endpoint shape
+- exact status snapshot JSON shape for reconciliation evidence
 
 ## Secrets Details
 

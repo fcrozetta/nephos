@@ -19,6 +19,9 @@ Backend/control plane:
 - destructive local SQLite reset allowed before the first usable version
 - official Python Kubernetes client
 - API-owned in-process reconciler
+- persisted SQLite reconciliation requests
+- one serialized background reconciler worker initially
+- reconciliation request states `pending`, `running`, `succeeded`, `failed`, and `blocked`
 - `pytest` backend tests
 - `ruff` backend linting/formatting checks
 - mocks/fakes for unit tests

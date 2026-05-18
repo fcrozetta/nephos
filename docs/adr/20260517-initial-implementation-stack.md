@@ -40,6 +40,12 @@ Use `pytest` and `ruff` as the backend test/lint baseline.
 
 Use an API-owned in-process reconciler for Phase 1.
 
+API 0.0.1 reconciliation runs through a background worker over persisted SQLite reconciliation requests.
+
+Mutating API calls return after the desired-state transaction and reconciliation request commit.
+
+The API should not wait for Kubernetes convergence before returning.
+
 Defer the Web UI and frontend framework decision.
 
 Use Python and Typer for the CLI, but implement the CLI in the separate `nephos-cli` repository:

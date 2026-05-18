@@ -1165,9 +1165,9 @@ Status is separate from lifecycle state.
 
 API 0.0.1 should persist the latest status snapshot with reason and evidence fields.
 
-## D127: API mutations trigger reconciliation
+## D127: API mutations enqueue reconciliation
 
-Mutating API calls update desired state and trigger or enqueue reconciliation.
+Mutating API calls update desired state and create a persisted reconciliation request.
 
 A manual reconcile endpoint is allowed for debugging.
 
@@ -1326,3 +1326,75 @@ Do not treat drafts as implementation contracts.
 `metadata.version` remains optional for catalog entries.
 
 Installed records store version if present and always store manifest digest.
+
+## D147: Reconciliation runs as an API-owned background worker
+
+API 0.0.1 uses an API-owned in-process background reconciler.
+
+The reconciler reads desired state from SQLite and reconciles Nephos-owned resources into Kubernetes.
+
+## D148: Mutating API calls return after enqueue
+
+Mutating API calls write desired-state changes and a reconciliation request in one database transaction.
+
+The API returns after the transaction commits.
+
+The API should not wait for Kubernetes convergence before returning.
+
+## D149: Reconciliation requests target one resource
+
+Each reconciliation request targets one App instance, Service instance, binding, or platform domain configuration target.
+
+## D150: Reconciliation request states are accepted
+
+Accepted reconciliation request states are:
+
+- `pending`
+- `running`
+- `succeeded`
+- `failed`
+- `blocked`
+
+## D151: Reconciliation handlers are idempotent
+
+Reconciliation handlers must be idempotent and safe to retry.
+
+Handlers reconcile Nephos-owned resources only.
+
+Nephos must not mutate Kubernetes resources it does not own.
+
+## D152: Initial reconciliation concurrency is serialized
+
+The first reconciliation worker is a single serialized worker.
+
+This is acceptable for a single-user local-first platform, including beyond API 0.0.1 until real usage proves queue concurrency is needed.
+
+## D153: Reconciliation retry is simple and capped
+
+Simple capped retry is the intended model.
+
+Automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight.
+
+Blocked requests require desired-state changes, user input, or explicit manual reconciliation after the blocker is resolved.
+
+## D154: Reconciler writes latest status snapshots
+
+The reconciler writes latest status snapshots with reasons and evidence.
+
+Status is separate from lifecycle.
+
+Reconciliation state should be visible through API and CLI status.
+
+## D155: Reconciliation failure keeps desired state intact
+
+Failures do not roll back desired state.
+
+When reconciliation fails, Nephos updates request state and status evidence while preserving the desired-state record.
+
+## D156: Phase 1 drift handling is detect and report
+
+Phase 1 detects and reports drift for Nephos-owned resources.
+
+Nephos may reconcile Nephos-owned resources when desired state is explicit or when manual reconciliation is requested.
+
+Nephos should not continuously overwrite runtime drift in ways that hide operator changes without reporting them.

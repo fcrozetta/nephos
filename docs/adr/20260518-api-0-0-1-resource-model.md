@@ -68,11 +68,19 @@ Status is separate from lifecycle state.
 
 API 0.0.1 should persist the latest status snapshot with reason and evidence fields.
 
-Mutating API calls update desired state and trigger or enqueue reconciliation.
+Mutating API calls update desired state and create a persisted reconciliation request.
+
+The API returns after desired state and the reconciliation request are committed.
+
+The API should not wait for Kubernetes convergence before returning.
 
 A manual reconcile endpoint is allowed for debugging.
 
 Do not mutate Kubernetes inline as the primary effect of an API command while bypassing desired state and reconciliation.
+
+Reconciliation requests target one App instance, Service instance, binding, or platform domain configuration.
+
+Accepted reconciliation request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`.
 
 API 0.0.1 should define only the resources needed for the Paperless plus PostgreSQL reference flow.
 

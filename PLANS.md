@@ -62,9 +62,10 @@ Current understanding:
 - Batch 23 ingress root domain config decisions are accepted: ingress root domains are platform desired state in the Nephos API/database, managed through Nephos API/CLI platform configuration operations, not App manifest fields; semantic shape is `rootDomains[]` with `name`, `domain`, and `default`; `domain` is a DNS suffix only and rejects URLs, paths, wildcards, schemes, and ports; operations are add/list/remove/set-default; setup creates initial platform configuration before Apps are installed, including at least one root domain and exactly one default/canonical domain; App status shows canonical URL plus aliases.
 - Batch 24 setup/CLI boundary is deferred: setup UX and command implementation belong in `nephos-cli` after Nephos API `0.0.1`; this repo should not decide command spelling yet. Accepted backend-side behavior: the backend may start with an empty database and reports platform configuration as incomplete until setup creates required desired state.
 - Batch 25 Service operation boundary is accepted: Service operations are typed backend/API-owned Service management actions; they are reserved but bounded in Phase 1; arbitrary shell commands, Helm hooks, Kubernetes jobs, and user-provided scripts are not product semantics; Phase 1 may use internal typed Service handlers for minimal accepted provisioning work; no general user-facing Service operation API or CLI UX is included.
-- Batch 26 API resource model is accepted: API 0.0.1 uses REST-ish resources, installed Apps are internal `AppInstance` records exposed publicly under `/apps`, installed Services are internal `ServiceInstance` records exposed under `/services`, bindings are first-class API/database resources, root domain resources use `/platform/config/domains`, lifecycle and status are separate, latest status is persisted with reasons/evidence, mutating API calls update desired state and trigger/enqueue reconciliation, and API 0.0.1 scope is limited to the Paperless plus PostgreSQL reference flow.
+- Batch 26 API resource model is accepted: API 0.0.1 uses REST-ish resources, installed Apps are internal `AppInstance` records exposed publicly under `/apps`, installed Services are internal `ServiceInstance` records exposed under `/services`, bindings are first-class API/database resources, root domain resources use `/platform/config/domains`, lifecycle and status are separate, latest status is persisted with reasons/evidence, mutating API calls update desired state and create a persisted reconciliation request, and API 0.0.1 scope is limited to the Paperless plus PostgreSQL reference flow.
 - Batch 27 database desired-state model is accepted: API 0.0.1 uses SQLite with plain SQL through a small repository/data-access layer, no full ORM, explicit SQL migration files with `migrations/0000_initial.sql` as the initial schema, destructive local reset allowed before the first usable version, normalized table families for app instances/service instances/bindings/platform domains/status snapshots/reconciliation requests/schema migrations, JSON text columns for validated snapshots and flexible payloads, catalog identity/version/source/digest metadata on installed records, latest status snapshots only, DB-persisted reconciliation requests, desired-state mutation and reconciliation request in one transaction, and destroy removes active desired-state rows without requiring audit/history in API 0.0.1.
 - Batch 28 catalog/manifest loading is accepted: API 0.0.1 supports one repo-shipped catalog root plus optional backend-local configured filesystem roots, custom roots are not platform DB desired state yet, manifests are read/validated on demand, catalog entries are not imported into SQLite before use, directory slug must match `metadata.name`, duplicate kind/name across roots errors unless source is explicitly selected, validation starts with typed Python/Pydantic domain models, JSON Schema remains blocked, install selects catalog kind/name plus optional source rather than arbitrary path, installed records store catalog kind/name/version-if-present/source and SHA-256 manifest digest, full manifest snapshots are not stored by default, drafts stay non-canonical until API validation models exist and Fer approves promotion, and `metadata.version` remains optional.
+- Batch 29 reconciliation execution is accepted: API 0.0.1 uses an API-owned in-process background reconciler with persisted SQLite reconciliation requests; mutating API calls write desired-state changes plus a reconciliation request in one transaction and return after commit; requests target one App instance, Service instance, binding, or platform domain configuration; request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`; handlers must be idempotent and safe to retry; one serialized worker is accepted initially; simple capped retry is intended but automatic retry may be deferred from API 0.0.1 if heavy; the reconciler writes latest status snapshots; failures do not roll back desired state; drift is detected/reported for Nephos-owned resources and reconciled only when desired state or manual reconciliation asks for it.
 
 Files likely to change:
 
@@ -86,6 +87,7 @@ Files likely to change:
 - `.agents/context/nephos-packaging.md`
 - `.agents/context/nephos-catalog.md`
 - `.agents/context/nephos-stack.md`
+- `.agents/context/nephos-reconciliation.md`
 - `.agents/context/nephos-dev-workflow.md`
 - `.agents/context/nephos-contribution-and-agent-workflow.md`
 - `.agents/context/nephos-reference-scenario.md`
@@ -110,6 +112,7 @@ Files likely to change:
 - `docs/adr/20260517-reference-scenario.md`
 - `docs/adr/20260517-nephos-manifest-schema-shape.md`
 - `docs/adr/20260517-manifest-field-conventions.md`
+- `docs/adr/20260518-reconciliation-execution-model.md`
 
 Proposed steps:
 
@@ -163,7 +166,9 @@ Proposed steps:
 - Keep runtime mapping outside config option objects.
 - Accept Phase 1 runtime value mapping shape.
 - Defer route/storage mapping source kinds and transforms.
-- Continue the interview with manifest schema or remaining open questions.
+- Accept the reconciliation execution model.
+- Add reconciliation context and ADR.
+- Continue the interview with API implementation details or remaining open questions.
 
 Risks:
 
@@ -204,6 +209,9 @@ Risks:
 - Baking full hostnames into App manifests before domain policy is decided.
 - Letting binding output details accidentally become raw Secret templates.
 - Treating provisioning as arbitrary shell or Helm hooks instead of a typed Nephos contract.
+- Letting API handlers mutate Kubernetes inline and bypass the persisted reconciliation request model.
+- Overbuilding reconciliation concurrency before single-user/local-first needs it.
+- Making drift correction too aggressive and hiding operator changes.
 
 Validation commands:
 
@@ -227,6 +235,7 @@ Validation commands:
 - `rg -n "Secret keys|secret App config|unknown manifest fields|raw Kubernetes manifest fallback shape|string|integer|boolean|enum" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "config options use required|stable machine key|required.*false|value.*label|validation bounds|spec.runtime.values.mappings" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "from.kind|to.helmValue|helmValue|mapping source|missing mapping|transforms|dot path" .agents/context docs/adr .agents/drafts PLANS.md`
+- `rg -n "reconciliation request|pending|running|succeeded|failed|blocked|serialized worker|idempotent|retry|drift" .agents/context docs/adr PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -258,3 +267,4 @@ Open questions:
 - Backend/CLI release process and future compatibility matrix.
 - Reference scenario exact command spelling and status output.
 - Draft manifest naming and cleanup conventions.
+- Exact reconciliation request columns, locking, polling, retry count/backoff, manual endpoint shape, and status evidence schema.

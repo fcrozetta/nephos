@@ -62,6 +62,7 @@ Include:
 
 - desired lifecycle state
 - reconciliation state
+- latest reconciliation request state
 - Kubernetes object existence/readiness
 - binding resolved/unresolved
 - dependency availability
@@ -71,6 +72,10 @@ Include:
 - Service dependent impact
 
 Do not implement deep app-specific probes in Phase 1 unless a specific App or Service requires it later.
+
+The reconciler writes latest status snapshots with reasons and evidence.
+
+Reconciliation failure does not roll back desired state.
 
 ## Entity Status
 

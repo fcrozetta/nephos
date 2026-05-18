@@ -62,6 +62,16 @@ Status event/history storage is deferred.
 
 Reconciliation requests are persisted in the database so the API mutation/reconciler boundary is visible and retryable.
 
+Accepted reconciliation request states are:
+
+- `pending`
+- `running`
+- `succeeded`
+- `failed`
+- `blocked`
+
+Each request targets one App instance, Service instance, binding, or platform domain configuration.
+
 API mutations that change desired state must write the desired-state change and reconciliation request in one database transaction.
 
 Destroy removes active desired-state rows.
@@ -125,4 +135,6 @@ After the first usable version, schema evolution should happen through forward m
 - whether `schema_migrations` exists in `0000_initial.sql` or is created by the migration runner
 - transaction retry and SQLite locking behavior
 - status snapshot JSON shape
-- reconciliation request state machine
+- exact reconciliation request column definitions
+- exact request claiming and locking behavior
+- exact retry count, backoff, and polling/wakeup behavior

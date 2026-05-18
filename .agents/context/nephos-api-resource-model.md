@@ -94,7 +94,11 @@ Do not mix health/status into lifecycle fields.
 
 ## Reconciliation
 
-Mutating API calls update desired state and trigger or enqueue reconciliation.
+Mutating API calls update desired state and create a persisted reconciliation request.
+
+The API returns after the desired-state mutation and reconciliation request are committed.
+
+The API should not wait for Kubernetes convergence before returning.
 
 A manual reconcile endpoint is allowed for debugging.
 
@@ -105,6 +109,22 @@ Reconciliation requests are persisted in SQLite.
 API mutations that change desired state write the desired-state change and reconciliation request in one database transaction.
 
 In-memory-only reconciliation queues are not the Phase 1 default.
+
+Each reconciliation request targets one App instance, Service instance, binding, or platform domain configuration.
+
+Accepted reconciliation request states:
+
+- `pending`
+- `running`
+- `succeeded`
+- `failed`
+- `blocked`
+
+Failures do not roll back desired state.
+
+The reconciler updates request state and latest status snapshots with reasons and evidence.
+
+Simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight.
 
 ## Scope
 

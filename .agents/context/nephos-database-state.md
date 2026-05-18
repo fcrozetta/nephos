@@ -89,6 +89,27 @@ In-memory-only reconciliation queues are not the Phase 1 default.
 
 Do not bypass desired state by mutating Kubernetes inline as the primary API effect.
 
+Each reconciliation request targets one resource target.
+
+Accepted target categories:
+
+- App instance
+- Service instance
+- binding
+- platform domain configuration
+
+Accepted request states:
+
+- `pending`
+- `running`
+- `succeeded`
+- `failed`
+- `blocked`
+
+Simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight.
+
+Failures update request state and status evidence without rolling back desired state.
+
 ## Transactions
 
 API mutations that change desired state must write:

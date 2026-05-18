@@ -38,6 +38,18 @@ Preserve the architecture boundary:
 
 intent -> desired state -> reconcile into Kubernetes
 
+The detailed Phase 1 execution model is accepted in:
+
+```text
+docs/adr/20260518-reconciliation-execution-model.md
+```
+
+API 0.0.1 uses an in-process background worker with persisted reconciliation requests in SQLite.
+
+API mutations return after desired state and the reconciliation request are committed.
+
+The API should not wait for Kubernetes convergence before returning.
+
 ## Drift Policy
 
 Phase 1 should detect and report drift.
