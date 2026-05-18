@@ -50,6 +50,17 @@ An App instance and Service instance may use the same base name because their ru
 - `app-<slug>`
 - `svc-<slug>`
 
+Public API paths use installed instance slugs.
+
+Examples:
+
+```text
+/apps/paperless
+/services/postgres
+```
+
+Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
+
 ## Collision Handling
 
 If a name, alias, route, provider, or instance selection collides or is ambiguous, Nephos fails and requires explicit user input.

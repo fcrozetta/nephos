@@ -66,7 +66,8 @@ Current understanding:
 - Batch 27 database desired-state model is accepted: API 0.0.1 uses SQLite with plain SQL through a small repository/data-access layer, no full ORM, explicit SQL migration files with `migrations/0000_initial.sql` as the initial schema, destructive local reset allowed before the first usable version, normalized table families for app instances/service instances/bindings/platform domains/status snapshots/reconciliation requests/schema migrations, JSON text columns for validated snapshots and flexible payloads, catalog identity/version/source/digest metadata on installed records, latest status snapshots only, DB-persisted reconciliation requests, desired-state mutation and reconciliation request in one transaction, and destroy removes active desired-state rows without requiring audit/history in API 0.0.1.
 - Batch 28 catalog/manifest loading is accepted: API 0.0.1 supports one repo-shipped catalog root plus optional backend-local configured filesystem roots, custom roots are not platform DB desired state yet, manifests are read/validated on demand, catalog entries are not imported into SQLite before use, directory slug must match `metadata.name`, duplicate kind/name across roots errors unless source is explicitly selected, validation starts with typed Python/Pydantic domain models, JSON Schema remains blocked, install selects catalog kind/name plus optional source rather than arbitrary path, installed records store catalog kind/name/version-if-present/source and SHA-256 manifest digest, full manifest snapshots are not stored by default, drafts stay non-canonical until API validation models exist and Fer approves promotion, and `metadata.version` remains optional.
 - Batch 29 reconciliation execution is accepted: API 0.0.1 uses an API-owned in-process background reconciler with persisted SQLite reconciliation requests; mutating API calls write desired-state changes plus a reconciliation request in one transaction and return after commit; requests target one App instance, Service instance, binding, or platform domain configuration; request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`; handlers must be idempotent and safe to retry; one serialized worker is accepted initially; simple capped retry is intended but automatic retry may be deferred from API 0.0.1 if heavy; the reconciler writes latest status snapshots; failures do not roll back desired state; drift is detected/reported for Nephos-owned resources and reconciled only when desired state or manual reconciliation asks for it.
-- Batch 30 API lifecycle action shape is accepted: install mutation uses `POST /apps` and `POST /services` with catalog refs in the body; catalog install endpoints are not primary; lifecycle uses `POST /apps/{id}/actions/start|stop|remove|destroy` and equivalent Service paths; destroy stays a confirmed `POST .../actions/destroy`, not `DELETE`; dependency-blocked Service lifecycle returns `409 Conflict` with impact list unless forced; mutating responses prefer `202 Accepted` with resource/reconciliation request/status metadata, with minimal `202` acceptable for API 0.0.1 if full status is too heavy; repeated lifecycle requests to the same desired state are idempotent.
+- Batch 30 API lifecycle action shape is accepted: install mutation uses `POST /apps` and `POST /services` with catalog refs in the body; catalog install endpoints are not primary; lifecycle uses `POST /apps/{appInstance}/actions/start|stop|remove|destroy` and equivalent Service paths; destroy stays a confirmed `POST .../actions/destroy`, not `DELETE`; dependency-blocked Service lifecycle returns `409 Conflict` with impact list unless forced; mutating responses prefer `202 Accepted` with resource/reconciliation request/status metadata; repeated lifecycle requests to the same desired state are idempotent.
+- Batch 31 API payload/error shape is accepted: public API paths use installed instance slugs, not opaque UUIDs; install bodies use `catalogRef` with `kind`, `name`, optional `source`, optional `instanceName`, optional `config`, and App install `bindings`; lifecycle action bodies use optional `force` and `confirm`, with `confirm` required only for destroy; mutation responses use `{ resource, reconciliation, status? }`; Nephos-owned domain errors use `{ error: { code, message, details? } }`; dependency-blocked impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability; FastAPI/Pydantic validation errors may remain framework-shaped for API 0.0.1 and are not stable Nephos product API.
 
 Files likely to change:
 
@@ -115,6 +116,7 @@ Files likely to change:
 - `docs/adr/20260517-manifest-field-conventions.md`
 - `docs/adr/20260518-reconciliation-execution-model.md`
 - `docs/adr/20260518-api-lifecycle-action-shape.md`
+- `docs/adr/20260518-api-payload-and-error-shape.md`
 
 Proposed steps:
 
@@ -171,6 +173,7 @@ Proposed steps:
 - Accept the reconciliation execution model.
 - Add reconciliation context and ADR.
 - Accept the API lifecycle action shape.
+- Accept the API payload and error shape.
 - Continue the interview with API implementation details or remaining open questions.
 
 Risks:
@@ -217,6 +220,8 @@ Risks:
 - Making drift correction too aggressive and hiding operator changes.
 - Making install mutation look owned by the catalog instead of the installed App/Service collection.
 - Using `DELETE` for destroy and losing confirmation/force/body semantics.
+- Treating framework validation errors as a stable public contract before deciding normalization.
+- Exposing opaque ids publicly and weakening local-first inspectability.
 
 Validation commands:
 
@@ -242,6 +247,7 @@ Validation commands:
 - `rg -n "from.kind|to.helmValue|helmValue|mapping source|missing mapping|transforms|dot path" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "reconciliation request|pending|running|succeeded|failed|blocked|serialized worker|idempotent|retry|drift" .agents/context docs/adr PLANS.md`
 - `rg -n "POST /apps|POST /services|actions/destroy|DELETE|202 Accepted|409 Conflict|force|impact list|idempotent" .agents/context docs/adr PLANS.md`
+- `rg -n "catalogRef|instanceName|resource.*reconciliation|dependency_blocked|requiresForce|bindingAlias|validation errors|/apps/paperless" .agents/context docs/adr PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -274,4 +280,4 @@ Open questions:
 - Reference scenario exact command spelling and status output.
 - Draft manifest naming and cleanup conventions.
 - Exact reconciliation request columns, locking, polling, retry count/backoff, manual endpoint shape, and status evidence schema.
-- Exact install request body fields, lifecycle action body fields, mutation response schema, and blocked impact response schema.
+- Exact resource/status snapshot schemas, reconciliation request id format, future validation error normalization, and future rename behavior for installed instance slugs.

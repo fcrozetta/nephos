@@ -76,6 +76,10 @@ POST /services
 
 The catalog reference is carried in the request body.
 
+The request body uses `catalogRef` with `kind`, `name`, and optional `source`.
+
+`catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
+
 Catalog endpoints are not the primary owner of install mutation.
 
 Do not make arbitrary install-from-path the main API or UX flow.

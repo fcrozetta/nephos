@@ -115,10 +115,11 @@ Lifecycle:
 - App and Service `destroy`
 - `disable` deferred
 - install through `POST /apps` and `POST /services`
-- lifecycle actions through `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- public paths use installed instance slugs such as `/apps/paperless` and `/services/postgres`
+- lifecycle actions through `POST /apps/{appInstance}/actions/{action}` and `POST /services/{serviceInstance}/actions/{action}`
 - destroy through `POST .../actions/destroy` with explicit confirmation, not plain `DELETE`
 - dependency-blocked Service lifecycle actions return `409 Conflict` with impact lists unless forced
-- mutating responses prefer `202 Accepted` with reconciliation request metadata
+- mutating responses prefer `202 Accepted` with `{ resource, reconciliation, status? }`
 
 Ingress and secrets:
 

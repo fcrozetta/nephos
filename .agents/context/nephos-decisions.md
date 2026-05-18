@@ -1419,8 +1419,8 @@ Do not make arbitrary YAML path install the primary API shape.
 Lifecycle actions use:
 
 ```text
-POST /apps/{id}/actions/{action}
-POST /services/{id}/actions/{action}
+POST /apps/{appInstance}/actions/{action}
+POST /services/{serviceInstance}/actions/{action}
 ```
 
 Accepted action names are `start`, `stop`, `remove`, and `destroy`.
@@ -1443,9 +1443,11 @@ The impact list should include dependent Apps and binding relationships.
 
 Mutating API calls that create desired-state changes should prefer `202 Accepted`.
 
-Mutation responses should include resource snapshot, reconciliation request id/state, and latest status when available.
+Mutation responses use `{ resource, reconciliation, status? }`.
 
-If the full response body is too heavy for API 0.0.1, a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable.
+`status` is optional.
+
+The `reconciliation` object must include request id and state.
 
 ## D162: Lifecycle actions are idempotent
 
@@ -1454,3 +1456,90 @@ Repeated lifecycle requests to the same desired state should be idempotent.
 When possible, Nephos should avoid duplicate reconciliation work and return the current resource plus no-op or existing pending reconciliation information.
 
 It is acceptable to enqueue reconciliation when needed to verify or converge runtime state.
+
+## D163: Public API paths use installed instance slugs
+
+Public resource paths use installed instance slugs.
+
+Examples:
+
+```text
+/apps/paperless
+/services/postgres
+```
+
+Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
+
+## D164: Install bodies use catalogRef
+
+Install bodies use a `catalogRef` object with `kind`, `name`, and optional `source`.
+
+App installs use `catalogRef`, optional `instanceName`, optional `config`, and optional `bindings`.
+
+Service installs use `catalogRef`, optional `instanceName`, and optional `config`.
+
+`catalogRef.source` is required only when needed to disambiguate duplicate catalog entries.
+
+## D165: Lifecycle action bodies share force and confirm
+
+Lifecycle action bodies use common optional fields:
+
+- `force`
+- `confirm`
+
+`force` defaults to `false`.
+
+`confirm` is required only for `destroy`.
+
+## D166: Mutation responses use resource/reconciliation/status envelope
+
+Mutation responses use:
+
+```json
+{
+  "resource": {},
+  "reconciliation": {
+    "id": "reconcile_...",
+    "state": "pending"
+  },
+  "status": {}
+}
+```
+
+`status` is optional.
+
+The `reconciliation` object must include reconciliation request id and state.
+
+## D167: Nephos-owned domain errors use a simple envelope
+
+Nephos-owned domain errors use:
+
+```json
+{
+  "error": {
+    "code": "dependency_blocked",
+    "message": "Service has dependent Apps.",
+    "details": {}
+  }
+}
+```
+
+`details` is optional.
+
+## D168: Dependency impact payload is structured
+
+Dependency-blocked lifecycle errors use `409 Conflict`.
+
+Impact details include:
+
+- required force flag
+- dependent App instance
+- binding id
+- binding alias
+- capability
+
+## D169: Framework validation errors may remain framework-shaped for 0.0.1
+
+FastAPI/Pydantic framework validation errors may remain in their default framework shape for API 0.0.1.
+
+Do not treat framework validation error shape as stable Nephos product API.

@@ -25,7 +25,36 @@ POST /apps
 POST /services
 ```
 
-The request body carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
+The request body uses `catalogRef` and carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
+
+Accepted App install shape:
+
+```json
+{
+  "catalogRef": {
+    "kind": "App",
+    "name": "paperless",
+    "source": "default"
+  },
+  "instanceName": "paperless",
+  "config": {},
+  "bindings": {}
+}
+```
+
+Accepted Service install shape:
+
+```json
+{
+  "catalogRef": {
+    "kind": "Service",
+    "name": "postgres",
+    "source": "default"
+  },
+  "instanceName": "postgres",
+  "config": {}
+}
+```
 
 The catalog remains the source of available App and Service definitions, but install mutation belongs to the installed resource collection.
 
@@ -36,15 +65,15 @@ Do not make arbitrary YAML path install the primary API shape.
 Use action subresources for lifecycle operations:
 
 ```text
-POST /apps/{id}/actions/start
-POST /apps/{id}/actions/stop
-POST /apps/{id}/actions/remove
-POST /apps/{id}/actions/destroy
+POST /apps/{appInstance}/actions/start
+POST /apps/{appInstance}/actions/stop
+POST /apps/{appInstance}/actions/remove
+POST /apps/{appInstance}/actions/destroy
 
-POST /services/{id}/actions/start
-POST /services/{id}/actions/stop
-POST /services/{id}/actions/remove
-POST /services/{id}/actions/destroy
+POST /services/{serviceInstance}/actions/start
+POST /services/{serviceInstance}/actions/stop
+POST /services/{serviceInstance}/actions/remove
+POST /services/{serviceInstance}/actions/destroy
 ```
 
 Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
@@ -72,14 +101,20 @@ The caller may repeat the lifecycle action with `force: true` when force is allo
 
 Mutating API calls that create desired-state changes should prefer `202 Accepted`.
 
-The response should include:
+The response shape is:
 
-- resource snapshot
-- reconciliation request id
-- reconciliation request state
-- latest status snapshot when available
+```json
+{
+  "resource": {},
+  "reconciliation": {
+    "id": "reconcile_...",
+    "state": "pending"
+  },
+  "status": {}
+}
+```
 
-If the full response body is too heavy for API 0.0.1, a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable.
+`status` is optional.
 
 Repeated lifecycle requests to the same desired state should be idempotent.
 
@@ -108,7 +143,7 @@ Use endpoints such as `POST /catalog/apps/{name}/install`.
 
 ### Lifecycle action subresources
 
-Use `POST /apps/{id}/actions/{action}` and equivalent Service paths.
+Use `POST /apps/{appInstance}/actions/{action}` and equivalent Service paths.
 
 - Good, because lifecycle operations are platform actions on installed resources.
 - Good, because request bodies can carry confirmation and force semantics.
@@ -117,7 +152,7 @@ Use `POST /apps/{id}/actions/{action}` and equivalent Service paths.
 
 ### PATCH lifecycle field
 
-Use `PATCH /apps/{id}` with a desired lifecycle state field.
+Use `PATCH /apps/{appInstance}` with a desired lifecycle state field.
 
 - Good, because lifecycle is desired state.
 - Bad, because destructive actions need confirmation and impact semantics that do not fit a simple field update cleanly.
@@ -125,7 +160,7 @@ Use `PATCH /apps/{id}` with a desired lifecycle state field.
 
 ### DELETE for destroy
 
-Use `DELETE /apps/{id}` or `DELETE /services/{id}` for destroy.
+Use `DELETE /apps/{appInstance}` or `DELETE /services/{serviceInstance}` for destroy.
 
 - Good, because the HTTP verb looks destructive.
 - Bad, because destroy needs an explicit confirmation body and possible force.
@@ -140,15 +175,14 @@ The API can keep exact payload fields minimal in API 0.0.1, but endpoint ownersh
 
 The CLI should map user-friendly commands to these resource endpoints instead of requiring API paths to mirror CLI syntax.
 
-The exact response body shape remains an implementation detail, but the response should expose reconciliation request identity and state.
+The exact resource and status snapshot schemas remain implementation details, but the response envelope is accepted.
 
-The exact blocked/validation error envelope remains open.
+Validation error normalization is deferred beyond API 0.0.1 unless a later decision changes that.
 
 ## Open Questions
 
-- exact install request body field names
-- exact lifecycle action request body field names
-- exact mutation response body schema
-- exact blocked dependency impact response schema
 - exact manual reconcile endpoint shape
-- exact error envelope and validation response shape
+- exact resource snapshot schema
+- exact status snapshot schema
+- exact reconciliation request id format
+- future validation error normalization

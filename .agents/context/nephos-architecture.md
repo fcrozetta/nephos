@@ -79,9 +79,13 @@ Installed Apps are represented internally as `AppInstance` records and may be ex
 
 Installed Services are represented internally as `ServiceInstance` records and may be exposed publicly under `/services`.
 
+Public API paths use installed instance slugs, such as `/apps/paperless` and `/services/postgres`.
+
 Install mutation happens through `POST /apps` and `POST /services` with catalog references in the request body.
 
-Lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`.
+Install bodies use `catalogRef`, optional `instanceName`, optional `config`, and App install `bindings` when needed.
+
+Lifecycle actions use `POST /apps/{appInstance}/actions/{action}` and `POST /services/{serviceInstance}/actions/{action}`.
 
 Accepted lifecycle actions are:
 
@@ -91,6 +95,8 @@ Accepted lifecycle actions are:
 - `destroy`
 
 Destroy remains a `POST` action with explicit confirmation, not a plain `DELETE`.
+
+Lifecycle action bodies use optional `force` and `confirm`.
 
 Bindings are first-class API/database resources connecting App instance requirement aliases to Service instance capabilities.
 
@@ -104,7 +110,13 @@ Mutating API calls return after the desired-state transaction and reconciliation
 
 The API should not wait for Kubernetes convergence before returning.
 
-Mutating API calls should prefer `202 Accepted` and return resource/reconciliation request metadata.
+Mutating API calls should prefer `202 Accepted`.
+
+Mutation responses use `{ resource, reconciliation, status? }`.
+
+Nephos-owned domain errors use `{ error: { code, message, details? } }`.
+
+FastAPI/Pydantic framework validation errors may remain framework-shaped for API 0.0.1.
 
 Dependency-blocked Service lifecycle actions should return `409 Conflict` with an impact list unless forced.
 

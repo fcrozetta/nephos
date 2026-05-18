@@ -32,6 +32,10 @@ Installed Services are represented internally as `ServiceInstance` records.
 
 The public API may expose installed App instances under `/apps` and installed Service instances under `/services`.
 
+Public resource paths use installed instance slugs, for example `/apps/paperless` and `/services/postgres`.
+
+Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
+
 Catalog App and Service manifests are separate from installed instances.
 
 The API reads local filesystem catalog manifests and installation records store catalog identity, version when available, source, and manifest digest information.
@@ -45,7 +49,7 @@ POST /apps
 POST /services
 ```
 
-The request body carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
+The request body uses `catalogRef` and carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
 
 Do not put install mutation under catalog endpoints as the primary API shape.
 
@@ -80,15 +84,15 @@ Phase 1 active lifecycle states are:
 Lifecycle actions use action subresources:
 
 ```text
-POST /apps/{id}/actions/start
-POST /apps/{id}/actions/stop
-POST /apps/{id}/actions/remove
-POST /apps/{id}/actions/destroy
+POST /apps/{appInstance}/actions/start
+POST /apps/{appInstance}/actions/stop
+POST /apps/{appInstance}/actions/remove
+POST /apps/{appInstance}/actions/destroy
 
-POST /services/{id}/actions/start
-POST /services/{id}/actions/stop
-POST /services/{id}/actions/remove
-POST /services/{id}/actions/destroy
+POST /services/{serviceInstance}/actions/start
+POST /services/{serviceInstance}/actions/stop
+POST /services/{serviceInstance}/actions/remove
+POST /services/{serviceInstance}/actions/destroy
 ```
 
 Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
@@ -111,9 +115,13 @@ The API should not wait for Kubernetes convergence before returning.
 
 Mutating API calls should prefer `202 Accepted`.
 
-Mutation responses should include the resource snapshot, reconciliation request id/state, and latest status when available.
+Mutation responses use `{ resource, reconciliation, status? }`.
 
-If the full response body is too heavy for API 0.0.1, a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable.
+The `reconciliation` object must include reconciliation request id and state.
+
+Nephos-owned domain errors use `{ error: { code, message, details? } }`.
+
+Framework validation errors may remain in FastAPI/Pydantic shape for API 0.0.1.
 
 A manual reconcile endpoint is allowed for debugging.
 
@@ -164,7 +172,7 @@ Use endpoints such as `POST /catalog/apps/{name}/install`.
 
 ### DELETE for destroy
 
-Use `DELETE /apps/{id}` or `DELETE /services/{id}` for destroy.
+Use `DELETE /apps/{appInstance}` or `DELETE /services/{serviceInstance}` for destroy.
 
 - Good, because the HTTP verb looks destructive.
 - Bad, because destroy needs an explicit confirmation body and possible force.
@@ -183,11 +191,10 @@ Later APIs must extend this model deliberately rather than adding raw Kubernetes
 
 ## Open Questions
 
-- exact status response schema
 - exact manual reconcile endpoint shape
 - exact catalog read/list endpoint shape
-- exact install request body schema
-- exact lifecycle action request body schema
-- exact mutation response body schema
-- exact blocked dependency impact response schema
-- exact error envelope and validation response shape
+- exact resource snapshot schema
+- exact status response schema
+- exact reconciliation request id format
+- future validation error normalization
+- future rename behavior for installed instance slugs

@@ -30,6 +30,17 @@ The public API may expose installed Service instances under `/services`.
 
 Catalog App and Service manifests are separate from installed instances.
 
+Public resource paths use installed instance slugs.
+
+Examples:
+
+```text
+/apps/paperless
+/services/postgres
+```
+
+Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
+
 ## Install Endpoints
 
 Install Apps and Services through installed resource collections:
@@ -39,13 +50,40 @@ POST /apps
 POST /services
 ```
 
-The request body carries:
+The request body uses `catalogRef`.
 
-- catalog reference
-- optional explicit catalog source
-- instance name
-- config
-- binding or provider choices
+App install shape:
+
+```json
+{
+  "catalogRef": {
+    "kind": "App",
+    "name": "paperless",
+    "source": "default"
+  },
+  "instanceName": "paperless",
+  "config": {},
+  "bindings": {}
+}
+```
+
+Service install shape:
+
+```json
+{
+  "catalogRef": {
+    "kind": "Service",
+    "name": "postgres",
+    "source": "default"
+  },
+  "instanceName": "postgres",
+  "config": {}
+}
+```
+
+`catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
+
+`instanceName`, `config`, and `bindings` are optional where accepted defaults are available.
 
 Do not use catalog install action endpoints as the primary API shape.
 
@@ -106,20 +144,33 @@ It is not a normal active desired-state lifecycle value.
 Lifecycle actions use action subresources:
 
 ```text
-POST /apps/{id}/actions/start
-POST /apps/{id}/actions/stop
-POST /apps/{id}/actions/remove
-POST /apps/{id}/actions/destroy
+POST /apps/{appInstance}/actions/start
+POST /apps/{appInstance}/actions/stop
+POST /apps/{appInstance}/actions/remove
+POST /apps/{appInstance}/actions/destroy
 
-POST /services/{id}/actions/start
-POST /services/{id}/actions/stop
-POST /services/{id}/actions/remove
-POST /services/{id}/actions/destroy
+POST /services/{serviceInstance}/actions/start
+POST /services/{serviceInstance}/actions/stop
+POST /services/{serviceInstance}/actions/remove
+POST /services/{serviceInstance}/actions/destroy
 ```
 
 Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
 
 Destroy requires an explicit confirmation body.
+
+Lifecycle action bodies use one common shape:
+
+```json
+{
+  "force": false,
+  "confirm": "destroy paperless"
+}
+```
+
+`force` is optional and defaults to `false`.
+
+`confirm` is required only for `destroy`.
 
 Stopping, removing, or destroying a Service instance with dependents returns `409 Conflict` with an impact list unless the request explicitly carries `force: true`.
 
@@ -147,9 +198,22 @@ The API should not wait for Kubernetes convergence before returning.
 
 Mutating API calls should prefer `202 Accepted`.
 
-Mutation responses should include the resource snapshot, reconciliation request id/state, and latest status when available.
+Mutation responses use:
 
-If the full response is too heavy for API 0.0.1, a minimal `202 Accepted` body with resource identity and reconciliation request id/state is acceptable.
+```json
+{
+  "resource": {},
+  "reconciliation": {
+    "id": "reconcile_...",
+    "state": "pending"
+  },
+  "status": {}
+}
+```
+
+`status` is optional.
+
+The `reconciliation` object must include reconciliation request id and state.
 
 A manual reconcile endpoint is allowed for debugging.
 
@@ -177,6 +241,58 @@ The reconciler updates request state and latest status snapshots with reasons an
 
 Simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight.
 
+## Errors
+
+Nephos-owned domain errors use:
+
+```json
+{
+  "error": {
+    "code": "dependency_blocked",
+    "message": "Service has dependent Apps.",
+    "details": {}
+  }
+}
+```
+
+`details` is optional.
+
+Dependency-blocked lifecycle errors use HTTP `409 Conflict`.
+
+Dependency impact details include:
+
+- `requiresForce`
+- dependent App instance
+- binding id
+- binding alias
+- capability
+
+Accepted shape:
+
+```json
+{
+  "error": {
+    "code": "dependency_blocked",
+    "message": "Service has dependent Apps.",
+    "details": {
+      "requiresForce": true,
+      "dependents": [
+        {
+          "appInstance": "paperless",
+          "bindingId": "binding_...",
+          "bindingAlias": "database",
+          "capability": "postgres"
+        }
+      ]
+    }
+  }
+}
+```
+
+FastAPI/Pydantic framework validation errors may remain in their default framework shape for API 0.0.1.
+
+Do not treat framework validation error shape as a stable Nephos product API.
+
 ## Scope
 
 API 0.0.1 defines only the resources needed for the Paperless plus PostgreSQL reference flow.
@@ -188,8 +304,7 @@ Future backups, upgrades, auth/RBAC, resource profiles, remote catalogs, and gen
 - exact status response schema
 - exact manual reconcile endpoint shape
 - exact catalog read/list endpoint shape
-- exact install request body schema
-- exact lifecycle action request body schema
-- exact mutation response body schema
-- exact blocked dependency impact response schema
-- exact error envelope and validation response shape
+- exact resource snapshot schema
+- exact reconciliation request id format
+- future validation error normalization
+- future rename behavior for installed instance slugs

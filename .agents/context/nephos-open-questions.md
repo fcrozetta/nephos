@@ -119,8 +119,10 @@ Accepted direction:
 - installed Services are represented internally as `ServiceInstance` records
 - public API may expose installed App instances under `/apps`
 - public API may expose installed Service instances under `/services`
+- public resource paths use installed instance slugs, such as `/apps/paperless` and `/services/postgres`
+- opaque UUIDs are not the primary public path identifiers in API 0.0.1
 - install Apps and Services through `POST /apps` and `POST /services`
-- install request body carries catalog reference, optional source, instance name, config, and binding/provider choices
+- install request body uses `catalogRef` and carries optional source, instance name, config, and binding/provider choices
 - catalog endpoints are not the primary owner of install mutation
 - catalog App and Service manifests are separate from installed instances
 - bindings are first-class API/database resources
@@ -129,10 +131,13 @@ Accepted direction:
 - lifecycle state is desired state
 - active lifecycle states are `running`, `stopped`, and `removed`
 - `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value
-- lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- lifecycle actions use `POST /apps/{appInstance}/actions/{action}` and `POST /services/{serviceInstance}/actions/{action}`
 - accepted action names are `start`, `stop`, `remove`, and `destroy`
 - destroy remains `POST .../actions/destroy` with explicit confirmation, not plain `DELETE`
 - Service lifecycle actions blocked by dependents return `409 Conflict` with an impact list unless forced
+- lifecycle action body uses common optional fields `force` and `confirm`
+- `force` defaults to `false`
+- `confirm` is required only for `destroy`
 - status is separate from lifecycle state
 - API 0.0.1 should persist the latest status snapshot with reasons and evidence
 - API reads local filesystem catalog manifests
@@ -140,8 +145,8 @@ Accepted direction:
 - mutating API calls update desired state and create a persisted reconciliation request
 - mutating API calls return after desired state and the reconciliation request commit
 - mutating API calls should prefer `202 Accepted`
-- mutation responses should include resource snapshot, reconciliation request id/state, and latest status when available
-- minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable if full status payload is too heavy for API 0.0.1
+- mutation responses use `{ resource, reconciliation, status? }`
+- reconciliation response object must include reconciliation request id and state
 - API does not wait for Kubernetes convergence before returning
 - manual reconcile endpoint is allowed for debugging
 - reconciliation requests target one App instance, Service instance, binding, or platform domain configuration
@@ -150,6 +155,9 @@ Accepted direction:
 - failures do not roll back desired state
 - one serialized background worker is accepted initially
 - simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight
+- Nephos-owned domain errors use `{ error: { code, message, details? } }`
+- dependency-blocked lifecycle errors use `409 Conflict` with impact details including required force flag, dependent App instance, binding id, binding alias, and capability
+- FastAPI/Pydantic framework validation errors may remain in default framework shape for API 0.0.1
 - API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
 
 Need to decide:
@@ -157,11 +165,10 @@ Need to decide:
 - exact status response schema
 - exact manual reconcile endpoint shape
 - exact catalog read/list endpoint shape
-- exact install request body schema
-- exact lifecycle action request body schema
-- exact mutation response body schema
-- exact blocked dependency impact response schema
-- exact error envelope and validation response shape
+- exact resource snapshot schema
+- exact reconciliation request id format
+- future validation error normalization
+- future rename behavior for installed instance slugs
 
 ## API Lifecycle Action Shape
 
@@ -172,29 +179,64 @@ What concrete HTTP shape should API 0.0.1 use for install and lifecycle actions?
 Accepted direction:
 
 - install mutation happens through `POST /apps` and `POST /services`
-- install request body carries catalog reference, optional source, instance name, config, and binding/provider choices
+- install request body uses `catalogRef` and carries optional source, instance name, config, and binding/provider choices
 - catalog install action endpoints are not the primary API shape
 - arbitrary YAML path install is not the primary API shape
-- lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- lifecycle actions use `POST /apps/{appInstance}/actions/{action}` and `POST /services/{serviceInstance}/actions/{action}`
 - accepted action names are `start`, `stop`, `remove`, and `destroy`
 - destroy remains `POST .../actions/destroy`, not `DELETE`
 - destroy requires explicit confirmation in the request body
 - Service lifecycle actions blocked by dependents return `409 Conflict` with an impact list unless the request carries `force: true`
 - callers may repeat blocked lifecycle actions with `force: true` when force is allowed
 - mutating API calls should prefer `202 Accepted`
-- mutation responses should include resource snapshot, reconciliation request id/state, and latest status when available
-- a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable if full status payload is too heavy for API 0.0.1
+- mutation responses use `{ resource, reconciliation, status? }`
+- `reconciliation` includes request id and state
 - repeated lifecycle requests to the same desired state should be idempotent
 - Nephos should avoid duplicate reconciliation work when possible, but may enqueue reconciliation when needed to verify or converge runtime state
 
 Need to decide:
 
-- exact install request body field names
-- exact lifecycle action request body field names
-- exact mutation response body schema
-- exact blocked dependency impact response schema
 - exact manual reconcile endpoint shape
-- exact error envelope and validation response shape
+- exact resource snapshot schema
+- exact status snapshot schema
+- exact reconciliation request id format
+- future validation error normalization
+- future rename behavior for installed instance slugs
+
+## API Payload And Error Shape
+
+Question:
+
+What request, response, path id, and error payload shapes should API 0.0.1 use?
+
+Accepted direction:
+
+- public resource paths use installed instance slugs
+- examples are `/apps/paperless` and `/services/postgres`
+- opaque UUIDs are not the primary public path identifiers in API 0.0.1
+- install bodies use `catalogRef`
+- App install shape uses `catalogRef`, optional `instanceName`, optional `config`, and optional `bindings`
+- Service install shape uses `catalogRef`, optional `instanceName`, and optional `config`
+- `catalogRef` contains `kind`, `name`, and optional `source`
+- `catalogRef.source` is required only when needed to disambiguate duplicate catalog entries
+- lifecycle action body uses common optional fields `force` and `confirm`
+- `force` defaults to `false`
+- `confirm` is required only for `destroy`
+- mutation responses use `{ resource, reconciliation, status? }`
+- `reconciliation` includes request id and state
+- Nephos-owned domain errors use `{ error: { code, message, details? } }`
+- dependency-blocked lifecycle errors use `409 Conflict`
+- dependency impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability
+- FastAPI/Pydantic framework validation errors may remain in their default framework shape for API 0.0.1
+- default framework validation error shape is not stable Nephos product API
+
+Need to decide:
+
+- exact resource snapshot schema
+- exact status snapshot schema
+- exact reconciliation request id format
+- future validation error normalization
+- future rename behavior for installed instance slugs
 
 ## Database Desired-State Model
 
