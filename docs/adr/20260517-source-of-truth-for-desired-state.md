@@ -31,6 +31,10 @@ Defer Kubernetes CRDs and GitOps-as-source-of-truth until a later explicit decis
 
 Use simple explicit SQL migrations for Phase 1 database versioning.
 
+Platform configuration that affects reconciliation, such as ingress root domains, is also desired state in the Nephos API/database.
+
+Do not store ingress root domains only in local startup config or environment variables.
+
 ## Considered Options
 
 ### Nephos API and Database

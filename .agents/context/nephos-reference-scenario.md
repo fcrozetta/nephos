@@ -65,6 +65,8 @@ One configured root domain is canonical/default.
 
 The other generated hostnames are aliases.
 
+The ingress root domains are platform desired state created during Nephos setup before Apps are installed.
+
 DNS, Cloudflare Tunnel, and TLS termination remain user-managed in Phase 1.
 
 The route should exercise Nephos-owned route intent and Kubernetes-owned Ingress resources.

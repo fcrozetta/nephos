@@ -46,6 +46,7 @@ Persistence:
 
 - SQLite is the canonical Phase 1 desired-state database
 - The Nephos API/database is the source of truth for desired platform state
+- Platform configuration that affects reconciliation, such as ingress root domains, is stored in the API/database as desired state
 
 Migrations:
 

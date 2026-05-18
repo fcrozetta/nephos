@@ -117,6 +117,8 @@ The same route identity should be usable across local, public, and tailnet/tunne
 
 Phase 1 supports multiple configured ingress root domains with one default/canonical domain.
 
+Ingress root domains are platform desired state in the Nephos API/database, not App manifest fields.
+
 Default route host pattern:
 
 ```text

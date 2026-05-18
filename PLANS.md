@@ -59,6 +59,7 @@ Current understanding:
 - Batch 20 binding identity decisions are accepted: if `as` is omitted, binding alias defaults to `capability`; aliases are unique within one App manifest and installed App instance; Phase 1 `app-secret` names use `nephos-bind-<alias>` in the consuming App namespace; rebinding an alias updates the same Secret name after explicit reconciliation or confirmation; binding Secrets include relationship metadata; slug normalization was finalized in Batch 21.
 - Batch 21 naming/metadata decisions are accepted: manifest `metadata.name`, binding aliases, route names, installed instance slugs, and catalog entry slugs use strict DNS-label style machine identifiers; invalid names are rejected; default installed instance names equal catalog manifest `metadata.name`; explicit install-time instance names are allowed; name collisions fail and require explicit input; generated Kubernetes names must fit resource limits after prefixes; runtime metadata uses `app.kubernetes.io/managed-by: nephos` plus `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`; Nephos does not use Kubernetes `ownerReferences` for platform relationships.
 - Batch 22 ingress/domain decisions are accepted: Phase 1 supports multiple configured ingress root domains with one default/canonical domain and at least one root domain required for generated route hosts; Nephos generates host rules for every configured root domain; default route hostnames use `<app-instance>.<root-domain>` and non-default route hostnames use `<route>.<app-instance>.<root-domain>`; root domains are aliases for the same route intent; path-based App routing is out of scope; manual Cloudflare Tunnel remains compatible but user-managed; Nephos-managed ingress is HTTP-only; generated hostname collisions fail; Services do not expose admin routes through Nephos ingress.
+- Batch 23 ingress root domain config decisions are accepted: ingress root domains are platform desired state in the Nephos API/database, managed through Nephos API/CLI platform configuration operations, not App manifest fields; semantic shape is `rootDomains[]` with `name`, `domain`, and `default`; `domain` is a DNS suffix only and rejects URLs, paths, wildcards, schemes, and ports; operations are add/list/remove/set-default; setup creates initial platform configuration before Apps are installed, including at least one root domain and exactly one default/canonical domain; App status shows canonical URL plus aliases.
 
 Files likely to change:
 
@@ -238,7 +239,8 @@ Open questions:
 - Concrete backup implementation design.
 - Health/status check implementation details.
 - Reference scenario manifest sketches and data preservation checks.
-- Ingress root domain configuration storage/API shape.
+- Exact API path and CLI command spelling for ingress root domain operations.
+- Whether Nephos setup is interactive, flag-driven, or both.
 - Secret rotation details.
 - Catalog source/trust beyond local filesystem.
 - Local development command details.

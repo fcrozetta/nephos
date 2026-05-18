@@ -109,6 +109,29 @@ Root domains are aliases for the same Nephos route intent.
 
 They do not create separate Apps, separate routes, or separate bindings.
 
+Ingress root domains are platform desired state in the Nephos API/database.
+
+They are managed through Nephos API/CLI platform configuration operations.
+
+They are not App manifest fields.
+
+Semantic shape:
+
+```yaml
+rootDomains:
+  - name: local
+    domain: nephos.local
+    default: true
+  - name: cloudflare
+    domain: nephos.fcrozetta.app
+```
+
+`name` is a Nephos machine identifier.
+
+`domain` is a DNS suffix.
+
+Store only suffixes such as `nephos.local`, not URLs, paths, wildcards, schemes, or ports.
+
 Default route host pattern:
 
 ```text
@@ -130,6 +153,8 @@ Example:
 
 Status should identify the canonical URL and may list aliases.
 
+App status should show the canonical URL from the default root domain and aliases from non-default root domains.
+
 Avoid path-based App routing in Phase 1.
 
 Do not require Apps to run under paths such as `/paperless`.
@@ -145,6 +170,23 @@ If generated hostnames collide, Nephos fails and requires an explicit route, App
 Services do not expose admin routes through Nephos ingress in Phase 1.
 
 Service management stays through Nephos API/CLI operations and future typed Service operations.
+
+Phase 1 root domain operations:
+
+- add root domain
+- list root domains
+- remove root domain
+- set default root domain
+
+The exact HTTP API path and CLI command spelling remain open.
+
+Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
+
+Nephos setup must create the initial platform configuration before Apps are installed.
+
+That setup includes at least one ingress root domain and exactly one default/canonical root domain.
+
+Do not rely on App installation to discover or create ingress root domain configuration.
 
 Stopping an App keeps route intent.
 
@@ -230,7 +272,8 @@ Do not expose secret values unless a future explicit reveal command is designed 
 
 ## Still Open
 
-- exact ingress root domain configuration storage/API shape
+- exact API path and CLI command spelling for root domain operations
+- whether setup is interactive, flag-driven, or both
 - secret rotation behavior
 - whether/how secrets participate in backup
 - non-PostgreSQL Secret key serialization

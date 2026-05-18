@@ -305,6 +305,12 @@ Phase 1 supports multiple configured ingress root domains with one default/canon
 
 At least one root domain is required for generated route hosts.
 
+Ingress root domains are platform desired state in the Nephos API/database.
+
+They are managed through Nephos API/CLI platform configuration operations.
+
+They are not App manifest fields.
+
 Nephos generates host rules for each configured root domain.
 
 Root domains are aliases for the same route intent, not separate Apps or separate routes.
@@ -320,6 +326,18 @@ Phase 1 Nephos-managed ingress is HTTP-only.
 If generated hostnames collide, Nephos fails and requires an explicit route, App instance, or domain policy change.
 
 Services do not expose admin routes through Nephos ingress in Phase 1.
+
+Root domain config uses `name`, `domain`, and `default`.
+
+The domain value is a DNS suffix.
+
+Reject URLs, paths, wildcards, schemes, and ports.
+
+Nephos setup creates initial platform configuration before Apps are installed, including at least one ingress root domain and exactly one default/canonical root domain.
+
+Root domain operations are add, list, remove, and set default.
+
+App status shows canonical URL from the default root domain plus aliases from non-default root domains.
 
 ## D041: Manual tunnel compatibility without tunnel automation
 
@@ -485,7 +503,7 @@ Nephos should block the Service stop unless forced and show an impact list.
 
 Use illustrative generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`.
 
-The exact ingress root domain configuration storage/API shape remains open.
+The exact API path and CLI command spelling for root domain operations remain open.
 
 ## D065: Nephos manifests use YAML
 
@@ -984,3 +1002,64 @@ Kubernetes labels and annotations exist for inspection, drift detection, and cle
 Do not model App-Service bindings, Service dependents, lifecycle ownership, or desired-state ownership through Kubernetes owner references.
 
 Helm charts or Kubernetes controllers may create their own internal owner references as runtime implementation details, but Nephos must not rely on those references as the platform relationship model.
+
+## D113: Ingress root domains are platform desired state
+
+Ingress root domains are platform desired state in the Nephos API/database.
+
+They are not App manifest fields, startup-only environment variables, or local config files that bypass the canonical desired-state model.
+
+Nephos API and CLI manage ingress root domains through platform configuration operations.
+
+## D114: Root domain config uses name domain default
+
+Ingress root domain config uses this semantic shape:
+
+```yaml
+rootDomains:
+  - name: local
+    domain: nephos.local
+    default: true
+  - name: cloudflare
+    domain: nephos.fcrozetta.app
+```
+
+`name` is a Nephos machine identifier.
+
+`domain` is a DNS suffix.
+
+Exactly one root domain has `default: true`.
+
+At least one root domain is required before route reconciliation can generate hosts.
+
+## D115: Root domain values are DNS suffixes only
+
+Store only DNS suffixes such as `nephos.local`.
+
+Reject full URLs, paths, wildcards, schemes, and ports.
+
+Wildcard behavior belongs in DNS, tunnel, or external routing configuration, not in Nephos root domain state.
+
+## D116: Root domain operations are typed platform config operations
+
+Phase 1 needs platform configuration operations for add, list, remove, and set default.
+
+The exact HTTP API path and CLI command spelling remain open.
+
+Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
+
+## D117: Setup creates initial platform ingress config
+
+Nephos setup must create initial platform configuration before Apps are installed.
+
+That setup includes at least one ingress root domain and exactly one default/canonical root domain.
+
+Do not rely on App installation to discover or create ingress root domain configuration.
+
+Do not silently invent hostnames during App install.
+
+## D118: App status shows canonical URL and aliases
+
+App status shows the canonical URL generated from the default root domain and aliases generated from non-default root domains.
+
+Because Phase 1 Nephos-managed ingress is HTTP-only, Nephos-generated URLs use `http://`.

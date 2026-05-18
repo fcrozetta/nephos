@@ -106,6 +106,8 @@ Nephos derives hostnames from App instance name, route name, visibility, and con
 
 Phase 1 supports multiple configured ingress root domains with one default/canonical domain.
 
+Ingress root domains are platform desired state in the Nephos API/database, not App manifest fields.
+
 Default route host pattern:
 
 ```text

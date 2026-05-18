@@ -61,6 +61,29 @@ Root domains are aliases for the same Nephos route intent.
 
 They do not create separate Apps, separate routes, or separate bindings.
 
+Ingress root domains are platform desired state in the Nephos API/database.
+
+They are managed through Nephos API/CLI platform configuration operations.
+
+They are not App manifest fields.
+
+Semantic configuration shape:
+
+```yaml
+rootDomains:
+  - name: local
+    domain: nephos.local
+    default: true
+  - name: cloudflare
+    domain: nephos.fcrozetta.app
+```
+
+`name` is a Nephos machine identifier.
+
+`domain` is a DNS suffix.
+
+Store only suffixes such as `nephos.local`, not URLs, paths, wildcards, schemes, or ports.
+
 Example root domains:
 
 - `nephos.local`
@@ -86,6 +109,8 @@ Example:
 - `api.paperless.nephos.fcrozetta.app`
 
 Status should identify the canonical URL and may list aliases.
+
+App status should show the canonical URL from the default root domain and aliases from non-default root domains.
 
 Avoid path-based App routing in Phase 1.
 
@@ -114,6 +139,33 @@ Nephos does not suffix, randomize, or silently override hostnames.
 Services do not expose admin routes through Nephos ingress in Phase 1.
 
 Service management stays through Nephos API/CLI operations and future typed Service operations.
+
+## Root Domain Operations
+
+Phase 1 needs platform configuration operations for:
+
+- add root domain
+- list root domains
+- remove root domain
+- set default root domain
+
+The exact HTTP API path and CLI command spelling remain open.
+
+Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
+
+Removing a non-default root domain does not remove route intent or Apps.
+
+Removing the default root domain requires selecting another default first or performing a single operation that both removes it and selects a replacement.
+
+## Initial Setup
+
+Nephos setup must create the initial platform configuration before Apps are installed.
+
+That initial setup includes at least one ingress root domain and exactly one default/canonical root domain.
+
+Do not rely on App installation to discover or create ingress root domain configuration.
+
+Do not silently invent hostnames during App install.
 
 ## Stopped And Removed Apps
 
@@ -144,7 +196,8 @@ Need to define:
 
 - future Cloudflare integration
 - future Tailscale integration
-- exact ingress root domain configuration storage/API shape
+- exact API path and CLI command spelling for root domain operations
+- whether setup is interactive, flag-driven, or both
 
 ## Consequences
 

@@ -49,6 +49,13 @@ Accepted direction:
 - multiple configured ingress root domains are supported
 - exactly one ingress root domain is the default/canonical domain
 - at least one root domain is required for generated route hosts
+- ingress root domains are platform desired state in the Nephos API/database
+- ingress root domains are managed through Nephos API/CLI platform configuration operations
+- ingress root domains are not App manifest fields
+- root domain config uses `name`, `domain`, and `default`
+- `name` is a Nephos machine identifier
+- `domain` is a DNS suffix
+- domains reject URLs, paths, wildcards, schemes, and ports
 - Nephos generates host rules for each configured root domain
 - root domains are aliases for the same route intent, not separate Apps or routes
 - default route host pattern is `<app-instance>.<root-domain>`
@@ -58,12 +65,18 @@ Accepted direction:
 - Cloudflare Tunnel or other user-managed systems may terminate TLS outside Nephos
 - generated hostname collisions fail and require explicit route, App instance, or domain policy changes
 - Services do not expose admin routes through Nephos ingress in Phase 1
+- root domain operations are add, list, remove, and set default
+- removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it
+- Nephos setup creates initial platform configuration before Apps are installed
+- setup includes at least one ingress root domain and exactly one default/canonical root domain
+- App status shows canonical URL from the default root domain plus aliases from other root domains
 - stopped Apps keep route intent and may keep runtime ingress
 - remove/destroy remove runtime ingress
 
 Need to decide:
 
-- exact ingress root domain configuration storage/API shape
+- exact API path and CLI command spelling for root domain operations
+- whether setup is interactive, flag-driven, or both
 - future Cloudflare adapter shape
 - future Tailscale adapter shape
 
@@ -178,6 +191,9 @@ Accepted direction:
 - Phase 1 supports multiple configured ingress root domains with one default/canonical domain
 - default route host pattern is `<app-instance>.<root-domain>`
 - non-default route host pattern is `<route>.<app-instance>.<root-domain>`
+- root domain config lives in platform desired state, not App manifests
+- root domain config uses `name`, `domain`, and `default`
+- domains reject URLs, paths, wildcards, schemes, and ports
 - path-based App routing is out of Phase 1
 - Phase 1 Nephos-managed ingress is HTTP-only
 - Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`
@@ -535,5 +551,5 @@ Need to decide:
 - exact Service manifest examples
 - exact commands
 - expected status outputs
-- exact ingress root domain configuration storage/API shape
+- exact API path and CLI command spelling for root domain operations
 - data preservation checks

@@ -32,7 +32,7 @@ The reference scenario contains:
 - Paperless binding to PostgreSQL
 - local route intent using generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`
 
-The exact ingress root domain configuration storage/API shape remains open.
+The exact API path and CLI command spelling for root domain operations remain open.
 
 Paperless requires only PostgreSQL in the Phase 1 reference scenario.
 
@@ -88,6 +88,8 @@ These are two configured root domains for the same Paperless route.
 One configured root domain is canonical/default.
 
 The other generated hostnames are aliases.
+
+The ingress root domains are platform desired state created during Nephos setup before Apps are installed.
 
 DNS, Cloudflare Tunnel, and TLS termination remain user-managed in Phase 1.
 

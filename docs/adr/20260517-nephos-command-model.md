@@ -23,6 +23,7 @@ Nephos will use separate command groups:
 - nephos cluster *
 - nephos app *
 - nephos service *
+- platform configuration commands
 
 `nephos up` and `nephos down` may be shorthand for cluster lifecycle.
 
@@ -45,6 +46,19 @@ App commands manage user-facing workloads.
 Service commands manage shared platform infrastructure.
 
 Service commands must be dependency-aware.
+
+Platform configuration commands manage Nephos platform desired state that is not owned by one App or Service.
+
+Ingress root domain operations belong to platform configuration, not App manifests.
+
+Phase 1 needs operations for:
+
+- add root domain
+- list root domains
+- remove root domain
+- set default root domain
+
+The exact command spelling remains open.
 
 ## Example Commands
 

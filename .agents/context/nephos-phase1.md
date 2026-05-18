@@ -116,9 +116,14 @@ Ingress and secrets:
 - multiple configured ingress root domains
 - one default/canonical ingress root domain
 - at least one root domain for generated route hosts
+- ingress root domains stored as platform desired state in the Nephos API/database
+- ingress root domains managed through Nephos API/CLI platform configuration operations
+- root domain config uses `name`, `domain`, and `default`
 - host rules generated for each configured root domain
 - default route host pattern `<app-instance>.<root-domain>`
 - non-default route host pattern `<route>.<app-instance>.<root-domain>`
+- App status shows canonical URL plus aliases
+- setup creates initial platform configuration before Apps are installed
 - path-based App routing out of scope
 - HTTP-only Nephos-managed ingress
 - no Service admin routes through Nephos ingress
@@ -197,7 +202,8 @@ Reference scenario:
 
 ## Still To Define
 
-- exact ingress root domain configuration storage/API shape
+- exact API path and CLI command spelling for root domain operations
+- whether setup is interactive, flag-driven, or both
 - binding Secret rotation behavior
 - backup guarantees
 - local development workflow

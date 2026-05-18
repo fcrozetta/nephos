@@ -67,6 +67,8 @@ The API should own platform intent.
 
 The API/database is the canonical source of desired platform state.
 
+Platform configuration that affects reconciliation, such as ingress root domains, lives in the API/database as desired state.
+
 For Phase 1, the backend stack is:
 
 - Python
@@ -164,6 +166,10 @@ Nephos generates host rules for each configured root domain.
 
 Root domains are aliases for the same route intent, not separate Apps or separate routes.
 
+Ingress root domains are platform desired state in the Nephos API/database and are managed through Nephos API/CLI platform configuration operations.
+
+They are not App manifest fields.
+
 Default route host pattern:
 
 ```text
@@ -183,6 +189,8 @@ Phase 1 Nephos-managed ingress is HTTP-only.
 If generated hostnames collide, Nephos fails and requires explicit user input.
 
 Services do not expose admin routes through Nephos ingress in Phase 1.
+
+Nephos setup must create initial platform configuration before Apps are installed, including at least one ingress root domain and exactly one default/canonical root domain.
 
 Phase 1 uses Kubernetes Secrets.
 

@@ -64,6 +64,7 @@ Include:
 - binding resolved/unresolved
 - dependency availability
 - route known/unknown
+- canonical route URL and alias URLs for Apps with routes
 - backup status as `unsupported`
 - Service dependent impact
 
