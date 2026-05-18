@@ -129,7 +129,7 @@ Accepted direction:
 - status is separate from lifecycle state
 - API 0.0.1 should persist the latest status snapshot with reasons and evidence
 - API reads local filesystem catalog manifests
-- installed records store catalog identity and version snapshot information
+- installed records store catalog identity, version when available, source, and manifest digest information
 - mutating API calls update desired state and trigger or enqueue reconciliation
 - manual reconcile endpoint is allowed for debugging
 - API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
@@ -161,8 +161,10 @@ Accepted direction:
 - use normalized columns for core identity, relationship, lifecycle, and lookup fields
 - use SQLite JSON text columns for snapshots and flexible payloads where useful
 - validate JSON payloads at the API/domain boundary
-- installed records store catalog identity and version snapshot information
-- installed records should include catalog kind, catalog name, catalog version when available, catalog source path, and manifest digest or manifest snapshot
+- installed records store catalog identity and version information
+- installed records should include catalog kind, catalog name, catalog version when available, catalog source path, and SHA-256 manifest digest
+- do not store a full manifest snapshot by default
+- store a full manifest snapshot only if implementation proves it is necessary for concrete behavior such as stable replay, import/export, or debugging
 - do not recompute installed desired state only from current catalog files
 - persist the latest status snapshot per resource
 - status event/history storage is deferred
@@ -412,6 +414,47 @@ Need to decide:
 - remote catalog source format
 - future separate catalog index format, if needed
 - compatibility metadata
+
+## Catalog And Manifest Loading
+
+Question:
+
+How should API 0.0.1 load and validate local catalog manifests?
+
+Accepted direction:
+
+- API 0.0.1 supports one repo-shipped catalog root
+- API 0.0.1 supports optional configured local filesystem catalog roots
+- custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config
+- custom catalog roots are not platform desired state in SQLite for API 0.0.1
+- catalog source management can move into platform configuration later by explicit decision
+- API reads and validates catalog manifests on demand
+- do not import all catalog entries into SQLite before use
+- do not require a startup catalog index
+- directory slug and manifest `metadata.name` must match
+- do not silently normalize slug/name mismatches
+- duplicate catalog entries with the same kind and name across configured roots are an error unless the caller explicitly selects a source
+- do not let later roots silently override earlier roots
+- validate manifests with typed Python/Pydantic domain models in API code first
+- do not add canonical JSON Schema files under `schemas/` until Fer approves the concrete validation schema
+- reject unknown manifest fields once canonical validation models exist
+- install by catalog kind and name, plus optional explicit source when needed
+- do not make arbitrary install-from-path the main API or UX flow
+- store catalog kind, catalog name, catalog version when available, catalog source path or source identifier, and SHA-256 manifest digest at install time
+- do not store a full manifest snapshot by default
+- store a full manifest snapshot only if implementation proves it is necessary for concrete behavior such as stable replay, import/export, or debugging
+- temporary draft manifests stay under `.agents/drafts/manifests/` and remain non-canonical until API validation models exist and Fer approves promotion
+- `metadata.version` remains optional for catalog entries
+- installed records store version if present and always store the manifest digest
+
+Need to decide:
+
+- exact backend config/env variable shape for custom local catalog roots
+- exact source identifier format when more than one root is configured
+- exact duplicate-entry error shape
+- exact Pydantic/domain validation model names
+- exact catalog list/read API response shape
+- whether full manifest snapshots become necessary for stable replay, import/export, or debugging
 
 ## Draft Manifest Naming Details
 

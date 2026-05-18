@@ -48,7 +48,11 @@ Use normalized columns for core identity, relationship, lifecycle, and lookup fi
 
 Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
 
-Installed App and Service records should store catalog identity and version snapshot information, including catalog kind, catalog name, catalog version when available, source path, and manifest digest or snapshot.
+Installed App and Service records should store catalog identity and version information, including catalog kind, catalog name, catalog version when available, source path, and SHA-256 manifest digest.
+
+Do not store a full manifest snapshot by default.
+
+Store a full manifest snapshot only if implementation proves it is necessary for a concrete behavior such as stable replay, import/export, or debugging.
 
 Do not recompute installed desired state only from current catalog files.
 

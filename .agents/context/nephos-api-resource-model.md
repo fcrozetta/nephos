@@ -34,11 +34,17 @@ Catalog App and Service manifests are separate from installed instances.
 
 The API reads local filesystem catalog manifests.
 
-Installed records store catalog identity and version snapshot information.
+API 0.0.1 reads and validates catalog manifests on demand.
+
+Installed records store catalog identity, optional version, source, and digest information.
 
 Do not require catalog entries to be imported into SQLite before installation in Phase 1.
 
 Do not install directly from arbitrary YAML paths as the default API model.
+
+Install by catalog kind and name, plus optional explicit source when needed.
+
+Custom catalog roots are backend local configuration for API 0.0.1, not platform desired state.
 
 ## Bindings
 

@@ -28,6 +28,14 @@ Supported Phase 1 catalog sources:
 - repo-shipped reference catalog entries
 - user-configured local filesystem catalog paths
 
+API 0.0.1 supports one repo-shipped catalog root plus optional configured local filesystem catalog roots.
+
+Custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config.
+
+Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
+
+Catalog source management can move into platform configuration later by explicit decision.
+
 Nephos must not hardcode App or Service behavior in backend logic.
 
 Even the reference scenario should exercise the catalog and manifest path.
@@ -66,11 +74,43 @@ Catalog metadata should not become a second source of truth for package semantic
 
 Catalog entry slugs use the accepted Nephos machine identifier rule.
 
-For Phase 1, the catalog entry directory slug should match the manifest `metadata.name`.
+For Phase 1, the catalog entry directory slug must match the manifest `metadata.name`.
+
+In API 0.0.1, the directory slug and manifest `metadata.name` must match.
+
+Do not silently normalize mismatches.
+
+Duplicate catalog entries with the same kind and name across configured roots are an error unless the caller explicitly selects a source.
+
+Do not let later roots silently override earlier roots.
 
 By default, an installed instance name equals the catalog manifest `metadata.name`.
 
 Users may provide an explicit instance name at install time.
+
+## Loading And Validation
+
+API 0.0.1 reads and validates catalog manifests on demand.
+
+Do not import all catalog entries into SQLite before use.
+
+Do not require a startup catalog index.
+
+Validate manifests with typed Python/Pydantic domain models in API code first.
+
+Do not add canonical JSON Schema files under `schemas/` until Fer approves the concrete validation schema.
+
+Reject unknown manifest fields once canonical validation models exist.
+
+Install by catalog kind and name, plus optional explicit source when needed.
+
+Do not make arbitrary install-from-path the main API or UX flow.
+
+At install time, store catalog kind, catalog name, catalog version when available, catalog source path or source identifier, and SHA-256 digest of the manifest file content.
+
+Do not store a full manifest snapshot by default.
+
+Store a full manifest snapshot only if implementation proves it is necessary for a concrete behavior such as stable replay, import/export, or debugging.
 
 ## Deferred Sources
 

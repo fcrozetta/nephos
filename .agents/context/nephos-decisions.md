@@ -1219,11 +1219,15 @@ JSON payloads must be validated at the API/domain boundary.
 
 Do not use unvalidated JSON blobs as the main domain model.
 
-## D133: Installed records store catalog identity snapshots
+## D133: Installed records store catalog identity and digest
 
-Installed App and Service records store catalog identity and version snapshot information.
+Installed App and Service records store catalog identity and version information.
 
-This should include catalog kind, catalog name, catalog version when available, catalog source path, and manifest digest or manifest snapshot.
+This should include catalog kind, catalog name, catalog version when available, catalog source path, and SHA-256 manifest digest.
+
+Do not store a full manifest snapshot by default.
+
+Store a full manifest snapshot only if implementation proves it is necessary for a concrete behavior such as stable replay, import/export, or debugging.
 
 Do not recompute installed desired state only from current catalog files.
 
@@ -1256,3 +1260,69 @@ Destroy removes active desired-state rows.
 API 0.0.1 does not require an audit/history table for destroyed resources.
 
 `destroyed` may appear later as terminal history if an audit/history model is accepted.
+
+## D138: API 0.0.1 catalog roots are local filesystem roots
+
+API 0.0.1 supports one repo-shipped catalog root and optional configured local filesystem catalog roots.
+
+Custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config.
+
+Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
+
+Catalog source management can move into platform configuration later by explicit decision.
+
+## D139: API 0.0.1 loads catalog manifests on demand
+
+The API reads and validates catalog manifests on demand.
+
+Do not import all catalog entries into SQLite before use.
+
+Do not require a startup catalog index in API 0.0.1.
+
+## D140: Catalog directory slug must match metadata.name
+
+The directory slug and manifest `metadata.name` must match.
+
+Do not silently normalize mismatches.
+
+## D141: Duplicate catalog entries require explicit source selection
+
+Duplicate catalog entries with the same kind and name across configured roots are an error unless the caller explicitly selects a source.
+
+Do not let later roots silently override earlier roots.
+
+## D142: Manifest validation starts with typed Python domain models
+
+Validate manifests with typed Python/Pydantic domain models in API code first.
+
+Do not add canonical JSON Schema files under `schemas/` until Fer approves the concrete validation schema.
+
+Reject unknown manifest fields once canonical validation models exist.
+
+## D143: Install selects catalog kind and name
+
+Install by catalog kind and name, plus optional explicit source when needed.
+
+Do not make arbitrary install-from-path the main API or UX flow.
+
+## D144: Installed catalog metadata stores digest by default
+
+At install time, store catalog kind, catalog name, catalog version when available, catalog source path or source identifier, and SHA-256 digest of the manifest file content.
+
+Do not store a full manifest snapshot by default.
+
+Store a full manifest snapshot only if implementation proves it is necessary for concrete behavior such as stable replay, import/export, or debugging.
+
+## D145: Draft manifests remain non-canonical
+
+Temporary draft manifests stay under `.agents/drafts/manifests/`.
+
+Drafts remain non-canonical until API validation models exist and Fer approves promotion.
+
+Do not treat drafts as implementation contracts.
+
+## D146: Catalog metadata.version remains optional
+
+`metadata.version` remains optional for catalog entries.
+
+Installed records store version if present and always store manifest digest.

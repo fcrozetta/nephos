@@ -34,7 +34,7 @@ The public API may expose installed App instances under `/apps` and installed Se
 
 Catalog App and Service manifests are separate from installed instances.
 
-The API reads local filesystem catalog manifests and installation records store catalog identity and version snapshot information.
+The API reads local filesystem catalog manifests and installation records store catalog identity, version when available, source, and manifest digest information.
 
 Do not require catalog entries to be imported into the database before installation in Phase 1.
 

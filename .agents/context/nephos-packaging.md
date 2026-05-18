@@ -460,6 +460,14 @@ The catalog stores available Apps and Services.
 
 Installed App and Service instances live in Nephos desired state, not in the catalog.
 
+API 0.0.1 loads catalog manifests on demand from one repo-shipped catalog root plus optional configured local filesystem roots.
+
+Install by catalog kind and name, plus optional explicit source when needed.
+
+Do not make arbitrary install-from-path the main API or UX flow.
+
+Validate manifests with typed Python/Pydantic domain models in API code first.
+
 ## Service Operations
 
 The canonical term is Service operation.

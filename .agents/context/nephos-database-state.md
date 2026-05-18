@@ -55,7 +55,7 @@ Do not use unvalidated JSON blobs as the main domain model.
 
 ## Catalog Identity Snapshot
 
-Installed records store catalog identity and version snapshot information.
+Installed records store catalog identity and version information.
 
 This should include:
 
@@ -63,7 +63,11 @@ This should include:
 - catalog name
 - catalog version when available
 - catalog source path
-- manifest digest or manifest snapshot
+- SHA-256 manifest digest
+
+Do not store a full manifest snapshot by default.
+
+Store a full manifest snapshot only if implementation proves it is necessary for a concrete behavior such as stable replay, import/export, or debugging.
 
 Do not recompute installed desired state only from current catalog files.
 
