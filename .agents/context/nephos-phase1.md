@@ -69,7 +69,12 @@ Catalog and packaging:
 - no separate catalog index
 - tiny repo-shipped reference catalog
 - Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`
+- config options use required `name` and `type`, plus optional `label`, `description`, `default`, and `required`
+- config option `required` defaults to `false`
+- enum config options use object values with `value` and `label`
 - `secret` App config option type deferred
+- config validation bounds such as min/max/regex/length deferred
+- config runtime mapping happens through `spec.runtime.values.mappings[]`
 - unknown manifest fields rejected once canonical schemas exist
 - no schema files until Fer approves concrete validation schema
 

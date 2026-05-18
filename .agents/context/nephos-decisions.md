@@ -709,3 +709,59 @@ Raw Kubernetes manifests remain an accepted fallback runtime mechanism.
 The exact raw manifest fallback field shape is deferred until Nephos needs a raw-manifest package.
 
 Do not add raw manifest schema fields now.
+
+## D091: Config option object shape
+
+Phase 1 config options support:
+
+- `name`
+- `type`
+- `label`
+- `description`
+- `default`
+- `required`
+
+Required config option fields:
+
+- `name`
+- `type`
+
+Optional config option fields:
+
+- `label`
+- `description`
+- `default`
+- `required`
+
+`name` is the stable machine key.
+
+Use `label` for display text.
+
+`required` defaults to `false`.
+
+## D092: Enum config options use value and label objects
+
+Enum config options use object values with:
+
+- `value`
+- `label`
+
+`value` is the stored value.
+
+`label` is display text.
+
+## D093: Config validation bounds are deferred
+
+Do not add validation bounds such as `min`, `max`, `regex`, or length constraints in Phase 1.
+
+Config option `default` values should still match the declared config option type.
+
+## D094: Config options do not carry runtime mapping paths
+
+Config options are semantic inputs.
+
+Do not put Helm value paths, environment variables, or Kubernetes field paths directly in config option objects.
+
+Mapping config options into runtime deployment values happens through `spec.runtime.values.mappings[]`.
+
+The exact mapping object shape remains open.

@@ -283,9 +283,23 @@ Phase 1 App config option types are:
 - `boolean`
 - `enum`
 
+Config options use required `name` and `type`, plus optional `label`, `description`, `default`, and `required`.
+
+Config option `name` is the stable machine key.
+
+Config option `required` defaults to `false`.
+
+Enum config options use object values with `value` and `label`.
+
 The `secret` App config option type is deferred.
 
 App config must not become a second credential path beside bindings and generated Service credentials.
+
+Config validation bounds such as min/max/regex/length are deferred.
+
+Config options do not carry Helm value paths, environment variables, or Kubernetes field paths.
+
+Config runtime mapping happens through `spec.runtime.values.mappings[]`.
 
 For Phase 1 Service manifests:
 

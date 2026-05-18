@@ -89,11 +89,56 @@ Accepted Phase 1 config option types:
 - `boolean`
 - `enum`
 
+Each config option supports:
+
+- `name`
+- `type`
+- `label`
+- `description`
+- `default`
+- `required`
+
+Required config option fields:
+
+- `name`
+- `type`
+
+Optional config option fields:
+
+- `label`
+- `description`
+- `default`
+- `required`
+
+`name` is the stable machine key.
+
+Use `label` for display text.
+
+`required` defaults to `false`.
+
+For `enum`, use object values with `value` and `label`.
+
+Enum `value` is the stored value.
+
+Enum `label` is display text.
+
 `secret` is deferred as an App config option type.
 
 Do not use App config as a second credential path beside bindings and generated Service credentials.
 
 Do not allow arbitrary object or array config option values in Phase 1.
+
+Do not add validation bounds such as `min`, `max`, `regex`, or length constraints in Phase 1.
+
+Config option `default` values should still match the declared config option type.
+
+Config options are semantic inputs.
+
+Do not put Helm value paths, environment variables, or Kubernetes field paths directly in config option objects.
+
+Mapping config options into runtime deployment values happens through `spec.runtime.values.mappings[]`.
+
+The exact mapping object shape remains open.
 
 For Phase 1 App manifests:
 

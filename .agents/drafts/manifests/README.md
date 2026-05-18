@@ -35,7 +35,12 @@ Accepted binding/provisioning decisions reflected in the current draft sketches:
 - PostgreSQL output fields are capability-defined; there is no Phase 1 manifest `fields:` syntax
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
 - Phase 1 config option types are `string`, `integer`, `boolean`, and `enum`
+- config options use required `name` and `type`, plus optional `label`, `description`, `default`, and `required`
+- config option `required` defaults to `false`
+- enum config options use object values with `value` and `label`
 - `secret` App config option type is deferred
+- config validation bounds such as min/max/regex/length are deferred
+- config runtime mapping happens through `spec.runtime.values.mappings[]`
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `apiVersion`, `kind`, `metadata.name`, and `spec.runtime` are required for Phase 1 installable catalog entries
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists

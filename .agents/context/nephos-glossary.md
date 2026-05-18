@@ -238,9 +238,21 @@ Phase 1 config option types:
 - `boolean`
 - `enum`
 
+Config options use required `name` and `type`, plus optional `label`, `description`, `default`, and `required`.
+
+The `name` field is the stable machine key.
+
+The `label` field is display text.
+
+`required` defaults to `false`.
+
+Enum config options use object values with `value` and `label`.
+
 `secret` is deferred as an App config option type.
 
 Config options must not become a second credential path beside bindings and generated Service credentials.
+
+Config options do not carry Helm value paths, environment variables, or Kubernetes field paths.
 
 ## Service Manifest
 

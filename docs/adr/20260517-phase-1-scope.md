@@ -47,7 +47,12 @@ Phase 1 includes:
 - backup intent/status only
 - pinned versions and manual upgrades
 - Phase 1 App config option types `string`, `integer`, `boolean`, and `enum`
+- config options use required `name` and `type`, plus optional `label`, `description`, `default`, and `required`
+- config option `required` defaults to `false`
+- enum config options use object values with `value` and `label`
 - `secret` App config option type deferred
+- config validation bounds such as min/max/regex/length deferred
+- config runtime mapping happens through `spec.runtime.values.mappings[]`
 - unknown manifest fields rejected once canonical schemas exist
 
 Phase 1 lifecycle commands for Apps and Services:

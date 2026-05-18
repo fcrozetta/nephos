@@ -100,8 +100,15 @@ Later accepted direction:
 - Other binding targets and non-PostgreSQL payload schemas remain open.
 - Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`.
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists.
+- Config options use `name`, `type`, optional `label`, optional `description`, optional `default`, and optional `required`.
+- Config option `name` is the stable machine key.
+- Config option `required` defaults to `false`.
 - Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`.
+- Enum config options use object values with `value` and `label`.
+- Config option `default` values should match the declared config option type.
 - `secret` App config option type is deferred.
+- Config validation bounds such as min/max/regex/length are deferred.
+- Runtime mappings stay in `spec.runtime.values.mappings[]`, not in config option objects.
 - Service `spec.provides[]` is required non-empty.
 - Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`.
 - Unknown manifest fields are rejected once canonical schemas exist.
@@ -124,12 +131,13 @@ Do not create canonical files under `schemas/` or `examples/` from this ADR alon
 
 Need to decide:
 
-- config surface format
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
+- future validation bounds such as min/max/regex/length
+- exact `spec.runtime.values.mappings[]` object shape
 - command/status shape needed before promoting draft sketches into canonical examples
 - when to create files under `schemas/`
 

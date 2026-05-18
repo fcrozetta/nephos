@@ -97,7 +97,30 @@ Do not put full hostnames in App manifests as the primary route model.
 
 Use `spec.config.options[]` as the config surface.
 
-Option fields such as name, type, default, and required are reserved for later refinement.
+Each config option supports:
+
+- `name`
+- `type`
+- `label`
+- `description`
+- `default`
+- `required`
+
+Required config option fields:
+
+- `name`
+- `type`
+
+Optional config option fields:
+
+- `label`
+- `description`
+- `default`
+- `required`
+
+`name` is the stable machine key.
+
+Use `label` for display text.
 
 Accepted Phase 1 config option types:
 
@@ -106,11 +129,39 @@ Accepted Phase 1 config option types:
 - `boolean`
 - `enum`
 
+`required` defaults to `false`.
+
 `secret` is deferred as an App config option type.
 
 Do not use App config as a second credential path beside bindings and generated Service credentials.
 
 Do not allow arbitrary object or array config option values in Phase 1.
+
+Do not add validation bounds such as `min`, `max`, `regex`, or length constraints in Phase 1.
+
+Config option `default` values should still match the declared config option type.
+
+For `enum`, use:
+
+```yaml
+values:
+  - value: daily
+    label: Daily
+  - value: weekly
+    label: Weekly
+```
+
+Enum `value` is the stored value.
+
+Enum `label` is display text.
+
+Config options are semantic inputs.
+
+Do not put Helm value paths, environment variables, or Kubernetes field paths directly in config option objects.
+
+Mapping config options into runtime deployment values happens through `spec.runtime.values.mappings[]`.
+
+The exact mapping object shape remains open.
 
 Do not model App config as arbitrary environment variables in the primary schema.
 
@@ -255,7 +306,6 @@ Do not create files under `schemas/` or `examples/` from this ADR alone.
 
 Need to decide:
 
-- config option object shape
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
@@ -265,6 +315,8 @@ Need to decide:
 - Service operation contract
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
+- future validation bounds such as min/max/regex/length
+- exact `spec.runtime.values.mappings[]` object shape
 - exact promotion path from draft sketches to canonical examples after command/status shape is stable
 - when to create schema files under `schemas/`
 

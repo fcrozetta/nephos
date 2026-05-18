@@ -120,9 +120,16 @@ Accepted direction:
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
 - Phase 1 config option types are `string`, `integer`, `boolean`, and `enum`
+- config options use required `name` and `type`, plus optional `label`, `description`, `default`, and `required`
+- config option `name` is the stable machine key
+- config option `required` defaults to `false`
+- enum config options use object values with `value` and `label`
 - `secret` App config option type is deferred
 - App config must not become a second credential path beside bindings and generated Service credentials
 - arbitrary object and array config option values are not supported in Phase 1
+- config validation bounds such as min/max/regex/length are deferred
+- config options do not carry Helm value paths, environment variables, or Kubernetes field paths
+- config runtime mapping happens through `spec.runtime.values.mappings[]`
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance
 - `none` means no Service-side resource is created for the binding
@@ -146,7 +153,6 @@ Accepted direction:
 
 Need to decide:
 
-- config option object shape
 - binding output targets beyond `app-secret`
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
@@ -155,6 +161,8 @@ Need to decide:
 - required/default behavior for Services that expose capabilities without binding outputs
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
+- future validation bounds such as min/max/regex/length
+- exact `spec.runtime.values.mappings[]` object shape
 - command/status shape needed before promoting draft sketches into canonical examples
 
 ## Dedicated Service Sharing Policy Details
