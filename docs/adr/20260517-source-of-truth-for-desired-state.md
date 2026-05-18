@@ -35,6 +35,8 @@ Platform configuration that affects reconciliation, such as ingress root domains
 
 Do not store ingress root domains only in local startup config or environment variables.
 
+The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state.
+
 ## Considered Options
 
 ### Nephos API and Database

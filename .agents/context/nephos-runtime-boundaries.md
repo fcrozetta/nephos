@@ -186,6 +186,10 @@ Nephos setup must create the initial platform configuration before Apps are inst
 
 That setup includes at least one ingress root domain and exactly one default/canonical root domain.
 
+The setup UX and command implementation belong in the separate `nephos-cli` repository after Nephos API `0.0.1` is implemented.
+
+The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state.
+
 Do not rely on App installation to discover or create ingress root domain configuration.
 
 Stopping an App keeps route intent.
@@ -274,6 +278,9 @@ Do not expose secret values unless a future explicit reveal command is designed 
 
 - exact API path and CLI command spelling for root domain operations
 - whether setup is interactive, flag-driven, or both
+- exact setup command spelling in `nephos-cli`
+- setup idempotency behavior
+- App install behavior when setup is missing
 - secret rotation behavior
 - whether/how secrets participate in backup
 - non-PostgreSQL Secret key serialization

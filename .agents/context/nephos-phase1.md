@@ -124,6 +124,8 @@ Ingress and secrets:
 - non-default route host pattern `<route>.<app-instance>.<root-domain>`
 - App status shows canonical URL plus aliases
 - setup creates initial platform configuration before Apps are installed
+- setup UX and command implementation deferred to `nephos-cli` after Nephos API `0.0.1`
+- backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state
 - path-based App routing out of scope
 - HTTP-only Nephos-managed ingress
 - no Service admin routes through Nephos ingress
@@ -204,6 +206,9 @@ Reference scenario:
 
 - exact API path and CLI command spelling for root domain operations
 - whether setup is interactive, flag-driven, or both
+- exact setup command spelling in `nephos-cli`
+- setup idempotency behavior
+- App install behavior when setup is missing
 - binding Secret rotation behavior
 - backup guarantees
 - local development workflow

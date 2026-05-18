@@ -335,6 +335,8 @@ Reject URLs, paths, wildcards, schemes, and ports.
 
 Nephos setup creates initial platform configuration before Apps are installed, including at least one ingress root domain and exactly one default/canonical root domain.
 
+Setup UX and command implementation belong in the separate `nephos-cli` repository after Nephos API `0.0.1` is implemented.
+
 Root domain operations are add, list, remove, and set default.
 
 App status shows canonical URL from the default root domain plus aliases from non-default root domains.
@@ -1054,6 +1056,8 @@ Nephos setup must create initial platform configuration before Apps are installe
 
 That setup includes at least one ingress root domain and exactly one default/canonical root domain.
 
+Setup UX and command implementation belong in the separate `nephos-cli` repository after Nephos API `0.0.1` is implemented.
+
 Do not rely on App installation to discover or create ingress root domain configuration.
 
 Do not silently invent hostnames during App install.
@@ -1063,3 +1067,24 @@ Do not silently invent hostnames during App install.
 App status shows the canonical URL generated from the default root domain and aliases generated from non-default root domains.
 
 Because Phase 1 Nephos-managed ingress is HTTP-only, Nephos-generated URLs use `http://`.
+
+## D119: Backend may start with incomplete platform config
+
+The backend may start with an empty database.
+
+When required platform configuration is missing, the backend reports platform configuration as incomplete until setup creates the required desired state.
+
+## D120: Setup command design is deferred to nephos-cli
+
+Setup UX and command implementation belong in the separate `nephos-cli` repository.
+
+Nephos setup command design is deferred until after Nephos API `0.0.1` is implemented.
+
+Open CLI-phase questions:
+
+- exact setup command spelling
+- whether setup is interactive, flag-driven, or both
+- exact root domain command group spelling
+- setup idempotency behavior
+- App install behavior when setup is missing
+- exact API paths used by CLI setup and root domain operations

@@ -51,6 +51,10 @@ Platform configuration commands manage Nephos platform desired state that is not
 
 Ingress root domain operations belong to platform configuration, not App manifests.
 
+Setup UX and command implementation belong in the separate `nephos-cli` repository.
+
+Nephos setup command design is deferred until after Nephos API `0.0.1` is implemented.
+
 Phase 1 needs operations for:
 
 - add root domain
@@ -59,6 +63,14 @@ Phase 1 needs operations for:
 - set default root domain
 
 The exact command spelling remains open.
+
+Open command questions saved for the CLI phase:
+
+- whether the setup command is `nephos setup` or another spelling
+- whether setup is interactive, flag-driven, or both
+- exact root domain command group spelling
+- setup idempotency behavior
+- App install behavior when setup is missing
 
 ## Example Commands
 

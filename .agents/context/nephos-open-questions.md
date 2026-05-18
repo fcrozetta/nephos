@@ -80,6 +80,31 @@ Need to decide:
 - future Cloudflare adapter shape
 - future Tailscale adapter shape
 
+## Setup And Platform Config Commands
+
+Question:
+
+What exact CLI/API command shape should initialize and manage Nephos platform configuration?
+
+Accepted direction:
+
+- setup UX and command implementation belong in the separate `nephos-cli` repository
+- setup command design is deferred until after Nephos API `0.0.1` is implemented
+- setup creates initial platform configuration before Apps are installed
+- setup includes at least one ingress root domain and exactly one default/canonical root domain
+- backend may start with an empty database
+- backend reports platform configuration as incomplete until setup creates required desired state
+- ingress root domain operations are platform configuration operations, not App manifest fields
+
+Need to decide later in the `nephos-cli` phase:
+
+- exact setup command spelling
+- whether setup is interactive, flag-driven, or both
+- exact root domain command group spelling
+- setup idempotency behavior
+- App install behavior when setup is missing
+- exact API paths used by CLI setup and root domain operations
+
 ## Secrets Details
 
 Question:

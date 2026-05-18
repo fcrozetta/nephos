@@ -88,9 +88,17 @@ That initial setup includes at least one ingress root domain and exactly one def
 
 The root domain may be provided by the user during setup.
 
+The setup UX and command implementation belong in the separate `nephos-cli` repository.
+
+Nephos setup command design is deferred until after Nephos API `0.0.1` is implemented.
+
 Do not rely on App installation to discover or create ingress root domain configuration.
 
 Do not silently invent hostnames during App install.
+
+The backend may start with an empty database.
+
+When required platform configuration is missing, the backend reports platform configuration as incomplete until setup creates the required desired state.
 
 ## Status Output
 
@@ -128,4 +136,7 @@ Need to decide later:
 - exact API path
 - exact CLI command spelling
 - whether setup is interactive, flag-driven, or both
+- exact setup command spelling in `nephos-cli`
+- setup idempotency behavior
+- App install behavior when setup is missing
 - whether route status should show HTTP-only Nephos URLs, externally observed HTTPS URLs, or both after future tunnel/DNS integrations

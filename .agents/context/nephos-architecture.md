@@ -55,6 +55,10 @@ The CLI should report CLI and backend versions and may warn on unknown/newer/old
 
 The CLI should not block state-mutating commands solely because of version mismatch in Phase 1.
 
+Setup UX and command implementation belong in the separate CLI repository.
+
+Nephos setup command design is deferred until after Nephos API `0.0.1` is implemented.
+
 It should support:
 
 - nephos cluster *
@@ -68,6 +72,10 @@ The API should own platform intent.
 The API/database is the canonical source of desired platform state.
 
 Platform configuration that affects reconciliation, such as ingress root domains, lives in the API/database as desired state.
+
+The backend may start with an empty database.
+
+When required platform configuration is missing, the backend should report platform configuration as incomplete until setup creates the required desired state.
 
 For Phase 1, the backend stack is:
 

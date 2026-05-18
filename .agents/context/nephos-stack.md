@@ -19,6 +19,8 @@ The CLI lives in a separate repository:
 
 The CLI repository is adjacent to this repository but still needs project setup/configuration.
 
+Setup UX and command implementation belong in the CLI repository after Nephos API `0.0.1` is implemented.
+
 Do not implement CLI code in this repository unless Fer explicitly changes the repository boundary.
 
 ## Accepted Phase 1 Stack
@@ -47,6 +49,7 @@ Persistence:
 - SQLite is the canonical Phase 1 desired-state database
 - The Nephos API/database is the source of truth for desired platform state
 - Platform configuration that affects reconciliation, such as ingress root domains, is stored in the API/database as desired state
+- The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state
 
 Migrations:
 
