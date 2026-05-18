@@ -31,6 +31,11 @@ This mirrors the accepted directory-per-entry catalog layout, but remains non-ca
 Accepted binding/provisioning decisions reflected in the current draft sketches:
 
 - Phase 1 binding output target is `app-secret`
+- App binding aliases default to `capability` when `as` is omitted
+- binding aliases are unique per App manifest and installed App instance
+- `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
+- rebinding updates the same Secret name after explicit reconciliation or confirmation
+- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
 - PostgreSQL logical output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - PostgreSQL output fields are capability-defined; there is no Phase 1 manifest `fields:` syntax
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`

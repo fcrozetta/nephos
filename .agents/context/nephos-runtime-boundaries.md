@@ -89,9 +89,21 @@ Bindings are the source of truth for which App may receive which Service credent
 
 Service manifests declare logical binding outputs, not final consuming Secret names.
 
-Nephos chooses deterministic Secret names from binding identity.
+Nephos chooses deterministic Secret names from binding alias.
 
-The exact naming algorithm remains open.
+For `app-secret`, Nephos creates the Secret in the consuming App namespace with this name:
+
+```text
+nephos-bind-<alias>
+```
+
+The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
+
+Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+
+The exact Kubernetes label and annotation key names remain open.
+
+Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
 For Phase 1, the only accepted binding output target is `app-secret`.
 
@@ -123,8 +135,8 @@ Do not expose secret values unless a future explicit reveal command is designed 
 - TLS and cert-manager strategy
 - route collision handling
 - whether Services can expose admin routes
-- binding Secret naming algorithm
-- secret labels and annotations
+- exact shared slug normalization for binding aliases and Secret names
+- exact Kubernetes label and annotation key names for binding Secret metadata
 - secret rotation behavior
 - whether/how secrets participate in backup
 - non-PostgreSQL Secret key serialization

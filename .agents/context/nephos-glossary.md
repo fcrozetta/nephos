@@ -114,6 +114,27 @@ A binding represents how an App receives access to a capability.
 
 Bindings are the source of dependent tracking between Apps and Service instances.
 
+## Binding Alias
+
+A stable semantic name for an App requirement binding.
+
+App manifests may set a binding alias with `as`.
+
+If `as` is omitted, the alias defaults to `capability`.
+
+Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
+
+Example:
+
+```yaml
+spec:
+  requires:
+    - capability: postgres
+      as: database
+```
+
+The alias in this example is `database`.
+
 ## Binding Output
 
 A logical output produced by a Service binding and delivered to a consuming App.
@@ -126,7 +147,26 @@ Phase 1 supports one concrete binding output target:
 
 Service manifests declare logical binding outputs, not final consuming Secret names.
 
-Nephos chooses deterministic Secret names from binding identity.
+Nephos chooses deterministic Secret names from binding alias.
+
+## Binding Secret
+
+A Kubernetes Secret created by Nephos in a consuming App namespace to deliver binding credentials.
+
+For Phase 1 `app-secret` outputs, the Secret name is:
+
+```text
+nephos-bind-<alias>
+```
+
+Example:
+
+- binding alias `database`
+- Secret name `nephos-bind-database`
+
+Rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation.
+
+Binding Secrets must include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
 
 ## App-Scoped Resource
 

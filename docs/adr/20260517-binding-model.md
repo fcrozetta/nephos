@@ -36,9 +36,15 @@ Service manifests declare logical binding outputs.
 
 They do not hardcode the final consuming Secret name.
 
-Nephos chooses a deterministic Secret name from binding identity so reconciliation and debugging remain stable.
+Nephos chooses a deterministic Secret name from binding alias so reconciliation and debugging remain stable.
 
-The exact naming algorithm remains open.
+For `app-secret`, the Secret is created in the consuming App namespace with this name:
+
+```text
+nephos-bind-<alias>
+```
+
+The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
 
 PostgreSQL binding outputs are capability-defined.
 
@@ -79,6 +85,12 @@ spec:
 
 The alias gives the App a stable semantic name for the binding.
 
+If `as` is omitted, the alias defaults to `capability`.
+
+Aliases must be unique within one App manifest and one installed App instance after defaulting.
+
+If an App needs more than one binding for the same capability, the App manifest must set explicit aliases.
+
 Nephos maps binding outputs into runtime deployment values later through the accepted `spec.runtime.values.mappings[]` lane.
 
 Phase 1 binding runtime mappings use:
@@ -101,6 +113,32 @@ The binding mapping source shape may be revisited after a fuller Nephos manifest
 Do not make Apps depend on Service namespace Secrets.
 
 Do not expose raw Kubernetes Secret templates or raw environment variables as the primary Nephos manifest UX.
+
+## Binding Secret Identity
+
+An App binding Secret is identified by the App namespace and binding alias.
+
+For Phase 1, the Secret name is:
+
+```text
+nephos-bind-<alias>
+```
+
+This means a Paperless App requirement declared as `as: database` receives binding credentials through `nephos-bind-database` in the Paperless App namespace.
+
+Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
+
+Rebinding does not create a new Secret name by default.
+
+Binding Secrets must include metadata that identifies:
+
+- App instance
+- Service instance
+- capability
+- binding alias
+- `managed-by=nephos`
+
+The exact Kubernetes label and annotation key names remain open.
 
 ## Provisioning Modes
 
@@ -168,15 +206,11 @@ Need to define:
 
 - required vs optional capabilities
 - concrete engine preference
-- binding names
-- exact deterministic Secret naming algorithm
-- exact Secret labels and annotations
+- exact shared slug normalization for binding aliases and Secret names
+- exact Kubernetes label and annotation key names for binding Secret metadata
 - future optional manifest syntax for binding output payload fields, if needed
 - non-PostgreSQL Secret key serialization
-- exact runtime value mapping format
-- rebind behavior
 - credential rotation
-- whether bindings are immutable after creation
 - whether apps can bind to multiple providers of the same capability
 - provisioning execution mechanism
 - idempotency and failure semantics for provisioning

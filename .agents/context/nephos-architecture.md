@@ -148,6 +148,10 @@ Service-internal/admin secrets live in Service namespaces.
 
 App binding credentials are materialized into App namespaces.
 
+Binding Secrets use `nephos-bind-<alias>` in the consuming App namespace.
+
+Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+
 Secret values must be redacted in API responses, CLI output, status output, logs, and diagnostics by default.
 
 ## Catalog Layer
@@ -222,7 +226,19 @@ Phase 1 supports `app-secret` as the only binding output target.
 
 Service manifests declare logical binding outputs, not final consuming Secret names.
 
-Nephos chooses deterministic Secret names from binding identity.
+Nephos chooses deterministic Secret names from binding alias.
+
+If `as` is omitted in an App requirement, the binding alias defaults to `capability`.
+
+Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
+
+For `app-secret`, Nephos creates the Secret in the consuming App namespace with this name:
+
+```text
+nephos-bind-<alias>
+```
+
+Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
 For PostgreSQL bindings, the accepted logical output fields are:
 

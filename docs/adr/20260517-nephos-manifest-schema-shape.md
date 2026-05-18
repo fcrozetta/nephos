@@ -94,6 +94,11 @@ Concrete binding output payload fields are accepted only for the initial Postgre
 Later accepted direction:
 
 - Phase 1 binding output target is `app-secret`.
+- App binding aliases default to `capability` when `as` is omitted.
+- Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
+- `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace.
+- Rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation.
+- Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`.
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1.
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys: `host`, `port`, `database`, `username`, `password`, and `uri`.

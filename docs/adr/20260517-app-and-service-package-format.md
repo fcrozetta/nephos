@@ -167,6 +167,11 @@ Later accepted binding/provisioning direction:
 - Service `spec.provides[]` is required non-empty
 - Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`
 - Phase 1 binding output target is `app-secret`
+- App binding aliases default to `capability` when `as` is omitted
+- binding aliases must be unique within one App manifest and one installed App instance after defaulting
+- `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
+- rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation
+- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - provisioning is a typed backend/API-owned contract

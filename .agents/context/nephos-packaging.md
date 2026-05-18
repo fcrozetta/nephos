@@ -76,6 +76,12 @@ Accepted initial field conventions:
 
 `spec.requires[]` entries should support `capability`, optional `as`, and optional `provider`.
 
+If `as` is omitted, the binding alias defaults to `capability`.
+
+Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
+
+If an App needs more than one binding for the same capability, it must set explicit aliases.
+
 `spec.routes[]` entries declare route identity and visibility, not final hostnames.
 
 Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
@@ -215,6 +221,16 @@ Accepted initial field conventions:
 `app-secret` means Nephos materializes binding credentials into the consuming App namespace.
 
 For Phase 1, `app-secret` is the only accepted binding output target.
+
+For `app-secret`, Nephos creates the Secret in the consuming App namespace with this name:
+
+```text
+nephos-bind-<alias>
+```
+
+Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+
+Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
 PostgreSQL binding outputs are capability-defined.
 
@@ -437,9 +453,11 @@ Nephos maps binding outputs into runtime deployment values through the reserved 
 
 Service manifests declare logical binding outputs, not final consuming Secret names.
 
-Nephos chooses deterministic Secret names from binding identity.
+Nephos chooses deterministic Secret names from binding alias.
 
-The exact naming algorithm remains open.
+For `app-secret`, the consuming App namespace Secret name is `nephos-bind-<alias>`.
+
+The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
 
 Remove preserves provisioned Service-side resources created for an App.
 

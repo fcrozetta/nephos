@@ -72,6 +72,12 @@ Each requirement should support:
 - `as`
 - `provider`
 
+If `as` is omitted, the binding alias defaults to `capability`.
+
+Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
+
+If an App needs more than one binding for the same capability, it must set explicit aliases.
+
 Use `spec.routes[]` for route intent.
 
 Routes declare route identity and visibility, not final hostnames.
@@ -242,6 +248,16 @@ spec:
 `app-secret` means Nephos materializes binding credentials into the consuming App namespace.
 
 For Phase 1, `app-secret` is the only accepted binding output target.
+
+For `app-secret`, Nephos creates the Secret in the consuming App namespace with this name:
+
+```text
+nephos-bind-<alias>
+```
+
+Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
+
+Binding Secrets must include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
 
 PostgreSQL binding outputs are capability-defined.
 

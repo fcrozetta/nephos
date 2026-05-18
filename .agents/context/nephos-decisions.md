@@ -582,9 +582,9 @@ Service manifests declare logical binding outputs.
 
 They do not hardcode final consuming Secret names.
 
-Nephos chooses deterministic Secret names from binding identity.
+Nephos chooses deterministic Secret names from binding alias.
 
-The exact naming algorithm remains open.
+The Phase 1 name format is recorded in D103.
 
 ## D079: App binding aliases are symbolic
 
@@ -831,3 +831,57 @@ Do not silently skip missing mapping sources.
 Mappings live only under `spec.runtime.values.mappings[]`.
 
 Do not define runtime mappings inline on config options or binding declarations.
+
+## D101: Binding aliases default to capability
+
+If `as` is omitted from an App requirement, the binding alias defaults to the requirement `capability`.
+
+Example:
+
+```yaml
+spec:
+  requires:
+    - capability: postgres
+```
+
+The alias defaults to `postgres`.
+
+## D102: Binding aliases are unique per App
+
+Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
+
+If an App needs more than one binding for the same capability, it must set explicit aliases.
+
+## D103: Binding Secret names use nephos-bind alias
+
+For Phase 1 `app-secret` outputs, Nephos creates the Secret in the consuming App namespace with this name:
+
+```text
+nephos-bind-<alias>
+```
+
+The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
+
+## D104: Rebinding keeps the App Secret name stable
+
+Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
+
+Rebinding does not create a new Secret name by default.
+
+## D105: Binding Secrets carry relationship metadata
+
+Binding Secrets must include metadata identifying:
+
+- App instance
+- Service instance
+- capability
+- binding alias
+- `managed-by=nephos`
+
+The exact Kubernetes label and annotation key names remain open.
+
+## D106: Secret naming slug rules follow shared Nephos name rules
+
+Do not define a separate binding-Secret-only slugging system in Phase 1.
+
+Binding Secret alias slug normalization should follow the same future Nephos slug/name rules used for App, Service, namespace, and Kubernetes resource names where possible.

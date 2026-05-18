@@ -11,6 +11,8 @@ metadata:
 spec:
   requires:
     - capability: postgres
+      # Alias determines runtime mapping identity and the app-secret name:
+      # nephos-bind-database.
       as: database
   routes:
     - name: web

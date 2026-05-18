@@ -112,6 +112,11 @@ Ingress and secrets:
 - remove/destroy remove runtime ingress
 - Kubernetes Secrets for Phase 1
 - App binding credentials materialized into App namespaces
+- App binding aliases default to `capability` when `as` is omitted
+- binding aliases are unique per App manifest and installed App instance
+- binding Secret names use `nephos-bind-<alias>` in the consuming App namespace
+- rebinding updates the same binding Secret name after explicit reconciliation or confirmation
+- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
 - PostgreSQL `app-secret` outputs use exact lowercase keys `host`, `port`, `database`, `username`, `password`, and `uri`
 - Service-internal/admin secrets in Service namespaces
 - stop/remove preserve Secrets

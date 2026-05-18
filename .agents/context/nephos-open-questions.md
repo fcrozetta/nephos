@@ -68,15 +68,18 @@ Accepted direction:
 - App binding credentials are materialized into App namespaces
 - Apps should not read Service namespace Secrets directly
 - Service manifests declare logical binding outputs, not final consuming Secret names
-- Nephos chooses deterministic Secret names from binding identity
+- Nephos chooses deterministic Secret names from binding alias
+- `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
+- rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation
+- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
 - stop/remove preserve Secrets
 - destroy deletes Secrets for the destroyed entity
 - secret values are redacted by default
 
 Need to decide:
 
-- exact binding Secret naming algorithm
-- exact labels/annotations
+- exact shared slug normalization for binding aliases and Secret names
+- exact Kubernetes label and annotation key names for binding Secret metadata
 - rotation behavior
 - whether/how secrets are included in Nephos state backup
 - future explicit reveal command behavior
@@ -114,8 +117,13 @@ Accepted direction:
 - Phase 1 supports only `app-secret` as the binding output target
 - PostgreSQL binding outputs use logical fields `host`, `port`, `database`, `username`, `password`, and `uri`
 - Service manifests declare logical binding outputs, not final consuming Secret names
-- Nephos chooses deterministic Secret names from binding identity
+- Nephos chooses deterministic Secret names from binding alias
 - Apps consume bindings through symbolic aliases such as `as: database`
+- App binding aliases default to `capability` when `as` is omitted
+- binding aliases must be unique within one App manifest and one installed App instance after defaulting
+- `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
+- rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation
+- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
 - Nephos maps binding outputs into runtime values through the reserved `spec.runtime.values.mappings[]` lane
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
@@ -167,7 +175,8 @@ Need to decide:
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
 - non-PostgreSQL Secret key serialization
-- exact deterministic Secret naming algorithm
+- exact shared slug normalization for binding aliases and Secret names
+- exact Kubernetes label and annotation key names for binding Secret metadata
 - required/default behavior for Services that expose capabilities without binding outputs
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
@@ -487,6 +496,7 @@ Accepted direction:
 - capability binding
 - PostgreSQL provisions an app-scoped database/user for Paperless
 - Nephos materializes PostgreSQL binding outputs into Paperless App namespace
+- Paperless binding Secret name follows `nephos-bind-<alias>`, for example `nephos-bind-database` when the alias is `database`
 - PostgreSQL binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - basic ingress intent
 - lifecycle install/start/stop/remove/destroy
@@ -505,6 +515,5 @@ Need to decide:
 - exact commands
 - expected status outputs
 - namespace names
-- binding Secret naming algorithm
 - exact ingress hostname policy
 - data preservation checks
