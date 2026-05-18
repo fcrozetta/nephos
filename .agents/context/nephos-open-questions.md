@@ -280,14 +280,19 @@ Accepted direction:
 
 - Service operation is the canonical term
 - Service management action is only a descriptive phrase
-- Service operations are optional in Phase 1
+- Service operations are reserved but bounded in Phase 1
 - Service operations must be backend/API-owned and typed
 - Service operations must not be arbitrary user-facing shell scripts
+- Phase 1 may use internal typed Service handlers for minimal accepted provisioning work
+- Phase 1 does not expose a general user-facing Service operation API or CLI UX
+- canonical Service operation schemas and examples require later explicit approval
 
 Need to decide:
 
 - operation declaration format
 - input/output schema
+- API route shape
+- CLI command shape
 - execution model
 - audit/status model
 - permissions and safety prompts

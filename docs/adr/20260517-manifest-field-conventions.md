@@ -346,7 +346,13 @@ The concrete provisioning execution mechanism remains open.
 
 Use `spec.operations: []` to reserve Service operations.
 
-The Service operation contract remains deferred.
+Service operations are reserved but bounded.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+The detailed Service operation schema and command contract remain deferred.
 
 For Phase 1 Service manifests:
 

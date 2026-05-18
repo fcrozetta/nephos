@@ -109,7 +109,15 @@ Service operation is the canonical term for typed backend/API-owned Service mana
 
 Service management action may be used descriptively, but should not be the preferred architecture term.
 
-Service operations are optional in Phase 1, and their detailed contract still needs design.
+Service operations are reserved but bounded in Phase 1.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+Do not model Service operations as arbitrary shell commands, Helm hooks, Kubernetes jobs, or user-provided scripts exposed as product semantics.
+
+The detailed Service operation schema and command contract remain deferred.
 
 ## D016: Installed Services are Service instances
 
@@ -1088,3 +1096,21 @@ Open CLI-phase questions:
 - setup idempotency behavior
 - App install behavior when setup is missing
 - exact API paths used by CLI setup and root domain operations
+
+## D121: Service operations are reserved but bounded
+
+Service operations are typed backend/API-owned Service management actions.
+
+They are not arbitrary shell commands, Helm hooks, Kubernetes jobs, or user-provided scripts exposed as product semantics.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+`spec.operations[]` remains reserved in Service manifests and defaults to an empty list.
+
+Canonical Service operation schemas and examples require later explicit approval.
+
+Future user-facing or risky Service operations must be dependency-aware and status/audit visible.
+
+Destructive or risky Service operations must require explicit confirmation.

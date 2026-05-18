@@ -61,7 +61,7 @@ The Service `spec` should organize:
 - binding outputs
 - provisioning behavior, optional or deferred
 - runtime deployment reference
-- Service operations, optional or deferred
+- Service operations, reserved but bounded
 
 Service manifests may include more infrastructure-specific concerns than App manifests because Service authors define capability providers.
 
@@ -135,6 +135,10 @@ Later accepted direction:
 - Missing mapping sources block reconciliation with a reason.
 - Service `spec.provides[]` is required non-empty.
 - Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`.
+- `spec.operations[]` is reserved and defaults to an empty list.
+- Service operations are typed backend/API-owned actions, not arbitrary shell commands or hooks.
+- Phase 1 may use internal typed Service handlers for minimal accepted provisioning work.
+- Phase 1 does not expose a general user-facing Service operation API or CLI UX.
 - Unknown manifest fields are rejected once canonical schemas exist.
 - Raw Kubernetes manifest fallback shape is deferred until first needed.
 - Canonical examples remain blocked until manifest validation plus command/status shape are stable enough.

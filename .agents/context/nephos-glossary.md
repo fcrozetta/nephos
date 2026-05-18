@@ -414,3 +414,9 @@ Examples:
 Service management action is an acceptable descriptive phrase, but Service operation is the canonical term.
 
 Do not model Service operations as arbitrary user-facing shell scripts.
+
+For Phase 1, Service operations are reserved but bounded:
+
+- internal typed handlers may support required provisioning work
+- a general user-facing Service operation API or CLI UX is not included
+- canonical operation schemas and examples require a later explicit decision

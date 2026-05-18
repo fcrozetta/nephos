@@ -61,6 +61,7 @@ Current understanding:
 - Batch 22 ingress/domain decisions are accepted: Phase 1 supports multiple configured ingress root domains with one default/canonical domain and at least one root domain required for generated route hosts; Nephos generates host rules for every configured root domain; default route hostnames use `<app-instance>.<root-domain>` and non-default route hostnames use `<route>.<app-instance>.<root-domain>`; root domains are aliases for the same route intent; path-based App routing is out of scope; manual Cloudflare Tunnel remains compatible but user-managed; Nephos-managed ingress is HTTP-only; generated hostname collisions fail; Services do not expose admin routes through Nephos ingress.
 - Batch 23 ingress root domain config decisions are accepted: ingress root domains are platform desired state in the Nephos API/database, managed through Nephos API/CLI platform configuration operations, not App manifest fields; semantic shape is `rootDomains[]` with `name`, `domain`, and `default`; `domain` is a DNS suffix only and rejects URLs, paths, wildcards, schemes, and ports; operations are add/list/remove/set-default; setup creates initial platform configuration before Apps are installed, including at least one root domain and exactly one default/canonical domain; App status shows canonical URL plus aliases.
 - Batch 24 setup/CLI boundary is deferred: setup UX and command implementation belong in `nephos-cli` after Nephos API `0.0.1`; this repo should not decide command spelling yet. Accepted backend-side behavior: the backend may start with an empty database and reports platform configuration as incomplete until setup creates required desired state.
+- Batch 25 Service operation boundary is accepted: Service operations are typed backend/API-owned Service management actions; they are reserved but bounded in Phase 1; arbitrary shell commands, Helm hooks, Kubernetes jobs, and user-provided scripts are not product semantics; Phase 1 may use internal typed Service handlers for minimal accepted provisioning work; no general user-facing Service operation API or CLI UX is included.
 
 Files likely to change:
 
@@ -233,7 +234,7 @@ Rollback notes:
 Open questions:
 
 - Manifest validation schema details.
-- Service operation contract design.
+- Service operation declaration/schema/API/CLI design beyond the accepted boundary.
 - Dedicated Service sharing policy details.
 - Future resource profile design.
 - Future auth/RBAC model.

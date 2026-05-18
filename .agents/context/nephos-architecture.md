@@ -276,6 +276,14 @@ Service manifests may expose optional Service operations.
 
 Service operation is the canonical term for typed Service management actions.
 
+Service operations are reserved but bounded in Phase 1.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+Do not model Service operations as arbitrary shell commands, Helm hooks, Kubernetes jobs, or user-provided scripts exposed as product semantics.
+
 ## Binding And Provisioning Model
 
 Apps declare required capabilities.

@@ -90,7 +90,9 @@ Services:
 
 - shared/global Service instances first
 - dedicated Service instances reserved as concept
-- Service operations optional and contract deferred
+- Service operations reserved but bounded
+- internal typed Service handlers may support minimal accepted provisioning work
+- no general user-facing Service operation API or CLI UX
 
 Apps:
 

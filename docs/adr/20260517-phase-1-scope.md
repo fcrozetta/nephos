@@ -110,7 +110,7 @@ Phase 1 does not include:
 - remote/signed catalogs
 - OCI catalog distribution
 - dedicated Service instance implementation
-- Service operation implementation
+- general user-facing Service operation API or CLI UX
 - full cluster lifecycle management polish
 
 ## Consequences

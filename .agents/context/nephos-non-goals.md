@@ -52,7 +52,7 @@ Phase 1 does not include:
 - guaranteed rollback
 - concrete backup/restore implementation
 - dedicated Service instance implementation
-- Service operation implementation
+- general user-facing Service operation API or CLI UX
 - `disable` lifecycle operation
 - full cluster lifecycle management polish
 - full installer packaging

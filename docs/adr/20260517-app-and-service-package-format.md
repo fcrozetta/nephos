@@ -135,7 +135,13 @@ Service operations are optional in Phase 1.
 
 Do not model Service operations as arbitrary user-facing shell scripts.
 
-The detailed Service operation contract still needs design.
+Service operations are reserved but bounded.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work, such as PostgreSQL app-scoped database and credential creation.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+The detailed Service operation schema and command contract remain deferred.
 
 ## Example App Concept
 

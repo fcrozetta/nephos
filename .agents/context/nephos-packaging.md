@@ -319,7 +319,13 @@ The concrete provisioning execution mechanism remains open.
 
 `spec.operations[]` is reserved.
 
-The Service operation contract remains deferred.
+Service operations are reserved but bounded.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+The detailed Service operation schema and command contract remain deferred.
 
 For Phase 1 Service manifests:
 
@@ -478,7 +484,15 @@ Service operations are optional in Phase 1.
 
 Do not treat Service operations as arbitrary user-facing shell scripts.
 
-The Service operation contract needs later design before schemas are created.
+Service operations are reserved but bounded.
+
+Phase 1 may use internal typed Service handlers for minimal accepted provisioning work, such as PostgreSQL app-scoped database and credential creation.
+
+Phase 1 does not expose a general user-facing Service operation API or CLI UX.
+
+The detailed Service operation schema and command contract remain deferred.
+
+Do not create canonical Service operation schemas or examples until Fer approves the concrete shape.
 
 ## Binding Output And Provisioning
 
