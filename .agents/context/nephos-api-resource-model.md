@@ -30,6 +30,27 @@ The public API may expose installed Service instances under `/services`.
 
 Catalog App and Service manifests are separate from installed instances.
 
+## Install Endpoints
+
+Install Apps and Services through installed resource collections:
+
+```text
+POST /apps
+POST /services
+```
+
+The request body carries:
+
+- catalog reference
+- optional explicit catalog source
+- instance name
+- config
+- binding or provider choices
+
+Do not use catalog install action endpoints as the primary API shape.
+
+Do not install directly from arbitrary YAML paths as the primary API model.
+
 ## Catalog Boundary
 
 The API reads local filesystem catalog manifests.
@@ -82,6 +103,30 @@ Active lifecycle states for API 0.0.1:
 
 It is not a normal active desired-state lifecycle value.
 
+Lifecycle actions use action subresources:
+
+```text
+POST /apps/{id}/actions/start
+POST /apps/{id}/actions/stop
+POST /apps/{id}/actions/remove
+POST /apps/{id}/actions/destroy
+
+POST /services/{id}/actions/start
+POST /services/{id}/actions/stop
+POST /services/{id}/actions/remove
+POST /services/{id}/actions/destroy
+```
+
+Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
+
+Destroy requires an explicit confirmation body.
+
+Stopping, removing, or destroying a Service instance with dependents returns `409 Conflict` with an impact list unless the request explicitly carries `force: true`.
+
+Repeated lifecycle requests to the same desired state should be idempotent.
+
+When possible, avoid duplicate reconciliation work and return the current resource plus no-op or existing pending reconciliation information.
+
 ## Status
 
 Status is separate from lifecycle state.
@@ -99,6 +144,12 @@ Mutating API calls update desired state and create a persisted reconciliation re
 The API returns after the desired-state mutation and reconciliation request are committed.
 
 The API should not wait for Kubernetes convergence before returning.
+
+Mutating API calls should prefer `202 Accepted`.
+
+Mutation responses should include the resource snapshot, reconciliation request id/state, and latest status when available.
+
+If the full response is too heavy for API 0.0.1, a minimal `202 Accepted` body with resource identity and reconciliation request id/state is acceptable.
 
 A manual reconcile endpoint is allowed for debugging.
 
@@ -134,8 +185,11 @@ Future backups, upgrades, auth/RBAC, resource profiles, remote catalogs, and gen
 
 ## Open Questions
 
-- exact HTTP method and sub-action shape for lifecycle operations
 - exact status response schema
 - exact manual reconcile endpoint shape
 - exact catalog read/list endpoint shape
+- exact install request body schema
+- exact lifecycle action request body schema
+- exact mutation response body schema
+- exact blocked dependency impact response schema
 - exact error envelope and validation response shape

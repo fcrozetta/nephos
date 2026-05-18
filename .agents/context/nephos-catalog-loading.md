@@ -67,6 +67,17 @@ Install by catalog kind and name.
 
 Allow optional explicit source selection when needed to disambiguate duplicates.
 
+API install mutation happens through:
+
+```text
+POST /apps
+POST /services
+```
+
+The catalog reference is carried in the request body.
+
+Catalog endpoints are not the primary owner of install mutation.
+
 Do not make arbitrary install-from-path the main API or UX flow.
 
 ## Installed Record Metadata

@@ -38,6 +38,19 @@ The API reads local filesystem catalog manifests and installation records store 
 
 Do not require catalog entries to be imported into the database before installation in Phase 1.
 
+Install Apps and Services through installed resource collections:
+
+```text
+POST /apps
+POST /services
+```
+
+The request body carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
+
+Do not put install mutation under catalog endpoints as the primary API shape.
+
+Do not make arbitrary YAML path install the primary API shape.
+
 Bindings are first-class API/database resources connecting an App instance requirement alias to a Service instance capability.
 
 Bindings are not embedded only inside App desired state and are not inferred from Kubernetes Secret metadata.
@@ -64,6 +77,28 @@ Phase 1 active lifecycle states are:
 
 `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value.
 
+Lifecycle actions use action subresources:
+
+```text
+POST /apps/{id}/actions/start
+POST /apps/{id}/actions/stop
+POST /apps/{id}/actions/remove
+POST /apps/{id}/actions/destroy
+
+POST /services/{id}/actions/start
+POST /services/{id}/actions/stop
+POST /services/{id}/actions/remove
+POST /services/{id}/actions/destroy
+```
+
+Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
+
+Destroy requires an explicit confirmation body.
+
+Stopping, removing, or destroying a Service instance with dependents returns `409 Conflict` with an impact list unless the request explicitly carries `force: true`.
+
+Repeated lifecycle requests to the same desired state should be idempotent.
+
 Status is separate from lifecycle state.
 
 API 0.0.1 should persist the latest status snapshot with reason and evidence fields.
@@ -73,6 +108,12 @@ Mutating API calls update desired state and create a persisted reconciliation re
 The API returns after desired state and the reconciliation request are committed.
 
 The API should not wait for Kubernetes convergence before returning.
+
+Mutating API calls should prefer `202 Accepted`.
+
+Mutation responses should include the resource snapshot, reconciliation request id/state, and latest status when available.
+
+If the full response body is too heavy for API 0.0.1, a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable.
 
 A manual reconcile endpoint is allowed for debugging.
 
@@ -97,9 +138,9 @@ Use resource roots such as Apps, Services, bindings, platform config domains, an
 - Good, because lifecycle actions remain platform semantics instead of raw Kubernetes commands.
 - Bad, because it requires more domain modeling before the first endpoint.
 
-### Command/action API first
+### CLI-shaped command/action API first
 
-Expose endpoints around commands such as install App, stop Service, or destroy App.
+Expose top-level endpoints around command names such as install App, stop Service, or destroy App.
 
 - Good, because it can be fast to map from CLI commands.
 - Bad, because it makes relationships and desired state harder to model cleanly.
@@ -113,6 +154,23 @@ Shape HTTP paths around CLI spelling.
 - Bad, because CLI UX churn would leak into backend API compatibility.
 - Bad, because it risks turning the API into a transport wrapper for commands.
 
+### Catalog install action endpoint
+
+Use endpoints such as `POST /catalog/apps/{name}/install`.
+
+- Good, because it reads naturally from a CLI perspective.
+- Bad, because mutation is owned by the catalog path even though the result is an installed App.
+- Bad, because it blurs available catalog entries with installed desired-state resources.
+
+### DELETE for destroy
+
+Use `DELETE /apps/{id}` or `DELETE /services/{id}` for destroy.
+
+- Good, because the HTTP verb looks destructive.
+- Bad, because destroy needs an explicit confirmation body and possible force.
+- Bad, because DELETE request bodies are awkward across clients and tooling.
+- Bad, because destroy is not just deleting an API resource; it is destructive platform intent reconciled into runtime/data deletion.
+
 ## Consequences
 
 Implementation should create domain models around App instances, Service instances, bindings, root domain configuration, lifecycle, reconciliation, and status.
@@ -125,8 +183,11 @@ Later APIs must extend this model deliberately rather than adding raw Kubernetes
 
 ## Open Questions
 
-- exact HTTP method and sub-action shape for lifecycle operations
 - exact status response schema
 - exact manual reconcile endpoint shape
 - exact catalog read/list endpoint shape
+- exact install request body schema
+- exact lifecycle action request body schema
+- exact mutation response body schema
+- exact blocked dependency impact response schema
 - exact error envelope and validation response shape

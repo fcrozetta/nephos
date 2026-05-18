@@ -55,6 +55,10 @@ Persistence:
 - API 0.0.1 uses REST-ish resource APIs over installed Apps, installed Services, bindings, platform configuration domains, and status
 - Installed Apps are internal `AppInstance` records and may be exposed under `/apps`
 - Installed Services are internal `ServiceInstance` records and may be exposed under `/services`
+- install mutation uses `POST /apps` and `POST /services`
+- lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- destroy is a confirmed `POST .../actions/destroy`, not plain `DELETE`
+- mutating responses prefer `202 Accepted` with reconciliation request metadata
 - Ingress root domains are exposed at `/platform/config/domains`
 - Mutating API calls update desired state and create a persisted reconciliation request
 

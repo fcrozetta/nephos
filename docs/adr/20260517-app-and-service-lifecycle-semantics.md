@@ -79,6 +79,10 @@ If dependent Apps exist, Nephos should warn and require explicit force.
 
 Destroying a Service deletes persistent data and must require destructive confirmation when persistent data exists.
 
+API 0.0.1 lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`.
+
+`destroy` is a confirmed `POST .../actions/destroy`, not plain `DELETE`.
+
 ## Rationale
 
 Apps and Services are not symmetric.

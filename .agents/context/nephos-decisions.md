@@ -1398,3 +1398,59 @@ Phase 1 detects and reports drift for Nephos-owned resources.
 Nephos may reconcile Nephos-owned resources when desired state is explicit or when manual reconciliation is requested.
 
 Nephos should not continuously overwrite runtime drift in ways that hide operator changes without reporting them.
+
+## D157: Install mutation creates installed resources
+
+API install mutation happens through:
+
+```text
+POST /apps
+POST /services
+```
+
+The request body carries catalog reference, optional explicit source, instance name, config, and binding/provider choices.
+
+Do not put install mutation under catalog endpoints as the primary API shape.
+
+Do not make arbitrary YAML path install the primary API shape.
+
+## D158: Lifecycle actions are POST action subresources
+
+Lifecycle actions use:
+
+```text
+POST /apps/{id}/actions/{action}
+POST /services/{id}/actions/{action}
+```
+
+Accepted action names are `start`, `stop`, `remove`, and `destroy`.
+
+## D159: Destroy is a confirmed POST action
+
+Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
+
+Destroy requires explicit confirmation in the request body.
+
+Destroy is destructive platform intent reconciled into runtime/data deletion, not plain API row deletion.
+
+## D160: Dependency-blocked Service lifecycle returns conflict
+
+Stopping, removing, or destroying a Service instance with dependents returns `409 Conflict` with an impact list unless the request explicitly carries `force: true`.
+
+The impact list should include dependent Apps and binding relationships.
+
+## D161: Mutating API responses prefer 202 Accepted
+
+Mutating API calls that create desired-state changes should prefer `202 Accepted`.
+
+Mutation responses should include resource snapshot, reconciliation request id/state, and latest status when available.
+
+If the full response body is too heavy for API 0.0.1, a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable.
+
+## D162: Lifecycle actions are idempotent
+
+Repeated lifecycle requests to the same desired state should be idempotent.
+
+When possible, Nephos should avoid duplicate reconciliation work and return the current resource plus no-op or existing pending reconciliation information.
+
+It is acceptable to enqueue reconciliation when needed to verify or converge runtime state.

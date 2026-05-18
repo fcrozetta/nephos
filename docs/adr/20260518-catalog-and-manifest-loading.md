@@ -73,6 +73,17 @@ Store a full manifest snapshot only if implementation proves it is necessary for
 
 Install by catalog kind and name, plus optional explicit source when needed.
 
+API install mutation happens through:
+
+```text
+POST /apps
+POST /services
+```
+
+The catalog reference is carried in the request body.
+
+Catalog endpoints are not the primary owner of install mutation.
+
 Do not make arbitrary install-from-path the main API or UX flow.
 
 Temporary draft manifests stay under `.agents/drafts/manifests/` and remain non-canonical until API validation models exist and Fer approves promotion.

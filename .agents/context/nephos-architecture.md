@@ -79,6 +79,19 @@ Installed Apps are represented internally as `AppInstance` records and may be ex
 
 Installed Services are represented internally as `ServiceInstance` records and may be exposed publicly under `/services`.
 
+Install mutation happens through `POST /apps` and `POST /services` with catalog references in the request body.
+
+Lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`.
+
+Accepted lifecycle actions are:
+
+- `start`
+- `stop`
+- `remove`
+- `destroy`
+
+Destroy remains a `POST` action with explicit confirmation, not a plain `DELETE`.
+
 Bindings are first-class API/database resources connecting App instance requirement aliases to Service instance capabilities.
 
 Ingress root domains are platform configuration resources at `/platform/config/domains`.
@@ -90,6 +103,10 @@ Mutating API calls update desired state and create a persisted reconciliation re
 Mutating API calls return after the desired-state transaction and reconciliation request commit.
 
 The API should not wait for Kubernetes convergence before returning.
+
+Mutating API calls should prefer `202 Accepted` and return resource/reconciliation request metadata.
+
+Dependency-blocked Service lifecycle actions should return `409 Conflict` with an impact list unless forced.
 
 The backend may start with an empty database.
 

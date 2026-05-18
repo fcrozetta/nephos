@@ -114,6 +114,11 @@ Lifecycle:
 - App and Service `remove`
 - App and Service `destroy`
 - `disable` deferred
+- install through `POST /apps` and `POST /services`
+- lifecycle actions through `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- destroy through `POST .../actions/destroy` with explicit confirmation, not plain `DELETE`
+- dependency-blocked Service lifecycle actions return `409 Conflict` with impact lists unless forced
+- mutating responses prefer `202 Accepted` with reconciliation request metadata
 
 Ingress and secrets:
 

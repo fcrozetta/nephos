@@ -119,6 +119,9 @@ Accepted direction:
 - installed Services are represented internally as `ServiceInstance` records
 - public API may expose installed App instances under `/apps`
 - public API may expose installed Service instances under `/services`
+- install Apps and Services through `POST /apps` and `POST /services`
+- install request body carries catalog reference, optional source, instance name, config, and binding/provider choices
+- catalog endpoints are not the primary owner of install mutation
 - catalog App and Service manifests are separate from installed instances
 - bindings are first-class API/database resources
 - root domain resources use `/platform/config/domains`
@@ -126,12 +129,19 @@ Accepted direction:
 - lifecycle state is desired state
 - active lifecycle states are `running`, `stopped`, and `removed`
 - `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value
+- lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- accepted action names are `start`, `stop`, `remove`, and `destroy`
+- destroy remains `POST .../actions/destroy` with explicit confirmation, not plain `DELETE`
+- Service lifecycle actions blocked by dependents return `409 Conflict` with an impact list unless forced
 - status is separate from lifecycle state
 - API 0.0.1 should persist the latest status snapshot with reasons and evidence
 - API reads local filesystem catalog manifests
 - installed records store catalog identity, version when available, source, and manifest digest information
 - mutating API calls update desired state and create a persisted reconciliation request
 - mutating API calls return after desired state and the reconciliation request commit
+- mutating API calls should prefer `202 Accepted`
+- mutation responses should include resource snapshot, reconciliation request id/state, and latest status when available
+- minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable if full status payload is too heavy for API 0.0.1
 - API does not wait for Kubernetes convergence before returning
 - manual reconcile endpoint is allowed for debugging
 - reconciliation requests target one App instance, Service instance, binding, or platform domain configuration
@@ -144,10 +154,46 @@ Accepted direction:
 
 Need to decide:
 
-- exact HTTP method and sub-action shape for lifecycle operations
 - exact status response schema
 - exact manual reconcile endpoint shape
 - exact catalog read/list endpoint shape
+- exact install request body schema
+- exact lifecycle action request body schema
+- exact mutation response body schema
+- exact blocked dependency impact response schema
+- exact error envelope and validation response shape
+
+## API Lifecycle Action Shape
+
+Question:
+
+What concrete HTTP shape should API 0.0.1 use for install and lifecycle actions?
+
+Accepted direction:
+
+- install mutation happens through `POST /apps` and `POST /services`
+- install request body carries catalog reference, optional source, instance name, config, and binding/provider choices
+- catalog install action endpoints are not the primary API shape
+- arbitrary YAML path install is not the primary API shape
+- lifecycle actions use `POST /apps/{id}/actions/{action}` and `POST /services/{id}/actions/{action}`
+- accepted action names are `start`, `stop`, `remove`, and `destroy`
+- destroy remains `POST .../actions/destroy`, not `DELETE`
+- destroy requires explicit confirmation in the request body
+- Service lifecycle actions blocked by dependents return `409 Conflict` with an impact list unless the request carries `force: true`
+- callers may repeat blocked lifecycle actions with `force: true` when force is allowed
+- mutating API calls should prefer `202 Accepted`
+- mutation responses should include resource snapshot, reconciliation request id/state, and latest status when available
+- a minimal `202 Accepted` response with resource identity and reconciliation request id/state is acceptable if full status payload is too heavy for API 0.0.1
+- repeated lifecycle requests to the same desired state should be idempotent
+- Nephos should avoid duplicate reconciliation work when possible, but may enqueue reconciliation when needed to verify or converge runtime state
+
+Need to decide:
+
+- exact install request body field names
+- exact lifecycle action request body field names
+- exact mutation response body schema
+- exact blocked dependency impact response schema
+- exact manual reconcile endpoint shape
 - exact error envelope and validation response shape
 
 ## Database Desired-State Model
