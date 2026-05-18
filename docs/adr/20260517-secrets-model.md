@@ -52,7 +52,9 @@ For `app-secret`, the Secret is created in the consuming App namespace with this
 nephos-bind-<alias>
 ```
 
-The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
+The alias must follow the accepted Nephos machine identifier rule.
+
+If `nephos-bind-<alias>` would exceed Kubernetes Secret name limits, Nephos rejects the alias and requires a shorter explicit alias.
 
 For Phase 1, `app-secret` is the only accepted binding output target.
 
@@ -75,9 +77,16 @@ Binding Secrets must include metadata that identifies:
 - Service instance
 - capability
 - binding alias
-- `managed-by=nephos`
 
-The exact Kubernetes label and annotation key names remain open.
+Accepted Phase 1 metadata keys:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
@@ -119,8 +128,6 @@ Nephos owns the policy of:
 
 Need to define:
 
-- exact shared slug normalization for binding aliases and Secret names
-- exact Kubernetes label and annotation key names for binding Secret metadata
 - rotation behavior
 - whether secrets are backed up
 - future reveal/debug command behavior

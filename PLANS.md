@@ -56,7 +56,8 @@ Current understanding:
 - Batch 17 manifest validation/config decisions are accepted: PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`; Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`; `secret` App config option type is deferred; unknown manifest fields are rejected once canonical schemas exist; raw Kubernetes manifest fallback shape is deferred until first needed.
 - Batch 18 config option object decisions are accepted: config options use required `name` and `type`, optional `label`, `description`, `default`, and `required`; `name` is the stable machine key; `required` defaults to `false`; enum options use object values with `value` and `label`; validation bounds such as min/max/regex/length are deferred; config options do not carry Helm value paths, env vars, or Kubernetes field paths; runtime mapping happens through `spec.runtime.values.mappings[]`, whose exact shape remains open.
 - Batch 19 runtime value mapping decisions are accepted: Phase 1 mapping source kinds are `config` and `binding`; mappings use explicit `from` and `to` objects; config mappings use `from.kind: config`, `from.name`, and `to.helmValue`; binding mappings use `from.kind: binding`, `from.name`, `from.field`, and `to.helmValue`; `helmValue` is a dot path; transforms are deferred; missing sources block reconciliation with a reason; mappings live only under `spec.runtime.values.mappings[]`.
-- Batch 20 binding identity decisions are accepted: if `as` is omitted, binding alias defaults to `capability`; aliases are unique within one App manifest and installed App instance; Phase 1 `app-secret` names use `nephos-bind-<alias>` in the consuming App namespace; rebinding an alias updates the same Secret name after explicit reconciliation or confirmation; binding Secrets include metadata identifying App instance, Service instance, capability, alias, and `managed-by=nephos`; exact slug normalization follows future shared Nephos name/slug rules.
+- Batch 20 binding identity decisions are accepted: if `as` is omitted, binding alias defaults to `capability`; aliases are unique within one App manifest and installed App instance; Phase 1 `app-secret` names use `nephos-bind-<alias>` in the consuming App namespace; rebinding an alias updates the same Secret name after explicit reconciliation or confirmation; binding Secrets include relationship metadata; slug normalization was finalized in Batch 21.
+- Batch 21 naming/metadata decisions are accepted: manifest `metadata.name`, binding aliases, route names, installed instance slugs, and catalog entry slugs use strict DNS-label style machine identifiers; invalid names are rejected; default installed instance names equal catalog manifest `metadata.name`; explicit install-time instance names are allowed; name collisions fail and require explicit input; generated Kubernetes names must fit resource limits after prefixes; runtime metadata uses `app.kubernetes.io/managed-by: nephos` plus `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`; Nephos does not use Kubernetes `ownerReferences` for platform relationships.
 
 Files likely to change:
 
@@ -236,9 +237,8 @@ Open questions:
 - Concrete backup implementation design.
 - Health/status check implementation details.
 - Reference scenario manifest sketches and data preservation checks.
-- Namespace label/slug details.
 - Local ingress hostname/TLS details.
-- Secret naming/rotation details.
+- Secret rotation details.
 - Catalog source/trust beyond local filesystem.
 - Local development command details.
 - Testing command/marker/CI details.

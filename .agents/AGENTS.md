@@ -22,6 +22,8 @@ Kubernetes owns runtime primitives: Deployments, StatefulSets, Services, Ingress
 Do not turn Nephos into a generic container UI.
 The differentiator is composable self-hosted infrastructure: Apps & Services, capability binding, and platform-level relationships.
 
+Before making architectural changes, read the current architecture context, including `.agents/context/nephos-naming-and-metadata.md`, plus `docs/adr/`.
+
 Before writing or changing architecture context or ADR files, tell Fer explicitly which context files or ADRs need to change and why.
 
 Do not silently add, accept, or reshape architectural decisions in `.agents/context/`, `docs/adr/`, `examples/`, or `schemas/`.

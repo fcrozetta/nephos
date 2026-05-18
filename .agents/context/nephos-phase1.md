@@ -56,6 +56,11 @@ Catalog and packaging:
 - Kubernetes-like `apiVersion`/`kind`/`metadata`/`spec` envelope with Nephos semantics
 - `apiVersion: nephos.pro/v1alpha1`
 - accepted manifest kinds `App` and `Service`
+- strict DNS-label style machine identifiers for manifest `metadata.name`, binding aliases, route names, instance slugs, and catalog entry slugs
+- default installed instance names equal catalog manifest `metadata.name`
+- explicit user-provided instance names are allowed at install time
+- name collisions fail and require explicit input
+- generated Kubernetes names must fit resource limits after prefixes are added
 - directory-per-entry local catalog layout with `app.yaml` and `service.yaml`
 - Helm-primary runtime deployment underneath manifests
 - raw Kubernetes manifest fallback
@@ -116,7 +121,7 @@ Ingress and secrets:
 - binding aliases are unique per App manifest and installed App instance
 - binding Secret names use `nephos-bind-<alias>` in the consuming App namespace
 - rebinding updates the same binding Secret name after explicit reconciliation or confirmation
-- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
+- binding Secrets include `app.kubernetes.io/managed-by: nephos`, `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`
 - PostgreSQL `app-secret` outputs use exact lowercase keys `host`, `port`, `database`, `username`, `password`, and `uri`
 - Service-internal/admin secrets in Service namespaces
 - stop/remove preserve Secrets
@@ -183,9 +188,8 @@ Reference scenario:
 
 ## Still To Define
 
-- exact namespace slug normalization and labels
 - ingress/TLS/local DNS hostname behavior
-- binding Secret naming and rotation behavior
+- binding Secret rotation behavior
 - backup guarantees
 - local development workflow
 - packaging/distribution

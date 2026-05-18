@@ -98,12 +98,18 @@ Later accepted direction:
 - Binding aliases must be unique within one App manifest and one installed App instance after defaulting.
 - `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace.
 - Rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation.
-- Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+- Binding Secrets include `app.kubernetes.io/managed-by: nephos`, `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`.
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`.
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1.
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys: `host`, `port`, `database`, `username`, `password`, and `uri`.
 - Other binding targets and non-PostgreSQL payload schemas remain open.
 - Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`.
+- Manifest `metadata.name`, binding aliases, route names, installed instance slugs, and catalog entry slugs use strict DNS-label style machine identifiers.
+- Nephos rejects invalid machine identifiers instead of silently normalizing them.
+- Default installed instance names equal catalog manifest `metadata.name`.
+- Users may override the instance name at install time.
+- Platform-visible name collisions fail and require explicit user input.
+- Nephos rejects generated Kubernetes names that exceed resource limits after prefixes are added.
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists.
 - Config options use `name`, `type`, optional `label`, optional `description`, optional `default`, and optional `required`.
 - Config option `name` is the stable machine key.

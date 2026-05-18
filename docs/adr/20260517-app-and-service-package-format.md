@@ -166,12 +166,15 @@ Later accepted binding/provisioning direction:
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists
 - Service `spec.provides[]` is required non-empty
 - Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`
+- manifest `metadata.name`, binding aliases, route names, installed instance slugs, and catalog entry slugs use strict DNS-label style machine identifiers
+- default installed instance names equal catalog manifest `metadata.name`, with user override allowed at install time
+- platform-visible name collisions fail and require explicit user input
 - Phase 1 binding output target is `app-secret`
 - App binding aliases default to `capability` when `as` is omitted
 - binding aliases must be unique within one App manifest and one installed App instance after defaulting
 - `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
 - rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation
-- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
+- binding Secrets include `app.kubernetes.io/managed-by: nephos`, `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`
 - PostgreSQL binding output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - provisioning is a typed backend/API-owned contract

@@ -35,6 +35,46 @@ Shared Service instances remain in Service namespaces, even when several Apps bi
 
 Dedicated Service instances also remain Service instances and use Service namespaces.
 
+Slugs follow the accepted Nephos machine identifier rule:
+
+```text
+^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+```
+
+Nephos rejects invalid slugs instead of silently normalizing them.
+
+By default, an installed App or Service instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
+App instance names are unique within the App instance scope.
+
+Service instance names are unique within the Service instance scope.
+
+If a namespace name would exceed Kubernetes limits after adding `app-` or `svc-`, Nephos rejects the name and requires a shorter explicit instance name.
+
+Nephos does not silently truncate, suffix, or randomize namespace names.
+
+Namespaces should use:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+```
+
+App namespaces should include:
+
+```yaml
+nephos.pro/app-instance: <app-instance>
+```
+
+Service namespaces should include:
+
+```yaml
+nephos.pro/service-instance: <service-instance>
+```
+
+Nephos does not use Kubernetes `ownerReferences` to represent platform ownership or lifecycle relationships in Phase 1.
+
 ## Lifecycle Behavior
 
 `remove` preserves the namespace.
@@ -69,8 +109,6 @@ Namespace separation also makes debugging and cleanup easier without requiring N
 
 Need to decide:
 
-- exact slug normalization and collision handling
-- exact labels and annotations applied to namespaces
 - future NetworkPolicy model
 - exact cross-namespace connection metadata exposed through bindings
 

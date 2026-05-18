@@ -46,6 +46,14 @@ catalog/
       service.yaml
 ```
 
+Catalog entry slugs use the accepted Nephos machine identifier rule.
+
+For Phase 1, the catalog entry directory slug should match the manifest `metadata.name`.
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
 ## User-Created Entries
 
 User-created local catalog entries are allowed in Phase 1.

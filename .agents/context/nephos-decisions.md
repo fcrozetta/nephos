@@ -860,7 +860,9 @@ For Phase 1 `app-secret` outputs, Nephos creates the Secret in the consuming App
 nephos-bind-<alias>
 ```
 
-The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
+The alias must follow the accepted Nephos machine identifier rule.
+
+If `nephos-bind-<alias>` would exceed Kubernetes Secret name limits, Nephos rejects the alias and requires a shorter explicit alias.
 
 ## D104: Rebinding keeps the App Secret name stable
 
@@ -870,18 +872,93 @@ Rebinding does not create a new Secret name by default.
 
 ## D105: Binding Secrets carry relationship metadata
 
-Binding Secrets must include metadata identifying:
+Binding Secrets must include:
 
-- App instance
-- Service instance
-- capability
-- binding alias
-- `managed-by=nephos`
-
-The exact Kubernetes label and annotation key names remain open.
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 ## D106: Secret naming slug rules follow shared Nephos name rules
 
 Do not define a separate binding-Secret-only slugging system in Phase 1.
 
-Binding Secret alias slug normalization should follow the same future Nephos slug/name rules used for App, Service, namespace, and Kubernetes resource names where possible.
+Binding Secret alias slug normalization follows the same Nephos machine identifier rules used for App, Service, namespace, route, and catalog slugs.
+
+## D107: Machine identifiers use strict DNS-label style
+
+Manifest `metadata.name`, binding aliases, route names, installed App instance slugs, installed Service instance slugs, and catalog entry slugs must match:
+
+```text
+^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+```
+
+Nephos rejects invalid machine identifiers.
+
+Do not silently normalize, lowercase, truncate, suffix, or randomize machine identifiers.
+
+## D108: Instance names default from catalog metadata name
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
+App instance names are unique within the App instance scope.
+
+Service instance names are unique within the Service instance scope.
+
+## D109: Name collisions fail explicitly
+
+If a name, alias, route, provider, or instance selection collides or is ambiguous, Nephos fails and requires explicit user input.
+
+Nephos does not silently add suffixes such as `-2`.
+
+Nephos does not generate random suffixes for platform-visible names in Phase 1.
+
+## D110: Generated Kubernetes names must fit resource limits
+
+Generated Kubernetes object names must fit Kubernetes name limits.
+
+Prefixes count toward the final Kubernetes name length.
+
+Known Phase 1 derived names include:
+
+- `app-<slug>`
+- `svc-<slug>`
+- `nephos-bind-<alias>`
+
+If a final generated name would exceed the Kubernetes limit for that resource, Nephos rejects the input and asks for a shorter explicit name or alias.
+
+## D111: Runtime metadata uses app.kubernetes.io and nephos.pro keys
+
+Nephos-managed Kubernetes resources should use:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+```
+
+Nephos-owned relationship metadata uses keys under `nephos.pro/*`.
+
+Accepted Phase 1 keys:
+
+- `nephos.pro/app-instance`
+- `nephos.pro/service-instance`
+- `nephos.pro/capability`
+- `nephos.pro/binding-alias`
+
+Binding Secrets must carry all four relationship keys plus `app.kubernetes.io/managed-by: nephos`.
+
+## D112: Nephos does not use ownerReferences for platform relationships
+
+Nephos does not use Kubernetes `ownerReferences` to represent Nephos platform relationships in Phase 1.
+
+Nephos desired state in the API/database is the source of truth.
+
+Kubernetes labels and annotations exist for inspection, drift detection, and cleanup.
+
+Do not model App-Service bindings, Service dependents, lifecycle ownership, or desired-state ownership through Kubernetes owner references.
+
+Helm charts or Kubernetes controllers may create their own internal owner references as runtime implementation details, but Nephos must not rely on those references as the platform relationship model.

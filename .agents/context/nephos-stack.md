@@ -111,6 +111,12 @@ Nephos must not mutate Kubernetes resources it does not own.
 
 Nephos-owned runtime resources should be labeled and/or annotated so drift detection and reconciliation can identify ownership.
 
+Nephos-managed Kubernetes resources should use `app.kubernetes.io/managed-by: nephos`.
+
+Nephos-owned relationship metadata uses `nephos.pro/*` keys.
+
+Nephos does not use Kubernetes `ownerReferences` to represent platform relationships in Phase 1.
+
 ## Still To Decide
 
 Exact developer commands are not finalized.

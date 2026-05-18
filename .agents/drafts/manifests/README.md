@@ -35,7 +35,12 @@ Accepted binding/provisioning decisions reflected in the current draft sketches:
 - binding aliases are unique per App manifest and installed App instance
 - `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
 - rebinding updates the same Secret name after explicit reconciliation or confirmation
-- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
+- binding Secrets include `app.kubernetes.io/managed-by: nephos`, `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`
+- machine identifiers use strict DNS-label style and invalid identifiers are rejected
+- default installed instance names equal catalog manifest `metadata.name`
+- explicit user-provided instance names are allowed at install time
+- name collisions fail and require explicit input
+- generated Kubernetes names must fit resource limits after prefixes are added
 - PostgreSQL logical output fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - PostgreSQL output fields are capability-defined; there is no Phase 1 manifest `fields:` syntax
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`

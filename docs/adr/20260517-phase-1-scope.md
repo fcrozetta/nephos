@@ -57,6 +57,11 @@ Phase 1 includes:
 - runtime mapping target `to.helmValue` as a dot path
 - missing mapping sources block reconciliation with a reason
 - unknown manifest fields rejected once canonical schemas exist
+- strict DNS-label style machine identifiers for manifest `metadata.name`, binding aliases, route names, instance slugs, and catalog entry slugs
+- default installed instance names equal catalog manifest `metadata.name`
+- explicit user-provided instance names allowed at install time
+- name collisions fail and require explicit input
+- generated Kubernetes names must fit resource limits after prefixes are added
 
 Phase 1 lifecycle commands for Apps and Services:
 

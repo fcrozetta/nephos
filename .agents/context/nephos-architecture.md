@@ -124,6 +124,20 @@ Namespace pattern:
 - `app-<slug>`
 - `svc-<slug>`
 
+Slugs use strict DNS-label style machine identifiers.
+
+Nephos rejects invalid or too-long generated names instead of silently normalizing, suffixing, randomizing, or truncating them.
+
+Default installed instance names equal catalog manifest `metadata.name`.
+
+Users may provide explicit instance names at install time.
+
+App instance names and Service instance names are unique in separate scopes.
+
+Nephos-managed Kubernetes resources use `app.kubernetes.io/managed-by: nephos` and Nephos-owned relationship metadata under `nephos.pro/*`.
+
+Nephos does not use Kubernetes `ownerReferences` to represent platform relationships or lifecycle ownership in Phase 1.
+
 `remove` preserves namespaces.
 
 `destroy` deletes namespaces by default after destructive confirmation when persistent data exists.
@@ -150,7 +164,15 @@ App binding credentials are materialized into App namespaces.
 
 Binding Secrets use `nephos-bind-<alias>` in the consuming App namespace.
 
-Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+Binding Secrets include metadata identifying App instance, Service instance, capability, and binding alias using:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 Secret values must be redacted in API responses, CLI output, status output, logs, and diagnostics by default.
 

@@ -49,6 +49,20 @@ Use:
 
 The others are optional.
 
+`metadata.name` must follow the accepted Nephos machine identifier rule:
+
+```text
+^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+```
+
+Nephos rejects invalid `metadata.name` values.
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
+Nephos does not silently normalize, truncate, suffix, or randomize platform-visible names.
+
 ## Required Field Matrix
 
 For Phase 1 installable catalog entries, every App and Service manifest requires:
@@ -78,6 +92,8 @@ Binding aliases must be unique within one App manifest and one installed App ins
 
 If an App needs more than one binding for the same capability, it must set explicit aliases.
 
+Binding aliases must follow the accepted Nephos machine identifier rule.
+
 Use `spec.routes[]` for route intent.
 
 Routes declare route identity and visibility, not final hostnames.
@@ -92,6 +108,8 @@ spec:
       target:
         port: http
 ```
+
+Route names must follow the accepted Nephos machine identifier rule.
 
 Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
 
@@ -257,7 +275,15 @@ nephos-bind-<alias>
 
 Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
-Binding Secrets must include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+Binding Secrets must include accepted Phase 1 metadata:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 PostgreSQL binding outputs are capability-defined.
 

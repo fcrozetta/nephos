@@ -64,6 +64,14 @@ The manifest should remain the package boundary.
 
 Catalog metadata should not become a second source of truth for package semantics.
 
+Catalog entry slugs use the accepted Nephos machine identifier rule.
+
+For Phase 1, the catalog entry directory slug should match the manifest `metadata.name`.
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
 ## Deferred Sources
 
 Deferred catalog sources:

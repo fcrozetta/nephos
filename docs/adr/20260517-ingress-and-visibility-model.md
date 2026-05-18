@@ -81,7 +81,7 @@ Need to define:
 - future Cloudflare integration
 - future Tailscale integration
 - exact host naming rules
-- route collision handling
+- ingress hostname collision handling
 
 ## Consequences
 

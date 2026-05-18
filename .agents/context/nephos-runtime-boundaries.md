@@ -10,6 +10,26 @@ Namespace pattern:
 - `app-<slug>` for an App instance
 - `svc-<slug>` for a Service instance
 
+Slugs use strict DNS-label style machine identifiers:
+
+```text
+^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+```
+
+Nephos rejects invalid slugs instead of silently normalizing them.
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
+App instance names are unique within the App instance scope.
+
+Service instance names are unique within the Service instance scope.
+
+If a namespace name would exceed Kubernetes limits after adding `app-` or `svc-`, Nephos rejects the name and requires a shorter explicit instance name.
+
+Nephos does not silently truncate, suffix, or randomize namespace names.
+
 Apps and Services do not share a namespace by default.
 
 Shared Service instances live in Service namespaces even when multiple Apps bind to them.
@@ -23,6 +43,31 @@ Dedicated Service instances are still Service instances and also live in Service
 Phase 1 does not apply default-deny NetworkPolicy.
 
 Network policy is reserved for later design.
+
+## Runtime Metadata
+
+Nephos-managed Kubernetes resources should use:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+```
+
+Nephos-owned relationship metadata uses keys under:
+
+```text
+nephos.pro/*
+```
+
+Accepted Phase 1 keys:
+
+- `nephos.pro/app-instance`
+- `nephos.pro/service-instance`
+- `nephos.pro/capability`
+- `nephos.pro/binding-alias`
+
+Nephos does not use Kubernetes `ownerReferences` to represent App-Service bindings, Service dependents, lifecycle ownership, or desired-state ownership in Phase 1.
+
+Nephos desired state in the API/database is the source of truth.
 
 ## Ingress Model
 
@@ -97,11 +142,19 @@ For `app-secret`, Nephos creates the Secret in the consuming App namespace with 
 nephos-bind-<alias>
 ```
 
-The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
+The alias must follow the accepted Nephos machine identifier rule.
 
-Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+If `nephos-bind-<alias>` would exceed Kubernetes Secret name limits, Nephos rejects the alias and requires a shorter explicit alias.
 
-The exact Kubernetes label and annotation key names remain open.
+Binding Secrets include:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
@@ -128,15 +181,11 @@ Do not expose secret values unless a future explicit reveal command is designed 
 
 ## Still Open
 
-- exact slug normalization and collision handling
-- exact namespace labels and annotations
 - exact default local hostname/domain policy
 - wildcard domain behavior
 - TLS and cert-manager strategy
-- route collision handling
+- ingress hostname collision handling
 - whether Services can expose admin routes
-- exact shared slug normalization for binding aliases and Secret names
-- exact Kubernetes label and annotation key names for binding Secret metadata
 - secret rotation behavior
 - whether/how secrets participate in backup
 - non-PostgreSQL Secret key serialization

@@ -47,6 +47,20 @@ This requirement applies to installable catalog entries that Nephos deploys.
 
 Future imported, external, or pre-existing Services may need a different runtime shape, but that requires a later explicit decision.
 
+Manifest `metadata.name`, binding aliases, route names, installed instance slugs, and catalog entry slugs must follow the accepted Nephos machine identifier rule:
+
+```text
+^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+```
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
+Nephos rejects invalid machine identifiers, collisions, and generated Kubernetes names that exceed resource limits.
+
+Do not silently normalize, truncate, suffix, or randomize platform-visible names.
+
 ## Manifest Types
 
 Use separate manifest formats for Apps and Services.
@@ -82,7 +96,11 @@ Binding aliases must be unique within one App manifest and one installed App ins
 
 If an App needs more than one binding for the same capability, it must set explicit aliases.
 
+Binding aliases must follow the accepted Nephos machine identifier rule.
+
 `spec.routes[]` entries declare route identity and visibility, not final hostnames.
+
+Route names must follow the accepted Nephos machine identifier rule.
 
 Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
 
@@ -228,7 +246,15 @@ For `app-secret`, Nephos creates the Secret in the consuming App namespace with 
 nephos-bind-<alias>
 ```
 
-Binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+Binding Secrets include accepted Phase 1 metadata:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 Rebinding an alias to a different Service instance updates the same Secret name with new contents after explicit reconciliation or confirmation.
 
@@ -457,7 +483,9 @@ Nephos chooses deterministic Secret names from binding alias.
 
 For `app-secret`, the consuming App namespace Secret name is `nephos-bind-<alias>`.
 
-The exact slug normalization for `<alias>` follows the future shared Nephos name/slug rules.
+The alias must follow the accepted Nephos machine identifier rule.
+
+If `nephos-bind-<alias>` would exceed Kubernetes Secret name limits, Nephos rejects the alias and requires a shorter explicit alias.
 
 Remove preserves provisioned Service-side resources created for an App.
 

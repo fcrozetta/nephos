@@ -13,15 +13,21 @@ Accepted direction:
 - `nephos-system` for Nephos control-plane/runtime support components
 - `app-<slug>` naming for Apps
 - `svc-<slug>` naming for Services
+- strict DNS-label style machine identifiers
+- invalid slugs are rejected rather than silently normalized
+- default installed instance names equal catalog manifest `metadata.name`
+- explicit user-provided instance names are allowed at install time
+- name collisions fail and require explicit input
+- generated Kubernetes names must fit resource limits after prefixes are added
+- namespaces should use `app.kubernetes.io/managed-by: nephos`
+- App namespaces should use `nephos.pro/app-instance`
+- Service namespaces should use `nephos.pro/service-instance`
 - remove preserves namespaces
 - destroy deletes namespaces by default after destructive confirmation when persistent data exists
 - no default-deny NetworkPolicy in Phase 1
 
 Need to decide:
 
-- slug normalization
-- collision handling
-- required labels and annotations
 - future NetworkPolicy model
 - exact cross-namespace connection metadata in bindings
 
@@ -47,7 +53,7 @@ Need to decide:
 
 - default local domain
 - wildcard hostname policy
-- route collision behavior
+- ingress hostname collision behavior
 - TLS/cert-manager strategy
 - whether Services can expose admin routes
 - future Cloudflare adapter shape
@@ -71,15 +77,13 @@ Accepted direction:
 - Nephos chooses deterministic Secret names from binding alias
 - `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
 - rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation
-- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
+- binding Secrets include `app.kubernetes.io/managed-by: nephos`, `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`
 - stop/remove preserve Secrets
 - destroy deletes Secrets for the destroyed entity
 - secret values are redacted by default
 
 Need to decide:
 
-- exact shared slug normalization for binding aliases and Secret names
-- exact Kubernetes label and annotation key names for binding Secret metadata
 - rotation behavior
 - whether/how secrets are included in Nephos state backup
 - future explicit reveal command behavior
@@ -123,7 +127,12 @@ Accepted direction:
 - binding aliases must be unique within one App manifest and one installed App instance after defaulting
 - `app-secret` Secret names use `nephos-bind-<alias>` in the consuming App namespace
 - rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation
-- binding Secrets include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`
+- machine identifiers use strict DNS-label style and invalid identifiers are rejected
+- default installed instance names equal catalog manifest `metadata.name`
+- user-provided explicit instance names are allowed at install time
+- name collisions fail and require explicit input
+- generated Kubernetes names must fit resource limits after prefixes are added
+- binding Secrets include `app.kubernetes.io/managed-by: nephos`, `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`
 - Nephos maps binding outputs into runtime values through the reserved `spec.runtime.values.mappings[]` lane
 - PostgreSQL binding output fields are capability-defined and do not use a manifest `fields:` syntax in Phase 1
 - PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`
@@ -175,8 +184,6 @@ Need to decide:
 - non-PostgreSQL binding output payload schemas
 - future optional binding output payload declaration syntax, if needed
 - non-PostgreSQL Secret key serialization
-- exact shared slug normalization for binding aliases and Secret names
-- exact Kubernetes label and annotation key names for binding Secret metadata
 - required/default behavior for Services that expose capabilities without binding outputs
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
@@ -497,6 +504,7 @@ Accepted direction:
 - PostgreSQL provisions an app-scoped database/user for Paperless
 - Nephos materializes PostgreSQL binding outputs into Paperless App namespace
 - Paperless binding Secret name follows `nephos-bind-<alias>`, for example `nephos-bind-database` when the alias is `database`
+- default runtime namespaces are `app-paperless` and `svc-postgres` unless install-time instance names override them
 - PostgreSQL binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`
 - basic ingress intent
 - lifecycle install/start/stop/remove/destroy
@@ -514,6 +522,5 @@ Need to decide:
 - exact Service manifest examples
 - exact commands
 - expected status outputs
-- namespace names
 - exact ingress hostname policy
 - data preservation checks

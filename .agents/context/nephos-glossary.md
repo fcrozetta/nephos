@@ -106,6 +106,41 @@ Examples:
 
 Apps should depend on capabilities rather than concrete infrastructure whenever possible.
 
+## Machine Identifier
+
+A platform-visible technical name used by Nephos for manifests, routes, binding aliases, instance slugs, and catalog entry slugs.
+
+Machine identifiers use strict DNS-label style:
+
+```text
+^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+```
+
+They use lowercase ASCII letters, digits, and hyphens.
+
+They start and end with an alphanumeric character.
+
+Nephos rejects invalid machine identifiers.
+
+Do not silently normalize, truncate, suffix, or randomize machine identifiers.
+
+## Instance Name
+
+The Nephos desired-state name for an installed App instance or Service instance.
+
+By default, an installed instance name equals the catalog manifest `metadata.name`.
+
+Users may provide an explicit instance name at install time.
+
+App instance names are unique within the App instance scope.
+
+Service instance names are unique within the Service instance scope.
+
+Generated runtime namespaces add prefixes:
+
+- `app-<slug>`
+- `svc-<slug>`
+
 ## Binding
 
 A relationship between an App and a Service capability.
@@ -166,7 +201,15 @@ Example:
 
 Rebinding an alias to a different Service instance updates the same Secret name after explicit reconciliation or confirmation.
 
-Binding Secrets must include metadata identifying App instance, Service instance, capability, binding alias, and `managed-by=nephos`.
+Binding Secrets must include:
+
+```yaml
+app.kubernetes.io/managed-by: nephos
+nephos.pro/app-instance: <app-instance>
+nephos.pro/service-instance: <service-instance>
+nephos.pro/capability: <capability>
+nephos.pro/binding-alias: <alias>
+```
 
 ## App-Scoped Resource
 
