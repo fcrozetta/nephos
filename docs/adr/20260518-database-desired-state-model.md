@@ -1,0 +1,124 @@
+# Database Desired-State Model
+
+- Status: accepted
+- Date: 2026-05-18
+- Tags: database, sqlite, desired-state, migrations, phase-1
+
+## Context and Problem Statement
+
+Nephos API/database is the canonical source of desired platform state.
+
+API 0.0.1 needs a persistence model for installed Apps, installed Services, bindings, platform domains, status, and reconciliation requests.
+
+The database model must preserve the boundary:
+
+```text
+intent -> desired state -> reconcile into Kubernetes
+```
+
+## Decision
+
+Use SQLite with plain SQL through a small repository/data-access layer.
+
+Do not introduce a full ORM for API 0.0.1.
+
+Use explicit SQL migration files.
+
+Before the first usable version, local development may destroy and recreate the database.
+
+The initial schema should live in:
+
+```text
+migrations/0000_initial.sql
+```
+
+Forward-compatible migration discipline starts after the first usable version is established.
+
+API 0.0.1 should use separate normalized tables for core resources:
+
+- `app_instances`
+- `service_instances`
+- `bindings`
+- `platform_domains`
+- `status_snapshots`
+- `reconciliation_requests`
+- `schema_migrations`
+
+Use normalized columns for core identity, relationship, lifecycle, and lookup fields.
+
+Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
+
+Installed App and Service records should store catalog identity and version snapshot information, including catalog kind, catalog name, catalog version when available, source path, and manifest digest or snapshot.
+
+Do not recompute installed desired state only from current catalog files.
+
+Status persistence stores the latest status snapshot per resource.
+
+Status event/history storage is deferred.
+
+Reconciliation requests are persisted in the database so the API mutation/reconciler boundary is visible and retryable.
+
+API mutations that change desired state must write the desired-state change and reconciliation request in one database transaction.
+
+Destroy removes active desired-state rows.
+
+API 0.0.1 does not require an audit/history table for destroyed resources.
+
+`destroyed` may appear later as terminal history if an audit/history model is accepted.
+
+## Considered Options
+
+### Plain SQL with small repository/data-access layer
+
+- Good, because it keeps SQLite behavior explicit.
+- Good, because it avoids ORM complexity before the domain model stabilizes.
+- Good, because it matches the current local-first and pragmatic backend stack.
+- Bad, because the team must own SQL and row mapping discipline directly.
+
+### SQLModel or SQLAlchemy Core
+
+- Good, because it can reduce some boilerplate.
+- Bad, because it adds abstraction before the schema has proven itself.
+- Bad, because migrations and SQLite behavior can become less obvious.
+
+### Full ORM model first
+
+- Good, because it gives familiar model objects.
+- Bad, because it risks making persistence drive the domain model.
+- Bad, because it is too much framework weight for API 0.0.1.
+
+### Normalized tables plus JSON snapshots
+
+- Good, because relationships and lookups stay queryable.
+- Good, because catalog/runtime snapshots can evolve without overfitting columns too early.
+- Bad, because API/domain validation must keep JSON payloads disciplined.
+
+### JSON-only resources table
+
+- Good, because it is fast to prototype.
+- Bad, because bindings, dependents, lifecycle, status, and reconciliation queries become weaker.
+- Bad, because it makes the API resource model less explicit.
+
+## Consequences
+
+Implementation should create a small database layer around explicit SQL.
+
+API resource handlers should not issue ad hoc SQL everywhere.
+
+Schema design can start from the accepted table families, but exact columns, indexes, and constraints still need implementation-level design.
+
+Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
+
+After the first usable version, schema evolution should happen through forward migrations rather than destructive resets.
+
+## Open Questions
+
+- exact column definitions
+- foreign key and cascade behavior
+- indexes and uniqueness constraints
+- exact migration runner command
+- exact local reset command
+- whether `schema_migrations` exists in `0000_initial.sql` or is created by the migration runner
+- transaction retry and SQLite locking behavior
+- status snapshot JSON shape
+- reconciliation request state machine

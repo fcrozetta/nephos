@@ -97,9 +97,16 @@ For Phase 1, the backend stack is:
 - FastAPI
 - SQLite
 - simple explicit SQL migrations
+- plain SQL through a small repository/data-access layer
 - `uv` local development workflow
 - `pytest` backend tests
 - `ruff` backend linting/formatting checks
+
+API 0.0.1 desired-state storage uses separate normalized table families for App instances, Service instances, bindings, platform domains, latest status snapshots, reconciliation requests, and schema migrations.
+
+Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
+
+API mutations that change desired state must write desired-state changes and the reconciliation request in one database transaction.
 
 Backend unit tests should use mocks/fakes.
 

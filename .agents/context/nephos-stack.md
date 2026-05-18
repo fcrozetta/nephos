@@ -48,6 +48,8 @@ Persistence:
 
 - SQLite is the canonical Phase 1 desired-state database
 - The Nephos API/database is the source of truth for desired platform state
+- Use plain SQL through a small repository/data-access layer
+- Do not introduce a full ORM for API 0.0.1
 - Platform configuration that affects reconciliation, such as ingress root domains, is stored in the API/database as desired state
 - The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state
 - API 0.0.1 uses REST-ish resource APIs over installed Apps, installed Services, bindings, platform configuration domains, and status
@@ -60,6 +62,9 @@ Migrations:
 
 - Simple explicit SQL migrations
 - No ORM-driven migration framework is selected for Phase 1
+- Before the first usable version, local development may destroy and recreate the SQLite database
+- Initial schema should live in `migrations/0000_initial.sql`
+- Forward-compatible migration discipline starts after the first usable version is established
 
 Controller/reconciler:
 

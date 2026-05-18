@@ -142,6 +142,47 @@ Need to decide:
 - exact catalog read/list endpoint shape
 - exact error envelope and validation response shape
 
+## Database Desired-State Model
+
+Question:
+
+How should API 0.0.1 persist desired state?
+
+Accepted direction:
+
+- SQLite is the canonical Phase 1 desired-state database
+- use plain SQL through a small repository/data-access layer
+- do not introduce a full ORM for API 0.0.1
+- use explicit SQL migration files
+- before the first usable version, local development may destroy and recreate the database
+- initial schema should live in `migrations/0000_initial.sql`
+- forward-compatible migration discipline starts after the first usable version is established
+- API 0.0.1 table families are `app_instances`, `service_instances`, `bindings`, `platform_domains`, `status_snapshots`, `reconciliation_requests`, and `schema_migrations`
+- use normalized columns for core identity, relationship, lifecycle, and lookup fields
+- use SQLite JSON text columns for snapshots and flexible payloads where useful
+- validate JSON payloads at the API/domain boundary
+- installed records store catalog identity and version snapshot information
+- installed records should include catalog kind, catalog name, catalog version when available, catalog source path, and manifest digest or manifest snapshot
+- do not recompute installed desired state only from current catalog files
+- persist the latest status snapshot per resource
+- status event/history storage is deferred
+- reconciliation requests are persisted in SQLite
+- API mutations that change desired state write desired-state changes and reconciliation request in one database transaction
+- destroy removes active desired-state rows
+- API 0.0.1 does not require an audit/history table for destroyed resources
+
+Need to decide:
+
+- exact column definitions
+- foreign key and cascade behavior
+- indexes and uniqueness constraints
+- exact migration runner command
+- exact local reset command
+- whether `schema_migrations` exists in `0000_initial.sql` or is created by the migration runner
+- transaction retry and SQLite locking behavior
+- status snapshot JSON shape
+- reconciliation request state machine
+
 ## Secrets Details
 
 Question:

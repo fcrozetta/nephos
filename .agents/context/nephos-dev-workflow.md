@@ -23,7 +23,14 @@ The backend stack remains:
 - FastAPI
 - SQLite
 - simple explicit SQL migrations
+- plain SQL through a small repository/data-access layer
 - official Python Kubernetes client
+
+Before the first usable version, local development may destroy and recreate the SQLite database.
+
+Initial schema should live in `migrations/0000_initial.sql`.
+
+Forward-compatible migration discipline starts after the first usable version is established.
 
 Local development should run the backend as a local process.
 

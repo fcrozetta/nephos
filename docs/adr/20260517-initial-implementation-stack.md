@@ -24,6 +24,14 @@ Use SQLite as the Phase 1 canonical desired-state database.
 
 Use simple explicit SQL migrations.
 
+Use plain SQL through a small repository/data-access layer.
+
+Do not introduce a full ORM for API 0.0.1.
+
+Before the first usable version, local development may destroy and recreate the SQLite database.
+
+Initial schema should live in `migrations/0000_initial.sql`.
+
 Use the official Python Kubernetes client.
 
 Use `uv` as the canonical backend Python workflow.

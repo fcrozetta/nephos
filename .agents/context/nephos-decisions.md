@@ -1178,3 +1178,81 @@ The API must not bypass desired state and reconciliation by directly mutating Ku
 API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow.
 
 Future backups, upgrades, auth/RBAC, resource profiles, remote catalogs, and generalized Service operation APIs are deferred.
+
+## D129: API 0.0.1 uses plain SQL data access
+
+Use plain SQL through a small repository/data-access layer.
+
+Do not introduce a full ORM for API 0.0.1.
+
+## D130: Initial database schema starts at migrations/0000_initial.sql
+
+Use explicit SQL migration files.
+
+Before the first usable version, local development may destroy and recreate the SQLite database.
+
+The initial schema should live in `migrations/0000_initial.sql`.
+
+Forward-compatible migration discipline starts after the first usable version is established.
+
+## D131: API 0.0.1 table families are normalized
+
+API 0.0.1 should use separate normalized table families:
+
+- `app_instances`
+- `service_instances`
+- `bindings`
+- `platform_domains`
+- `status_snapshots`
+- `reconciliation_requests`
+- `schema_migrations`
+
+Exact columns, indexes, constraints, and foreign-key behavior remain implementation details.
+
+## D132: Desired state stores normalized fields plus JSON snapshots
+
+Use normalized columns for core identity, relationship, lifecycle, and lookup fields.
+
+Use SQLite JSON text columns for snapshots and flexible payloads where useful.
+
+JSON payloads must be validated at the API/domain boundary.
+
+Do not use unvalidated JSON blobs as the main domain model.
+
+## D133: Installed records store catalog identity snapshots
+
+Installed App and Service records store catalog identity and version snapshot information.
+
+This should include catalog kind, catalog name, catalog version when available, catalog source path, and manifest digest or manifest snapshot.
+
+Do not recompute installed desired state only from current catalog files.
+
+## D134: Status persistence stores latest snapshots
+
+Persist the latest status snapshot per resource.
+
+Status must include reasons and evidence.
+
+Status event/history storage is deferred.
+
+## D135: Reconciliation requests are persisted
+
+Persist reconciliation requests in SQLite.
+
+In-memory-only reconciliation queues are not the Phase 1 default.
+
+Persisted reconciliation requests make the API mutation/reconciler boundary visible and retryable.
+
+## D136: API mutations are transaction-bound
+
+API mutations that change desired state must write desired-state changes and the reconciliation request in one database transaction.
+
+Do not write desired state and enqueue reconciliation as separate best-effort steps.
+
+## D137: Destroy removes active desired-state rows
+
+Destroy removes active desired-state rows.
+
+API 0.0.1 does not require an audit/history table for destroyed resources.
+
+`destroyed` may appear later as terminal history if an audit/history model is accepted.

@@ -63,6 +63,7 @@ Current understanding:
 - Batch 24 setup/CLI boundary is deferred: setup UX and command implementation belong in `nephos-cli` after Nephos API `0.0.1`; this repo should not decide command spelling yet. Accepted backend-side behavior: the backend may start with an empty database and reports platform configuration as incomplete until setup creates required desired state.
 - Batch 25 Service operation boundary is accepted: Service operations are typed backend/API-owned Service management actions; they are reserved but bounded in Phase 1; arbitrary shell commands, Helm hooks, Kubernetes jobs, and user-provided scripts are not product semantics; Phase 1 may use internal typed Service handlers for minimal accepted provisioning work; no general user-facing Service operation API or CLI UX is included.
 - Batch 26 API resource model is accepted: API 0.0.1 uses REST-ish resources, installed Apps are internal `AppInstance` records exposed publicly under `/apps`, installed Services are internal `ServiceInstance` records exposed under `/services`, bindings are first-class API/database resources, root domain resources use `/platform/config/domains`, lifecycle and status are separate, latest status is persisted with reasons/evidence, mutating API calls update desired state and trigger/enqueue reconciliation, and API 0.0.1 scope is limited to the Paperless plus PostgreSQL reference flow.
+- Batch 27 database desired-state model is accepted: API 0.0.1 uses SQLite with plain SQL through a small repository/data-access layer, no full ORM, explicit SQL migration files with `migrations/0000_initial.sql` as the initial schema, destructive local reset allowed before the first usable version, normalized table families for app instances/service instances/bindings/platform domains/status snapshots/reconciliation requests/schema migrations, JSON text columns for validated snapshots and flexible payloads, catalog identity/version/source/digest snapshots on installed records, latest status snapshots only, DB-persisted reconciliation requests, desired-state mutation and reconciliation request in one transaction, and destroy removes active desired-state rows without requiring audit/history in API 0.0.1.
 
 Files likely to change:
 
@@ -235,6 +236,7 @@ Rollback notes:
 Open questions:
 
 - Manifest validation schema details.
+- Database exact column definitions, indexes, foreign keys, and migration/reset commands.
 - Service operation declaration/schema/API/CLI design beyond the accepted boundary.
 - Dedicated Service sharing policy details.
 - Future resource profile design.

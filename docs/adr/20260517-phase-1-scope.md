@@ -29,6 +29,8 @@ Phase 1 includes:
 - Nephos backend API
 - SQLite desired-state database
 - simple explicit SQL migrations
+- plain SQL through a small repository/data-access layer
+- initial schema file `migrations/0000_initial.sql`
 - in-process API-owned reconciler
 - separate Python/Typer CLI
 - local filesystem catalog

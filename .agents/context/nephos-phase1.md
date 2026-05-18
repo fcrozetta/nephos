@@ -14,6 +14,9 @@ Backend/control plane:
 - `uv` backend workflow
 - SQLite canonical desired-state database
 - simple explicit SQL migrations
+- plain SQL through a small repository/data-access layer
+- initial schema file `migrations/0000_initial.sql`
+- destructive local SQLite reset allowed before the first usable version
 - official Python Kubernetes client
 - API-owned in-process reconciler
 - `pytest` backend tests

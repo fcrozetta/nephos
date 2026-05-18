@@ -31,6 +31,12 @@ Defer Kubernetes CRDs and GitOps-as-source-of-truth until a later explicit decis
 
 Use simple explicit SQL migrations for Phase 1 database versioning.
 
+Before the first usable version, local development may destroy and recreate the SQLite database.
+
+Initial schema should live in `migrations/0000_initial.sql`.
+
+Forward-compatible migration discipline starts after the first usable version is established.
+
 Platform configuration that affects reconciliation, such as ingress root domains, is also desired state in the Nephos API/database.
 
 Do not store ingress root domains only in local startup config or environment variables.

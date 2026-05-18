@@ -94,6 +94,12 @@ A manual reconcile endpoint is allowed for debugging.
 
 The primary effect of a mutating API call must not be direct Kubernetes mutation that bypasses desired state and reconciliation.
 
+Reconciliation requests are persisted in SQLite.
+
+API mutations that change desired state write the desired-state change and reconciliation request in one database transaction.
+
+In-memory-only reconciliation queues are not the Phase 1 default.
+
 ## Scope
 
 API 0.0.1 defines only the resources needed for the Paperless plus PostgreSQL reference flow.
