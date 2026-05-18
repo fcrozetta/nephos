@@ -53,6 +53,9 @@ Phase 1 includes:
 - `secret` App config option type deferred
 - config validation bounds such as min/max/regex/length deferred
 - config runtime mapping happens through `spec.runtime.values.mappings[]`
+- Phase 1 runtime mapping source kinds `config` and `binding`
+- runtime mapping target `to.helmValue` as a dot path
+- missing mapping sources block reconciliation with a reason
 - unknown manifest fields rejected once canonical schemas exist
 
 Phase 1 lifecycle commands for Apps and Services:

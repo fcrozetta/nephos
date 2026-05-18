@@ -764,4 +764,70 @@ Do not put Helm value paths, environment variables, or Kubernetes field paths di
 
 Mapping config options into runtime deployment values happens through `spec.runtime.values.mappings[]`.
 
-The exact mapping object shape remains open.
+Accepted Phase 1 mapping shape is recorded in D095-D099.
+
+## D095: Phase 1 runtime mapping source kinds are config and binding
+
+Phase 1 runtime value mappings support only these source kinds:
+
+- `config`
+- `binding`
+
+Route and storage mapping source kinds are deferred.
+
+Do not add a generic expression language.
+
+## D096: Runtime mappings use explicit from and to objects
+
+Config mappings use:
+
+```yaml
+from:
+  kind: config
+  name: paperless_ocr_language
+to:
+  helmValue: paperless.ocr.language
+```
+
+Binding mappings use:
+
+```yaml
+from:
+  kind: binding
+  name: database
+  field: uri
+to:
+  helmValue: env.DATABASE_URL
+```
+
+For binding sources, `name` references the App binding alias.
+
+For binding sources, `field` references a binding output field such as `uri`.
+
+The binding mapping source shape may be revisited after a fuller Nephos manifest is evaluated.
+
+## D097: Runtime mapping targets use helmValue dot paths
+
+The `helmValue` target is a dot path in Phase 1.
+
+Do not use raw nested Helm value fragments as mapping targets in Phase 1.
+
+Target path escaping for literal dots in Helm value keys is deferred until needed.
+
+## D098: Runtime mappings have no transforms in Phase 1
+
+Do not support mapping transforms in Phase 1.
+
+Binding fields should expose useful outputs such as `uri` instead of requiring template strings or format transforms.
+
+## D099: Missing mapping sources block reconciliation
+
+If a mapping source is missing, reconciliation fails with `blocked` status and a reason.
+
+Do not silently skip missing mapping sources.
+
+## D100: Runtime mappings live only under spec.runtime.values.mappings
+
+Mappings live only under `spec.runtime.values.mappings[]`.
+
+Do not define runtime mappings inline on config options or binding declarations.

@@ -55,6 +55,7 @@ Current understanding:
 - Batch 16 manifest field requirement decisions are accepted: Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`; App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists; Service `spec.provides[]` is required non-empty; Service `spec.provisioning.mode` is required as `none` or `app-scoped-resource`; PostgreSQL output fields are capability-defined without manifest `fields:` syntax in Phase 1; canonical examples remain blocked until manifest validation plus command/status shape are stable enough.
 - Batch 17 manifest validation/config decisions are accepted: PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`; Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`; `secret` App config option type is deferred; unknown manifest fields are rejected once canonical schemas exist; raw Kubernetes manifest fallback shape is deferred until first needed.
 - Batch 18 config option object decisions are accepted: config options use required `name` and `type`, optional `label`, `description`, `default`, and `required`; `name` is the stable machine key; `required` defaults to `false`; enum options use object values with `value` and `label`; validation bounds such as min/max/regex/length are deferred; config options do not carry Helm value paths, env vars, or Kubernetes field paths; runtime mapping happens through `spec.runtime.values.mappings[]`, whose exact shape remains open.
+- Batch 19 runtime value mapping decisions are accepted: Phase 1 mapping source kinds are `config` and `binding`; mappings use explicit `from` and `to` objects; config mappings use `from.kind: config`, `from.name`, and `to.helmValue`; binding mappings use `from.kind: binding`, `from.name`, `from.field`, and `to.helmValue`; `helmValue` is a dot path; transforms are deferred; missing sources block reconciliation with a reason; mappings live only under `spec.runtime.values.mappings[]`.
 
 Files likely to change:
 
@@ -151,6 +152,8 @@ Proposed steps:
 - Accept enum option value shape.
 - Defer config validation bounds.
 - Keep runtime mapping outside config option objects.
+- Accept Phase 1 runtime value mapping shape.
+- Defer route/storage mapping source kinds and transforms.
 - Continue the interview with manifest schema or remaining open questions.
 
 Risks:
@@ -214,6 +217,7 @@ Validation commands:
 - `rg -n "required|defaults to an empty list|fields:|canonical examples|manifest validation|command/status shape" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "Secret keys|secret App config|unknown manifest fields|raw Kubernetes manifest fallback shape|string|integer|boolean|enum" .agents/context docs/adr .agents/drafts PLANS.md`
 - `rg -n "config options use required|stable machine key|required.*false|value.*label|validation bounds|spec.runtime.values.mappings" .agents/context docs/adr .agents/drafts PLANS.md`
+- `rg -n "from.kind|to.helmValue|helmValue|mapping source|missing mapping|transforms|dot path" .agents/context docs/adr .agents/drafts PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:

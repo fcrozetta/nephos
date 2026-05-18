@@ -138,7 +138,51 @@ Do not put Helm value paths, environment variables, or Kubernetes field paths di
 
 Mapping config options into runtime deployment values happens through `spec.runtime.values.mappings[]`.
 
-The exact mapping object shape remains open.
+Phase 1 mapping source kinds:
+
+- `config`
+- `binding`
+
+Route and storage mapping source kinds are deferred.
+
+Config mapping shape:
+
+```yaml
+from:
+  kind: config
+  name: paperless_ocr_language
+to:
+  helmValue: paperless.ocr.language
+```
+
+Binding mapping shape:
+
+```yaml
+from:
+  kind: binding
+  name: database
+  field: uri
+to:
+  helmValue: env.DATABASE_URL
+```
+
+For binding sources, `name` references the App binding alias.
+
+For binding sources, `field` references a binding output field such as `uri`.
+
+The binding mapping shape may be revisited after a fuller Nephos manifest is evaluated.
+
+The `helmValue` target is a dot path in Phase 1.
+
+Do not use raw nested Helm value fragments as mapping targets in Phase 1.
+
+Do not support mapping transforms in Phase 1.
+
+If a mapping source is missing, reconciliation fails with `blocked` status and a reason.
+
+Mappings live only under `spec.runtime.values.mappings[]`.
+
+Do not define runtime mappings inline on config options or binding declarations.
 
 For Phase 1 App manifests:
 

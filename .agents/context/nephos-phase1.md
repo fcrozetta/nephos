@@ -75,6 +75,9 @@ Catalog and packaging:
 - `secret` App config option type deferred
 - config validation bounds such as min/max/regex/length deferred
 - config runtime mapping happens through `spec.runtime.values.mappings[]`
+- Phase 1 runtime mapping source kinds are `config` and `binding`
+- runtime mapping target is `to.helmValue` as a dot path
+- missing mapping sources block reconciliation with a reason
 - unknown manifest fields rejected once canonical schemas exist
 - no schema files until Fer approves concrete validation schema
 

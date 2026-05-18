@@ -179,6 +179,9 @@ Later accepted binding/provisioning direction:
 - `secret` App config option type is deferred
 - config validation bounds such as min/max/regex/length are deferred
 - config runtime mapping happens through `spec.runtime.values.mappings[]`
+- Phase 1 runtime mapping source kinds are `config` and `binding`
+- runtime mapping target is `to.helmValue` as a dot path
+- missing mapping sources block reconciliation with a reason
 - unknown manifest fields are rejected once canonical schemas exist
 - raw Kubernetes manifest fallback shape is deferred until first needed
 - the provisioning execution mechanism remains open

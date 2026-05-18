@@ -130,6 +130,16 @@ Accepted direction:
 - config validation bounds such as min/max/regex/length are deferred
 - config options do not carry Helm value paths, environment variables, or Kubernetes field paths
 - config runtime mapping happens through `spec.runtime.values.mappings[]`
+- Phase 1 runtime mapping source kinds are `config` and `binding`
+- config mappings use `from.kind: config`, `from.name`, and `to.helmValue`
+- binding mappings use `from.kind: binding`, `from.name`, `from.field`, and `to.helmValue`
+- binding source `name` references the App binding alias
+- binding source `field` references a binding output field such as `uri`
+- `helmValue` is a dot path in Phase 1
+- mapping transforms are deferred
+- missing mapping sources block reconciliation with a reason
+- mappings live only under `spec.runtime.values.mappings[]`
+- runtime mappings are not defined inline on config options or binding declarations
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `app-scoped-resource` means the Service creates a resource for the consuming App inside the Service instance
 - `none` means no Service-side resource is created for the binding
@@ -162,7 +172,10 @@ Need to decide:
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
 - future validation bounds such as min/max/regex/length
-- exact `spec.runtime.values.mappings[]` object shape
+- route and storage mapping source kinds
+- target path escaping, if Helm values need literal dots in keys
+- mapping transforms, if capability outputs stop being sufficient
+- whether to revise binding mapping source shape after seeing a fuller Nephos manifest
 - command/status shape needed before promoting draft sketches into canonical examples
 
 ## Dedicated Service Sharing Policy Details

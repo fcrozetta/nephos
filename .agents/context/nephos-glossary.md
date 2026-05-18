@@ -254,6 +254,25 @@ Config options must not become a second credential path beside bindings and gene
 
 Config options do not carry Helm value paths, environment variables, or Kubernetes field paths.
 
+## Runtime Value Mapping
+
+A mapping from Nephos semantic inputs to lower-level runtime deployment values.
+
+Phase 1 source kinds:
+
+- `config`
+- `binding`
+
+Mappings live under:
+
+- `spec.runtime.values.mappings[]`
+
+Mappings use explicit `from` and `to` objects.
+
+The Phase 1 target is `to.helmValue`, a Helm value dot path.
+
+Mappings are not declared inline on config options or binding declarations.
+
 ## Service Manifest
 
 A Nephos manifest that defines an installable Service.

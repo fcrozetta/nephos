@@ -41,6 +41,9 @@ Accepted binding/provisioning decisions reflected in the current draft sketches:
 - `secret` App config option type is deferred
 - config validation bounds such as min/max/regex/length are deferred
 - config runtime mapping happens through `spec.runtime.values.mappings[]`
+- Phase 1 runtime mapping source kinds are `config` and `binding`
+- runtime mapping target is `to.helmValue` as a dot path
+- missing mapping sources block reconciliation with a reason
 - Phase 1 provisioning modes are `app-scoped-resource` and `none`
 - `apiVersion`, `kind`, `metadata.name`, and `spec.runtime` are required for Phase 1 installable catalog entries
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists

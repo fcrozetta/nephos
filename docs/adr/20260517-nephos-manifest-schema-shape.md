@@ -108,7 +108,13 @@ Later accepted direction:
 - Config option `default` values should match the declared config option type.
 - `secret` App config option type is deferred.
 - Config validation bounds such as min/max/regex/length are deferred.
-- Runtime mappings stay in `spec.runtime.values.mappings[]`, not in config option objects.
+- Runtime mappings stay in `spec.runtime.values.mappings[]`, not in config option or binding objects.
+- Phase 1 runtime mapping source kinds are `config` and `binding`.
+- Config mappings use `from.kind: config`, `from.name`, and `to.helmValue`.
+- Binding mappings use `from.kind: binding`, `from.name`, `from.field`, and `to.helmValue`.
+- `helmValue` is a dot path in Phase 1.
+- Mapping transforms are deferred.
+- Missing mapping sources block reconciliation with a reason.
 - Service `spec.provides[]` is required non-empty.
 - Service `spec.provisioning.mode` is required as either `none` or `app-scoped-resource`.
 - Unknown manifest fields are rejected once canonical schemas exist.
@@ -137,7 +143,9 @@ Need to decide:
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection
 - future validation bounds such as min/max/regex/length
-- exact `spec.runtime.values.mappings[]` object shape
+- route and storage mapping source kinds
+- target path escaping, if Helm values need literal dots in keys
+- mapping transforms, if capability outputs stop being sufficient
 - command/status shape needed before promoting draft sketches into canonical examples
 - when to create files under `schemas/`
 

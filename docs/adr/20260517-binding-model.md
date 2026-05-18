@@ -81,6 +81,23 @@ The alias gives the App a stable semantic name for the binding.
 
 Nephos maps binding outputs into runtime deployment values later through the accepted `spec.runtime.values.mappings[]` lane.
 
+Phase 1 binding runtime mappings use:
+
+```yaml
+from:
+  kind: binding
+  name: database
+  field: uri
+to:
+  helmValue: env.DATABASE_URL
+```
+
+The binding source `name` references the App binding alias.
+
+The binding source `field` references a binding output field such as `uri`.
+
+The binding mapping source shape may be revisited after a fuller Nephos manifest is evaluated.
+
 Do not make Apps depend on Service namespace Secrets.
 
 Do not expose raw Kubernetes Secret templates or raw environment variables as the primary Nephos manifest UX.

@@ -301,6 +301,25 @@ Config options do not carry Helm value paths, environment variables, or Kubernet
 
 Config runtime mapping happens through `spec.runtime.values.mappings[]`.
 
+Phase 1 runtime mapping source kinds are:
+
+- `config`
+- `binding`
+
+Runtime mappings use explicit `from` and `to` objects.
+
+Config mappings use `from.kind: config`, `from.name`, and `to.helmValue`.
+
+Binding mappings use `from.kind: binding`, `from.name`, `from.field`, and `to.helmValue`.
+
+The `helmValue` target is a dot path in Phase 1.
+
+Mappings have no transforms in Phase 1.
+
+Missing mapping sources block reconciliation with a reason.
+
+Mappings live only under `spec.runtime.values.mappings[]`.
+
 For Phase 1 Service manifests:
 
 - `spec.provides[]` is required and must be non-empty.
