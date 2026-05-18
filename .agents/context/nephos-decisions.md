@@ -243,6 +243,8 @@ Kubernetes readiness is an input, not the full status model.
 
 Removed and destroyed are lifecycle states, not health statuses.
 
+For API 0.0.1, `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value.
+
 Health status levels are `unknown`, `pending`, `healthy`, `degraded`, `blocked`, `stopped`, and `not_applicable`.
 
 ## D031: Status requires reasons and evidence
@@ -513,7 +515,7 @@ Nephos should block the Service stop unless forced and show an impact list.
 
 Use illustrative generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`.
 
-The exact API path and CLI command spelling for root domain operations remain open.
+The exact CLI command spelling for root domain operations remains open.
 
 ## D065: Nephos manifests use YAML
 
@@ -1054,7 +1056,9 @@ Wildcard behavior belongs in DNS, tunnel, or external routing configuration, not
 
 Phase 1 needs platform configuration operations for add, list, remove, and set default.
 
-The exact HTTP API path and CLI command spelling remain open.
+The accepted HTTP API path is `/platform/config/domains`.
+
+The exact CLI command spelling remains open.
 
 Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
 
@@ -1095,7 +1099,7 @@ Open CLI-phase questions:
 - exact root domain command group spelling
 - setup idempotency behavior
 - App install behavior when setup is missing
-- exact API paths used by CLI setup and root domain operations
+- exact API paths used by broader CLI setup operations beyond root domain config
 
 ## D121: Service operations are reserved but bounded
 
@@ -1114,3 +1118,63 @@ Canonical Service operation schemas and examples require later explicit approval
 Future user-facing or risky Service operations must be dependency-aware and status/audit visible.
 
 Destructive or risky Service operations must require explicit confirmation.
+
+## D122: API 0.0.1 uses a REST-ish resource model
+
+API 0.0.1 uses REST-ish resources rather than a command/action API or CLI-shaped HTTP paths.
+
+Lifecycle operations are actions on resources, not raw Kubernetes commands.
+
+## D123: Installed Apps and Services are instance resources
+
+Installed Apps are represented internally as `AppInstance` records.
+
+Installed Services are represented internally as `ServiceInstance` records.
+
+The public API may expose installed App instances under `/apps` and installed Service instances under `/services`.
+
+Catalog App and Service manifests are separate from installed instances.
+
+## D124: Bindings are first-class API/database resources
+
+Bindings connect App instance requirement aliases to Service instance capabilities.
+
+Bindings are not embedded only inside App desired state and are not inferred from Kubernetes Secret metadata.
+
+## D125: Root domain API path is /platform/config/domains
+
+Ingress root domains are platform configuration resources in the API/database.
+
+The accepted Phase 1 API path is:
+
+```text
+/platform/config/domains
+```
+
+These resources represent Nephos ingress root domains, not generic DNS management.
+
+## D126: API lifecycle and status are separate
+
+Lifecycle state is desired state.
+
+API 0.0.1 active lifecycle states are `running`, `stopped`, and `removed`.
+
+`destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value.
+
+Status is separate from lifecycle state.
+
+API 0.0.1 should persist the latest status snapshot with reason and evidence fields.
+
+## D127: API mutations trigger reconciliation
+
+Mutating API calls update desired state and trigger or enqueue reconciliation.
+
+A manual reconcile endpoint is allowed for debugging.
+
+The API must not bypass desired state and reconciliation by directly mutating Kubernetes inline as the primary effect of a command.
+
+## D128: API 0.0.1 scope is the reference flow
+
+API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow.
+
+Future backups, upgrades, auth/RBAC, resource profiles, remote catalogs, and generalized Service operation APIs are deferred.

@@ -50,6 +50,8 @@ Lifecycle states include:
 
 `removed` and `destroyed` are lifecycle states, not health statuses.
 
+For API 0.0.1, `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value.
+
 Every status must include reasons and/or evidence.
 
 Do not show opaque green/red status without explaining why.

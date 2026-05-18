@@ -178,7 +178,13 @@ Phase 1 root domain operations:
 - remove root domain
 - set default root domain
 
-The exact HTTP API path and CLI command spelling remain open.
+Accepted API path:
+
+```text
+/platform/config/domains
+```
+
+The exact CLI command spelling remains open.
 
 Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
 
@@ -276,7 +282,7 @@ Do not expose secret values unless a future explicit reveal command is designed 
 
 ## Still Open
 
-- exact API path and CLI command spelling for root domain operations
+- exact CLI command spelling for root domain operations
 - whether setup is interactive, flag-driven, or both
 - exact setup command spelling in `nephos-cli`
 - setup idempotency behavior

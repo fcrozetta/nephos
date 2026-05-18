@@ -22,7 +22,9 @@ They are not local config files that bypass the canonical desired-state model.
 
 Nephos API and CLI manage ingress root domains through platform configuration operations.
 
-The exact HTTP API path and CLI command spelling remain open.
+The accepted HTTP API path is `/platform/config/domains`.
+
+The exact CLI command spelling remains open.
 
 ## Configuration Shape
 
@@ -71,6 +73,12 @@ Phase 1 needs platform configuration operations for:
 - list root domains
 - remove root domain
 - set default root domain
+
+Accepted API path:
+
+```text
+/platform/config/domains
+```
 
 Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
 
@@ -133,7 +141,6 @@ Initial setup has one more required configuration step, but App install behavior
 
 Need to decide later:
 
-- exact API path
 - exact CLI command spelling
 - whether setup is interactive, flag-driven, or both
 - exact setup command spelling in `nephos-cli`

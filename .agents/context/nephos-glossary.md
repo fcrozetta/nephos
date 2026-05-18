@@ -246,6 +246,8 @@ Lifecycle state is separate from health status.
 
 Removed and destroyed are lifecycle states, not health statuses.
 
+For API 0.0.1, `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value.
+
 ## Health Status
 
 An operational status that answers whether an entity that should be operating is operating correctly.

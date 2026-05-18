@@ -32,7 +32,9 @@ The reference scenario contains:
 - Paperless binding to PostgreSQL
 - local route intent using generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`
 
-The exact API path and CLI command spelling for root domain operations remain open.
+Root domain API resources use `/platform/config/domains`.
+
+The exact CLI command spelling for root domain operations remains open.
 
 Paperless requires only PostgreSQL in the Phase 1 reference scenario.
 

@@ -66,6 +66,7 @@ Accepted direction:
 - generated hostname collisions fail and require explicit route, App instance, or domain policy changes
 - Services do not expose admin routes through Nephos ingress in Phase 1
 - root domain operations are add, list, remove, and set default
+- root domain API path is `/platform/config/domains`
 - removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it
 - Nephos setup creates initial platform configuration before Apps are installed
 - setup includes at least one ingress root domain and exactly one default/canonical root domain
@@ -75,7 +76,7 @@ Accepted direction:
 
 Need to decide:
 
-- exact API path and CLI command spelling for root domain operations
+- exact CLI command spelling for root domain operations
 - whether setup is interactive, flag-driven, or both
 - future Cloudflare adapter shape
 - future Tailscale adapter shape
@@ -103,7 +104,43 @@ Need to decide later in the `nephos-cli` phase:
 - exact root domain command group spelling
 - setup idempotency behavior
 - App install behavior when setup is missing
-- exact API paths used by CLI setup and root domain operations
+- exact API paths used by broader CLI setup operations beyond root domain config
+
+## API 0.0.1 Resource Model
+
+Question:
+
+What resources should API 0.0.1 expose?
+
+Accepted direction:
+
+- API 0.0.1 uses a REST-ish resource model
+- installed Apps are represented internally as `AppInstance` records
+- installed Services are represented internally as `ServiceInstance` records
+- public API may expose installed App instances under `/apps`
+- public API may expose installed Service instances under `/services`
+- catalog App and Service manifests are separate from installed instances
+- bindings are first-class API/database resources
+- root domain resources use `/platform/config/domains`
+- root domain resources are ingress root domains, not generic DNS management
+- lifecycle state is desired state
+- active lifecycle states are `running`, `stopped`, and `removed`
+- `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value
+- status is separate from lifecycle state
+- API 0.0.1 should persist the latest status snapshot with reasons and evidence
+- API reads local filesystem catalog manifests
+- installed records store catalog identity and version snapshot information
+- mutating API calls update desired state and trigger or enqueue reconciliation
+- manual reconcile endpoint is allowed for debugging
+- API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
+
+Need to decide:
+
+- exact HTTP method and sub-action shape for lifecycle operations
+- exact status response schema
+- exact manual reconcile endpoint shape
+- exact catalog read/list endpoint shape
+- exact error envelope and validation response shape
 
 ## Secrets Details
 
@@ -581,5 +618,5 @@ Need to decide:
 - exact Service manifest examples
 - exact commands
 - expected status outputs
-- exact API path and CLI command spelling for root domain operations
+- exact CLI command spelling for root domain operations
 - data preservation checks

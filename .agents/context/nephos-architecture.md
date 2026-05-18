@@ -73,6 +73,20 @@ The API/database is the canonical source of desired platform state.
 
 Platform configuration that affects reconciliation, such as ingress root domains, lives in the API/database as desired state.
 
+API 0.0.1 uses a REST-ish resource model.
+
+Installed Apps are represented internally as `AppInstance` records and may be exposed publicly under `/apps`.
+
+Installed Services are represented internally as `ServiceInstance` records and may be exposed publicly under `/services`.
+
+Bindings are first-class API/database resources connecting App instance requirement aliases to Service instance capabilities.
+
+Ingress root domains are platform configuration resources at `/platform/config/domains`.
+
+Status is separate from lifecycle state and should persist the latest status snapshot with reasons and evidence.
+
+Mutating API calls update desired state and trigger or enqueue reconciliation.
+
 The backend may start with an empty database.
 
 When required platform configuration is missing, the backend should report platform configuration as incomplete until setup creates the required desired state.

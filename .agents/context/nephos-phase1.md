@@ -121,6 +121,7 @@ Ingress and secrets:
 - ingress root domains stored as platform desired state in the Nephos API/database
 - ingress root domains managed through Nephos API/CLI platform configuration operations
 - root domain config uses `name`, `domain`, and `default`
+- root domain API path is `/platform/config/domains`
 - host rules generated for each configured root domain
 - default route host pattern `<app-instance>.<root-domain>`
 - non-default route host pattern `<route>.<app-instance>.<root-domain>`
@@ -206,7 +207,7 @@ Reference scenario:
 
 ## Still To Define
 
-- exact API path and CLI command spelling for root domain operations
+- exact CLI command spelling for root domain operations
 - whether setup is interactive, flag-driven, or both
 - exact setup command spelling in `nephos-cli`
 - setup idempotency behavior

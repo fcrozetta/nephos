@@ -50,6 +50,11 @@ Persistence:
 - The Nephos API/database is the source of truth for desired platform state
 - Platform configuration that affects reconciliation, such as ingress root domains, is stored in the API/database as desired state
 - The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state
+- API 0.0.1 uses REST-ish resource APIs over installed Apps, installed Services, bindings, platform configuration domains, and status
+- Installed Apps are internal `AppInstance` records and may be exposed under `/apps`
+- Installed Services are internal `ServiceInstance` records and may be exposed under `/services`
+- Ingress root domains are exposed at `/platform/config/domains`
+- Mutating API calls update desired state and trigger or enqueue reconciliation
 
 Migrations:
 
