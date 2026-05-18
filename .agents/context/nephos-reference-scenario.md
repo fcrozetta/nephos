@@ -56,9 +56,16 @@ Command spelling and status output are not finalized yet.
 
 Use an illustrative local route such as:
 
-- `paperless.<local-domain>`
+- `paperless.nephos.local`
+- `paperless.nephos.fcrozetta.app`
 
-The exact local domain, wildcard behavior, DNS behavior, and TLS behavior remain open.
+These are examples of two configured ingress root domains for the same Paperless route.
+
+One configured root domain is canonical/default.
+
+The other generated hostnames are aliases.
+
+DNS, Cloudflare Tunnel, and TLS termination remain user-managed in Phase 1.
 
 The route should exercise Nephos-owned route intent and Kubernetes-owned Ingress resources.
 

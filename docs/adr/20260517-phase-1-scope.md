@@ -43,6 +43,12 @@ Phase 1 includes:
 - basic provider selection
 - shared/global Service instances first
 - basic ingress intent
+- multiple configured ingress root domains with one default/canonical domain
+- at least one root domain for generated route hosts
+- generated host-based routes for each configured root domain
+- HTTP-only Nephos-managed ingress
+- no path-based App routing
+- no Service admin routes through Nephos ingress
 - minimal Nephos-aware health/status
 - backup intent/status only
 - pinned versions and manual upgrades

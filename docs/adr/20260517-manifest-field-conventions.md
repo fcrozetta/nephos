@@ -115,7 +115,25 @@ Nephos derives hostnames from App instance name, route name, visibility, and con
 
 The same route identity should be usable across local, public, and tailnet/tunnel contexts.
 
-Exact local domain, public root domain, wildcard behavior, MagicDNS/tailnet behavior, and TLS remain open.
+Phase 1 supports multiple configured ingress root domains with one default/canonical domain.
+
+Default route host pattern:
+
+```text
+<app-instance>.<root-domain>
+```
+
+Non-default route host pattern:
+
+```text
+<route>.<app-instance>.<root-domain>
+```
+
+Do not use path-based App routing in Phase 1.
+
+Phase 1 Nephos-managed ingress is HTTP-only.
+
+MagicDNS/tailnet behavior remains open.
 
 Do not put full hostnames in App manifests as the primary route model.
 

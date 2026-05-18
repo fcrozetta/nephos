@@ -47,6 +47,74 @@ The practical requirement is:
 - Nephos should not require a different ingress model for that to work
 - Nephos does not manage Cloudflare credentials, tunnel lifecycle, or DNS automation in Phase 1
 
+## Root Domains And Hostnames
+
+Phase 1 supports multiple configured ingress root domains.
+
+Exactly one configured root domain is the default/canonical domain.
+
+At least one root domain is required for generated route hosts.
+
+Nephos generates host rules for each configured root domain.
+
+Root domains are aliases for the same Nephos route intent.
+
+They do not create separate Apps, separate routes, or separate bindings.
+
+Example root domains:
+
+- `nephos.local`
+- `nephos.fcrozetta.app`
+
+Default route host pattern:
+
+```text
+<app-instance>.<root-domain>
+```
+
+Non-default route host pattern:
+
+```text
+<route>.<app-instance>.<root-domain>
+```
+
+Example:
+
+- `paperless.nephos.local`
+- `paperless.nephos.fcrozetta.app`
+- `api.paperless.nephos.local`
+- `api.paperless.nephos.fcrozetta.app`
+
+Status should identify the canonical URL and may list aliases.
+
+Avoid path-based App routing in Phase 1.
+
+Do not require Apps to run under paths such as `/paperless`.
+
+Many self-hosted Apps assume host-root deployment or need app-specific base path support.
+
+## TLS
+
+Phase 1 Nephos-managed ingress is HTTP-only.
+
+TLS automation, cert-manager integration, and user-provided TLS Secret support are deferred.
+
+User-managed systems such as Cloudflare Tunnel may terminate TLS outside Nephos.
+
+Nephos does not manage Cloudflare credentials, tunnel lifecycle, DNS records, TLS certificates, or certificate renewal in Phase 1.
+
+## Collision Behavior
+
+If generated hostnames collide, Nephos fails and requires an explicit route, App instance, or domain policy change.
+
+Nephos does not suffix, randomize, or silently override hostnames.
+
+## Service Admin Routes
+
+Services do not expose admin routes through Nephos ingress in Phase 1.
+
+Service management stays through Nephos API/CLI operations and future typed Service operations.
+
 ## Stopped And Removed Apps
 
 Stopping an App keeps route intent.
@@ -74,14 +142,9 @@ Nephos should manage:
 
 Need to define:
 
-- local DNS behavior
-- wildcard domain behavior
-- TLS/cert-manager strategy
-- whether Services can expose admin routes
 - future Cloudflare integration
 - future Tailscale integration
-- exact host naming rules
-- ingress hostname collision handling
+- exact ingress root domain configuration storage/API shape
 
 ## Consequences
 

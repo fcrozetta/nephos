@@ -79,6 +79,13 @@ Nephos must not expose raw Helm values or raw Kubernetes object specs as the pri
 
 Nephos should map Nephos-level config, bindings, storage intent, and visibility intent into runtime deployment values later.
 
+Phase 1 route hostnames are generated from route intent and configured ingress root domains:
+
+- default route: `<app-instance>.<root-domain>`
+- non-default route: `<route>.<app-instance>.<root-domain>`
+
+App manifests must not carry full hostnames as primary route identity.
+
 ## Binding Shape
 
 Binding schema remains minimal at the manifest level for now.

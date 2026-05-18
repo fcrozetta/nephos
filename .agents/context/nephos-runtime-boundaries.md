@@ -97,6 +97,55 @@ Practical Phase 1 constraint:
 - Nephos should not require a different product model for that to work
 - Nephos does not manage Cloudflare credentials, tunnel lifecycle, or DNS automation in Phase 1
 
+Phase 1 supports multiple configured ingress root domains.
+
+Exactly one configured root domain is the default/canonical domain.
+
+At least one root domain is required for generated route hosts.
+
+Nephos generates host rules for each configured root domain.
+
+Root domains are aliases for the same Nephos route intent.
+
+They do not create separate Apps, separate routes, or separate bindings.
+
+Default route host pattern:
+
+```text
+<app-instance>.<root-domain>
+```
+
+Non-default route host pattern:
+
+```text
+<route>.<app-instance>.<root-domain>
+```
+
+Example:
+
+- `paperless.nephos.local`
+- `paperless.nephos.fcrozetta.app`
+- `api.paperless.nephos.local`
+- `api.paperless.nephos.fcrozetta.app`
+
+Status should identify the canonical URL and may list aliases.
+
+Avoid path-based App routing in Phase 1.
+
+Do not require Apps to run under paths such as `/paperless`.
+
+Phase 1 Nephos-managed ingress is HTTP-only.
+
+TLS automation, cert-manager integration, and user-provided TLS Secret support are deferred.
+
+User-managed systems such as Cloudflare Tunnel may terminate TLS outside Nephos.
+
+If generated hostnames collide, Nephos fails and requires an explicit route, App instance, or domain policy change.
+
+Services do not expose admin routes through Nephos ingress in Phase 1.
+
+Service management stays through Nephos API/CLI operations and future typed Service operations.
+
 Stopping an App keeps route intent.
 
 Stopped Apps may keep runtime ingress objects, but status must report the App as stopped or unavailable.
@@ -181,11 +230,7 @@ Do not expose secret values unless a future explicit reveal command is designed 
 
 ## Still Open
 
-- exact default local hostname/domain policy
-- wildcard domain behavior
-- TLS and cert-manager strategy
-- ingress hostname collision handling
-- whether Services can expose admin routes
+- exact ingress root domain configuration storage/API shape
 - secret rotation behavior
 - whether/how secrets participate in backup
 - non-PostgreSQL Secret key serialization

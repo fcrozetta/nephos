@@ -104,6 +104,24 @@ Route names must follow the accepted Nephos machine identifier rule.
 
 Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
 
+Phase 1 supports multiple configured ingress root domains with one default/canonical domain.
+
+Default route host pattern:
+
+```text
+<app-instance>.<root-domain>
+```
+
+Non-default route host pattern:
+
+```text
+<route>.<app-instance>.<root-domain>
+```
+
+Do not use path-based App routing in Phase 1.
+
+Phase 1 Nephos-managed ingress is HTTP-only.
+
 Do not put full hostnames in App manifests as the primary route model.
 
 Accepted Phase 1 config option types:

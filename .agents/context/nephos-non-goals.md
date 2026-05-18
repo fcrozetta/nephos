@@ -45,6 +45,8 @@ Phase 1 does not include:
 - Tailscale automation
 - DNS automation
 - TLS/cert-manager automation
+- path-based App routing
+- Service admin routes through Nephos ingress
 - external secret manager integration
 - automatic latest upgrades
 - guaranteed rollback

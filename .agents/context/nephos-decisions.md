@@ -301,6 +301,26 @@ Kubernetes owns concrete Ingress resources.
 
 Phase 1 implements local visibility and reserves private, public, and tailnet visibility for later.
 
+Phase 1 supports multiple configured ingress root domains with one default/canonical domain.
+
+At least one root domain is required for generated route hosts.
+
+Nephos generates host rules for each configured root domain.
+
+Root domains are aliases for the same route intent, not separate Apps or separate routes.
+
+Default route host pattern is `<app-instance>.<root-domain>`.
+
+Non-default route host pattern is `<route>.<app-instance>.<root-domain>`.
+
+Path-based App routing is out of scope for Phase 1.
+
+Phase 1 Nephos-managed ingress is HTTP-only.
+
+If generated hostnames collide, Nephos fails and requires an explicit route, App instance, or domain policy change.
+
+Services do not expose admin routes through Nephos ingress in Phase 1.
+
 ## D041: Manual tunnel compatibility without tunnel automation
 
 Cloudflare Tunnel, Tailscale, DNS automation, and TLS automation are deferred.
@@ -463,9 +483,9 @@ Nephos should block the Service stop unless forced and show an impact list.
 
 ## D064: Reference scenario route is illustrative
 
-Use an illustrative local route such as `paperless.<local-domain>`.
+Use illustrative generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`.
 
-The exact local domain, wildcard behavior, DNS behavior, and TLS behavior remain open.
+The exact ingress root domain configuration storage/API shape remains open.
 
 ## D065: Nephos manifests use YAML
 
@@ -526,6 +546,8 @@ Installed App and Service instances live in Nephos desired state, not catalog fi
 App manifests use `spec.routes[]` with route `name`, `visibility`, and `target`.
 
 Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy.
+
+Phase 1 hostname generation uses `<app-instance>.<root-domain>` for default routes and `<route>.<app-instance>.<root-domain>` for non-default routes.
 
 Do not put full hostnames in App manifests as the primary route model.
 

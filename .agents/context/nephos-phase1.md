@@ -113,6 +113,15 @@ Ingress and secrets:
 - local visibility mode
 - Nephos-owned route intent
 - Kubernetes-owned Ingress resources
+- multiple configured ingress root domains
+- one default/canonical ingress root domain
+- at least one root domain for generated route hosts
+- host rules generated for each configured root domain
+- default route host pattern `<app-instance>.<root-domain>`
+- non-default route host pattern `<route>.<app-instance>.<root-domain>`
+- path-based App routing out of scope
+- HTTP-only Nephos-managed ingress
+- no Service admin routes through Nephos ingress
 - stopped Apps keep route intent and may keep runtime ingress
 - remove/destroy remove runtime ingress
 - Kubernetes Secrets for Phase 1
@@ -178,7 +187,7 @@ Reference scenario:
 - PostgreSQL provisions an app-scoped database/user for Paperless
 - Nephos materializes PostgreSQL binding outputs into the Paperless App namespace
 - PostgreSQL binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`
-- expose Paperless through local route intent using a placeholder like `paperless.<local-domain>`
+- expose Paperless through local route intent using examples such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`
 - stop/start preserves data
 - remove preserves persistent data and metadata
 - remove preserves app-scoped PostgreSQL resources and binding metadata
@@ -188,7 +197,7 @@ Reference scenario:
 
 ## Still To Define
 
-- ingress/TLS/local DNS hostname behavior
+- exact ingress root domain configuration storage/API shape
 - binding Secret rotation behavior
 - backup guarantees
 - local development workflow

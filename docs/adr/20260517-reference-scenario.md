@@ -30,9 +30,9 @@ The reference scenario contains:
 - Paperless App
 - `postgres` capability
 - Paperless binding to PostgreSQL
-- local route intent using a placeholder host such as `paperless.<local-domain>`
+- local route intent using generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`
 
-The exact local domain remains open.
+The exact ingress root domain configuration storage/API shape remains open.
 
 Paperless requires only PostgreSQL in the Phase 1 reference scenario.
 
@@ -78,11 +78,18 @@ Draft manifests are non-canonical and must not be treated as source of truth.
 
 ## Ingress Rule
 
-Use an illustrative local route such as:
+Use illustrative generated hosts such as:
 
-- `paperless.<local-domain>`
+- `paperless.nephos.local`
+- `paperless.nephos.fcrozetta.app`
 
-The exact local domain, wildcard behavior, DNS behavior, and TLS behavior remain open.
+These are two configured root domains for the same Paperless route.
+
+One configured root domain is canonical/default.
+
+The other generated hostnames are aliases.
+
+DNS, Cloudflare Tunnel, and TLS termination remain user-managed in Phase 1.
 
 The route should exercise Nephos-owned route intent and Kubernetes-owned Ingress resources.
 

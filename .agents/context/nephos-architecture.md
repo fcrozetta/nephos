@@ -156,6 +156,34 @@ Public/private/tailnet exposure, Cloudflare Tunnel automation, Tailscale automat
 
 Nephos-generated local ingress should be compatible with a manually configured Cloudflare Tunnel.
 
+Phase 1 supports multiple configured ingress root domains with one default/canonical domain.
+
+At least one root domain is required for generated route hosts.
+
+Nephos generates host rules for each configured root domain.
+
+Root domains are aliases for the same route intent, not separate Apps or separate routes.
+
+Default route host pattern:
+
+```text
+<app-instance>.<root-domain>
+```
+
+Non-default route host pattern:
+
+```text
+<route>.<app-instance>.<root-domain>
+```
+
+Avoid path-based App routing in Phase 1.
+
+Phase 1 Nephos-managed ingress is HTTP-only.
+
+If generated hostnames collide, Nephos fails and requires explicit user input.
+
+Services do not expose admin routes through Nephos ingress in Phase 1.
+
 Phase 1 uses Kubernetes Secrets.
 
 Service-internal/admin secrets live in Service namespaces.

@@ -46,16 +46,24 @@ Accepted direction:
 - private, public, and tailnet visibility are reserved
 - Cloudflare Tunnel and Tailscale automation are deferred
 - manually configured Cloudflare Tunnel must work with Nephos local ingress
+- multiple configured ingress root domains are supported
+- exactly one ingress root domain is the default/canonical domain
+- at least one root domain is required for generated route hosts
+- Nephos generates host rules for each configured root domain
+- root domains are aliases for the same route intent, not separate Apps or routes
+- default route host pattern is `<app-instance>.<root-domain>`
+- non-default route host pattern is `<route>.<app-instance>.<root-domain>`
+- path-based App routing is out of Phase 1
+- Phase 1 Nephos-managed ingress is HTTP-only
+- Cloudflare Tunnel or other user-managed systems may terminate TLS outside Nephos
+- generated hostname collisions fail and require explicit route, App instance, or domain policy changes
+- Services do not expose admin routes through Nephos ingress in Phase 1
 - stopped Apps keep route intent and may keep runtime ingress
 - remove/destroy remove runtime ingress
 
 Need to decide:
 
-- default local domain
-- wildcard hostname policy
-- ingress hostname collision behavior
-- TLS/cert-manager strategy
-- whether Services can expose admin routes
+- exact ingress root domain configuration storage/API shape
 - future Cloudflare adapter shape
 - future Tailscale adapter shape
 
@@ -167,6 +175,11 @@ Accepted direction:
 - App says it needs a capability, Service says it provides a capability, Nephos resolves and creates bindings outside the manifest
 - routes declare identity/visibility/target, not full hostnames
 - Nephos derives hostnames from App instance name, route name, visibility, and configured domain policy
+- Phase 1 supports multiple configured ingress root domains with one default/canonical domain
+- default route host pattern is `<app-instance>.<root-domain>`
+- non-default route host pattern is `<route>.<app-instance>.<root-domain>`
+- path-based App routing is out of Phase 1
+- Phase 1 Nephos-managed ingress is HTTP-only
 - Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`
 - App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists
 - Service `spec.provides[]` is required and must be non-empty
@@ -514,7 +527,7 @@ Accepted direction:
 - destroy requires destructive confirmation when persistent data exists
 - include Service dependency impact
 - attempting to stop PostgreSQL while Paperless depends on it is blocked unless forced and shows an impact list
-- use illustrative route placeholder such as `paperless.<local-domain>`
+- use illustrative route examples such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`
 
 Need to decide:
 
@@ -522,5 +535,5 @@ Need to decide:
 - exact Service manifest examples
 - exact commands
 - expected status outputs
-- exact ingress hostname policy
+- exact ingress root domain configuration storage/API shape
 - data preservation checks
