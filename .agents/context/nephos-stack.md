@@ -62,6 +62,14 @@ Persistence:
 - mutating responses prefer `202 Accepted` with `{ resource, reconciliation, status? }`
 - Ingress root domains are exposed at `/platform/config/domains`
 - Mutating API calls update desired state and create a persisted reconciliation request
+- Database relationships use internal stable text ids
+- Public API paths use unique installed instance slugs
+- Core domain tables include `id`, `created_at`, and `updated_at`
+- Enum-like state fields use SQLite `CHECK` constraints
+- SQLite foreign keys are enabled with restrictive relationships by default
+- JSON text columns are limited to validated snapshots and flexible payloads
+- Latest status snapshots are keyed by `resource_type` and `resource_id`
+- API 0.0.1 reconciliation requests use minimal fields: `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
 
 Migrations:
 
@@ -69,6 +77,8 @@ Migrations:
 - No ORM-driven migration framework is selected for Phase 1
 - Before the first usable version, local development may destroy and recreate the SQLite database
 - Initial schema should live in `migrations/0000_initial.sql`
+- `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
+- `schema_migrations` should exist in the initial schema
 - Forward-compatible migration discipline starts after the first usable version is established
 
 Controller/reconciler:

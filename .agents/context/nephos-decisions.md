@@ -1543,3 +1543,75 @@ Impact details include:
 FastAPI/Pydantic framework validation errors may remain in their default framework shape for API 0.0.1.
 
 Do not treat framework validation error shape as stable Nephos product API.
+
+## D170: Database relationships use internal ids and public resources use slugs
+
+Use internal stable text ids for database relationships.
+
+Use unique public slugs for user-addressable resources such as installed App instances and Service instances.
+
+Public API paths continue to use installed instance slugs, not internal ids.
+
+## D171: Core domain tables carry timestamps
+
+Core domain tables should include `id`, `created_at`, and `updated_at`.
+
+User-addressable domain tables should additionally include a unique `slug`.
+
+`schema_migrations` uses migration metadata fields recorded in D177.
+
+## D172: State enums use SQLite CHECK constraints
+
+Use SQLite `CHECK` constraints for accepted enum-like state fields.
+
+At minimum, enforce accepted lifecycle states, reconciliation request states, and status levels.
+
+## D173: SQLite foreign keys are enabled and lifecycle deletes are explicit
+
+Enable SQLite foreign keys.
+
+Use restrictive relationships by default.
+
+Do not rely on broad `ON DELETE CASCADE` to implement Nephos lifecycle semantics.
+
+Deletes for `remove` and `destroy` must happen through explicit domain transactions that preserve accepted lifecycle and data-deletion rules.
+
+## D174: JSON text columns are validated snapshots and payloads only
+
+Use SQLite JSON text columns only for validated snapshots and flexible payloads.
+
+Do not hide authoritative relationships, lifecycle state, dependency tracking, or public identity in generic JSON blobs.
+
+## D175: Reconciliation request columns stay minimal for API 0.0.1
+
+For API 0.0.1, `reconciliation_requests` uses the accepted minimum fields:
+
+- `id`
+- `target_type`
+- `target_id`
+- `state`
+- `error`
+- `created_at`
+- `updated_at`
+
+Attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable.
+
+## D176: Status snapshots are keyed by resource target
+
+Persist latest status snapshots as one row per resource target.
+
+Use a unique key over `resource_type` and `resource_id`.
+
+Do not store latest status JSON directly on each resource row as the primary model.
+
+Status event history remains deferred.
+
+## D177: Schema migrations track version and applied_at
+
+Track applied migrations with:
+
+```sql
+schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)
+```
+
+`schema_migrations` should exist in the initial schema.

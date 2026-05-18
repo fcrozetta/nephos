@@ -68,6 +68,7 @@ Current understanding:
 - Batch 29 reconciliation execution is accepted: API 0.0.1 uses an API-owned in-process background reconciler with persisted SQLite reconciliation requests; mutating API calls write desired-state changes plus a reconciliation request in one transaction and return after commit; requests target one App instance, Service instance, binding, or platform domain configuration; request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`; handlers must be idempotent and safe to retry; one serialized worker is accepted initially; simple capped retry is intended but automatic retry may be deferred from API 0.0.1 if heavy; the reconciler writes latest status snapshots; failures do not roll back desired state; drift is detected/reported for Nephos-owned resources and reconciled only when desired state or manual reconciliation asks for it.
 - Batch 30 API lifecycle action shape is accepted: install mutation uses `POST /apps` and `POST /services` with catalog refs in the body; catalog install endpoints are not primary; lifecycle uses `POST /apps/{appInstance}/actions/start|stop|remove|destroy` and equivalent Service paths; destroy stays a confirmed `POST .../actions/destroy`, not `DELETE`; dependency-blocked Service lifecycle returns `409 Conflict` with impact list unless forced; mutating responses prefer `202 Accepted` with resource/reconciliation request/status metadata; repeated lifecycle requests to the same desired state are idempotent.
 - Batch 31 API payload/error shape is accepted: public API paths use installed instance slugs, not opaque UUIDs; install bodies use `catalogRef` with `kind`, `name`, optional `source`, optional `instanceName`, optional `config`, and App install `bindings`; lifecycle action bodies use optional `force` and `confirm`, with `confirm` required only for destroy; mutation responses use `{ resource, reconciliation, status? }`; Nephos-owned domain errors use `{ error: { code, message, details? } }`; dependency-blocked impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability; FastAPI/Pydantic validation errors may remain framework-shaped for API 0.0.1 and are not stable Nephos product API.
+- Batch 32 database schema mechanics are accepted: database relationships use internal stable text ids, user-addressable installed resources use unique public slugs, core domain tables include `id`, `created_at`, and `updated_at`, state fields use SQLite `CHECK` constraints, SQLite foreign keys are enabled with restrictive relationships by default, lifecycle deletes happen through explicit domain transactions rather than broad cascades, JSON text columns are only for validated snapshots/flexible payloads, API 0.0.1 reconciliation requests use the minimal accepted field set, latest status snapshots are keyed by resource target, and `schema_migrations` uses `version TEXT PRIMARY KEY` plus `applied_at TEXT`.
 
 Files likely to change:
 
@@ -117,6 +118,7 @@ Files likely to change:
 - `docs/adr/20260518-reconciliation-execution-model.md`
 - `docs/adr/20260518-api-lifecycle-action-shape.md`
 - `docs/adr/20260518-api-payload-and-error-shape.md`
+- `docs/adr/20260518-database-schema-mechanics.md`
 
 Proposed steps:
 
@@ -174,6 +176,7 @@ Proposed steps:
 - Add reconciliation context and ADR.
 - Accept the API lifecycle action shape.
 - Accept the API payload and error shape.
+- Accept the database schema mechanics.
 - Continue the interview with API implementation details or remaining open questions.
 
 Risks:
@@ -222,6 +225,10 @@ Risks:
 - Using `DELETE` for destroy and losing confirmation/force/body semantics.
 - Treating framework validation errors as a stable public contract before deciding normalization.
 - Exposing opaque ids publicly and weakening local-first inspectability.
+- Coupling public slugs to foreign-key relationships and making future rename behavior unnecessarily painful.
+- Letting broad database cascades bypass Nephos lifecycle and data-deletion semantics.
+- Letting JSON columns become generic untyped resource blobs.
+- Overbuilding queue leasing and retry columns before the serialized local-first worker proves it needs them.
 
 Validation commands:
 
@@ -248,6 +255,7 @@ Validation commands:
 - `rg -n "reconciliation request|pending|running|succeeded|failed|blocked|serialized worker|idempotent|retry|drift" .agents/context docs/adr PLANS.md`
 - `rg -n "POST /apps|POST /services|actions/destroy|DELETE|202 Accepted|409 Conflict|force|impact list|idempotent" .agents/context docs/adr PLANS.md`
 - `rg -n "catalogRef|instanceName|resource.*reconciliation|dependency_blocked|requiresForce|bindingAlias|validation errors|/apps/paperless" .agents/context docs/adr PLANS.md`
+- `rg -n "internal stable text|unique public|created_at|updated_at|CHECK|foreign key|ON DELETE|schema_migrations|target_type|target_id|resource_type|resource_id|JSON text" .agents/context docs/adr PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -258,7 +266,7 @@ Rollback notes:
 Open questions:
 
 - Manifest validation schema details.
-- Database exact column definitions, indexes, foreign keys, and migration/reset commands.
+- Database exact full column definitions, id format, timestamp format, indexes, migration/reset commands, polymorphic target reference handling, and SQLite locking behavior.
 - Catalog root config/env shape, source identifier format, duplicate-entry error shape, and catalog list/read API responses.
 - Service operation declaration/schema/API/CLI design beyond the accepted boundary.
 - Dedicated Service sharing policy details.
@@ -279,5 +287,5 @@ Open questions:
 - Backend/CLI release process and future compatibility matrix.
 - Reference scenario exact command spelling and status output.
 - Draft manifest naming and cleanup conventions.
-- Exact reconciliation request columns, locking, polling, retry count/backoff, manual endpoint shape, and status evidence schema.
+- Additional reconciliation request columns beyond the accepted minimum, locking, polling, retry count/backoff, manual endpoint shape, and status evidence schema.
 - Exact resource/status snapshot schemas, reconciliation request id format, future validation error normalization, and future rename behavior for installed instance slugs.

@@ -34,7 +34,51 @@ Accepted table families:
 - `reconciliation_requests`
 - `schema_migrations`
 
-Exact columns, indexes, constraints, and foreign-key behavior are implementation details still to define.
+Exact full column sets and indexes remain implementation details, but the accepted schema mechanics below apply to the initial design.
+
+## Identity And Public Slugs
+
+Use internal stable text ids for database relationships.
+
+Use unique public slugs for user-addressable resources such as installed App instances and Service instances.
+
+Public API paths use installed instance slugs.
+
+Internal foreign-key relationships should use internal ids, not public slugs.
+
+Exact id format remains open.
+
+## Timestamps
+
+Core domain tables should include:
+
+- `id`
+- `created_at`
+- `updated_at`
+
+User-addressable domain tables should also include a unique `slug`.
+
+`schema_migrations` uses `version` and `applied_at` as migration metadata.
+
+Exact timestamp format remains open.
+
+## Constraints And Foreign Keys
+
+Use SQLite `CHECK` constraints for accepted enum-like state fields.
+
+At minimum, enforce:
+
+- lifecycle states: `running`, `stopped`, `removed`
+- reconciliation request states: `pending`, `running`, `succeeded`, `failed`, `blocked`
+- status levels: `unknown`, `pending`, `healthy`, `degraded`, `blocked`, `stopped`, `not_applicable`
+
+Enable SQLite foreign keys.
+
+Use restrictive relationships by default.
+
+Do not rely on broad `ON DELETE CASCADE` to implement Nephos lifecycle semantics.
+
+Deletes for `remove` and `destroy` must happen through explicit domain transactions that preserve the accepted lifecycle and data-deletion rules.
 
 ## Normalized State And JSON Snapshots
 
@@ -52,6 +96,8 @@ Use SQLite JSON text columns for snapshots and flexible payloads where useful.
 JSON payloads must be validated at the API/domain boundary.
 
 Do not use unvalidated JSON blobs as the main domain model.
+
+Do not hide authoritative relationships, lifecycle state, binding dependency tracking, or public identity in generic JSON payloads.
 
 ## Catalog Identity Snapshot
 
@@ -76,6 +122,13 @@ Do not recompute installed desired state only from current catalog files.
 Persist the latest status snapshot per resource.
 
 Status must include reasons and evidence.
+
+Store latest status as one row per resource target with a unique key over:
+
+- `resource_type`
+- `resource_id`
+
+Do not store latest status JSON directly on each resource row as the primary model.
 
 Status event/history storage is deferred.
 
@@ -106,6 +159,20 @@ Accepted request states:
 - `failed`
 - `blocked`
 
+For API 0.0.1, keep the request table minimal.
+
+Accepted minimum fields:
+
+- `id`
+- `target_type`
+- `target_id`
+- `state`
+- `error`
+- `created_at`
+- `updated_at`
+
+Attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable.
+
 Simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight.
 
 Failures update request state and status evidence without rolling back desired state.
@@ -120,6 +187,16 @@ API mutations that change desired state must write:
 in one database transaction.
 
 Do not write desired state and enqueue reconciliation as separate best-effort steps.
+
+## Migration Tracking
+
+Track applied migrations with:
+
+```sql
+schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)
+```
+
+`schema_migrations` should exist in the initial schema.
 
 ## Destroy Semantics
 

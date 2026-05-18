@@ -137,7 +137,23 @@ For Phase 1, the backend stack is:
 
 API 0.0.1 desired-state storage uses separate normalized table families for App instances, Service instances, bindings, platform domains, latest status snapshots, reconciliation requests, and schema migrations.
 
+Database relationships use internal stable text ids.
+
+Public API paths use unique installed instance slugs.
+
+Core domain tables should include `id`, `created_at`, and `updated_at`.
+
 Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
+
+JSON text columns must not hide authoritative relationships, lifecycle state, dependency tracking, or public identity.
+
+Use SQLite `CHECK` constraints for accepted enum-like state fields and enable SQLite foreign keys.
+
+Use restrictive relationships by default and implement destructive lifecycle deletes through explicit domain transactions, not broad cascades.
+
+Status snapshots are stored as latest rows keyed by `resource_type` and `resource_id`.
+
+API 0.0.1 reconciliation requests use the accepted minimal column set: `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`.
 
 API mutations that change desired state must write desired-state changes and the reconciliation request in one database transaction.
 

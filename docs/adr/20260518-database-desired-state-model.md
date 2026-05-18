@@ -121,20 +121,20 @@ API resource handlers should not issue ad hoc SQL everywhere.
 
 Schema design can start from the accepted table families, but exact columns, indexes, and constraints still need implementation-level design.
 
+Schema mechanics for internal ids, public slugs, timestamps, state constraints, foreign keys, reconciliation request columns, latest status row keying, and migration tracking are refined by [Database Schema Mechanics](20260518-database-schema-mechanics.md).
+
 Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
 
 After the first usable version, schema evolution should happen through forward migrations rather than destructive resets.
 
 ## Open Questions
 
-- exact column definitions
-- foreign key and cascade behavior
+- exact full column definitions
 - indexes and uniqueness constraints
 - exact migration runner command
 - exact local reset command
-- whether `schema_migrations` exists in `0000_initial.sql` or is created by the migration runner
 - transaction retry and SQLite locking behavior
 - status snapshot JSON shape
-- exact reconciliation request column definitions
-- exact request claiming and locking behavior
+- additional reconciliation request columns beyond the accepted API 0.0.1 minimum
+- exact request claiming and locking behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior

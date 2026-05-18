@@ -265,22 +265,40 @@ Accepted direction:
 - persist the latest status snapshot per resource
 - status event/history storage is deferred
 - reconciliation requests are persisted in SQLite
+- domain/resource relationships use internal stable text ids
+- user-addressable installed resources use unique public slugs
+- public API paths continue to use installed instance slugs
+- core domain tables include `id`, `created_at`, and `updated_at`
+- user-addressable domain tables additionally include unique `slug`
+- enum-like state fields should use SQLite `CHECK` constraints
+- SQLite foreign keys are enabled
+- relationships are restrictive by default
+- broad `ON DELETE CASCADE` is not used to implement Nephos lifecycle semantics
+- destructive lifecycle deletes happen through explicit domain transactions
+- JSON text columns are only for validated snapshots and flexible payloads
+- authoritative relationships, lifecycle state, dependency tracking, and public identity are not hidden in generic JSON blobs
+- `reconciliation_requests` keeps a minimal API 0.0.1 column set: `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
+- attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
+- `status_snapshots` stores one latest row per `resource_type` and `resource_id`
+- `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
 - API mutations that change desired state write desired-state changes and reconciliation request in one database transaction
 - destroy removes active desired-state rows
 - API 0.0.1 does not require an audit/history table for destroyed resources
 
 Need to decide:
 
-- exact column definitions
-- foreign key and cascade behavior
-- indexes and uniqueness constraints
+- exact full column definitions
+- exact internal id format
+- exact timestamp format
+- exact indexes beyond required uniqueness
 - exact migration runner command
 - exact local reset command
-- whether `schema_migrations` exists in `0000_initial.sql` or is created by the migration runner
 - transaction retry and SQLite locking behavior
 - status snapshot JSON shape
-- exact reconciliation request column definitions
-- exact request claiming and locking behavior
+- resource snapshot JSON shape
+- exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
+- additional reconciliation request columns beyond the accepted API 0.0.1 minimum
+- exact request claiming and locking behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior
 
 ## Reconciliation Execution Model
@@ -298,6 +316,8 @@ Accepted direction:
 - reconciliation requests are persisted in SQLite
 - each request targets one App instance, Service instance, binding, or platform domain configuration target
 - request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
+- API 0.0.1 keeps `reconciliation_requests` minimal with `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
+- attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - handlers must be idempotent and safe to retry
 - one serialized background worker is the initial model
 - serialized queueing is acceptable for the single-user local-first model beyond API 0.0.1 until real usage proves concurrency is needed
@@ -311,8 +331,8 @@ Accepted direction:
 
 Need to decide:
 
-- exact `reconciliation_requests` column definitions
-- exact request claiming and locking behavior in SQLite
+- exact additional `reconciliation_requests` columns beyond the accepted API 0.0.1 minimum, if any
+- exact request claiming and locking behavior in SQLite, if/when queue leasing becomes necessary
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
