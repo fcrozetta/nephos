@@ -145,11 +145,14 @@ Future remote catalogs, catalog indexes, signed catalogs, and platform-managed c
 
 Read-only catalog endpoint shape is refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
+Catalog response fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
 ## Open Questions
 
 - exact backend config/env variable shape for custom local catalog roots
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact catalog list/read API response field set
+- exact catalog capability summary fields
+- exact catalog route summary fields
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging

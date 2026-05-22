@@ -189,9 +189,9 @@ FastAPI/Pydantic validation errors are explicitly not stable product API in API 
 
 Read payloads, status payloads, and reconciliation request id format are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
+Resource-specific response fields, status evidence object fields, and installed slug rename behavior are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
 ## Open Questions
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
+- exact field names inside App, Service, Binding, and catalog summary nested entries
 - future validation error normalization
-- future rename behavior for installed instance slugs

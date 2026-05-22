@@ -67,6 +67,11 @@ Persistence:
 - Public API paths use unique installed instance slugs
 - Read payloads may include internal ids, but App and Service paths remain slug-based
 - Read payloads are domain snapshots, not raw database rows
+- App snapshots include `bindings` and `routes`
+- Service snapshots include `provides` and `dependents`
+- Binding snapshots are exposed directly with redacted output or Secret summary
+- Catalog responses use normalized summaries, not raw manifest blobs by default
+- Installed App and Service slugs are immutable in API 0.0.1
 - Core domain tables include `id`, `created_at`, and `updated_at`
 - Timestamps use app-generated UTC ISO strings with `Z`
 - Enum-like state fields use SQLite `CHECK` constraints

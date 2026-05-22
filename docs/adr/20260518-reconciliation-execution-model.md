@@ -113,6 +113,8 @@ The API 0.0.1 minimum column set is refined by [Database Schema Mechanics](20260
 
 Manual reconcile endpoint shape and reconciliation request id format are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
+Status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
 Mutating API handlers must not write desired state without a matching reconciliation request in the same transaction.
 
 The reconciler must own status snapshot writes for reconciliation outcomes.
@@ -130,4 +132,4 @@ This deliberately trades throughput for clarity because Nephos is single-user/lo
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
-- exact status evidence object fields for reconciliation evidence
+- exact status evidence `data` payloads for reconciliation evidence

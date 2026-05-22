@@ -46,6 +46,24 @@ Catalog endpoints are for discovery and inspection.
 
 They do not own install mutation.
 
+Catalog list and detail responses return normalized catalog summaries by default.
+
+Accepted catalog response fields:
+
+- `kind`
+- `name`
+- `displayName`
+- `description`
+- `version`
+- `source`
+- `manifestDigest`
+- capability summary
+- route summary
+
+Do not return raw manifest blobs by default.
+
+Raw or full validated manifest output, if needed later, requires an explicit response field or endpoint decision.
+
 ## Entry Layout And Identity
 
 Accepted layout:

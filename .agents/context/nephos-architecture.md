@@ -89,6 +89,12 @@ Read resource payloads are domain snapshots, not raw database rows.
 
 Installed App and Service snapshots include common fields such as `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`.
 
+App snapshots include top-level `bindings` and `routes`.
+
+Service snapshots include top-level `provides` and `dependents`.
+
+Binding snapshots expose alias, capability, App instance, Service instance, redacted output or Secret summary, status, and timestamps.
+
 Install mutation happens through `POST /apps` and `POST /services` with catalog references in the request body.
 
 Install bodies use `catalogRef`, optional `instanceName`, optional `config`, and App install `bindings` when needed.
@@ -112,9 +118,13 @@ Ingress root domains are platform configuration resources at `/platform/config/d
 
 Read-only catalog endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}` with optional `source` selection for duplicate catalog entries.
 
+Catalog responses return normalized summaries, not raw manifest blobs by default.
+
 Status is separate from lifecycle state and should persist the latest status snapshot with reasons and evidence.
 
 Status payloads include `level`, `lifecycle`, `reconciliation`, `reason`, `message`, `evidence`, and `observedAt`.
+
+Status evidence entries include `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`.
 
 Mutating API calls update desired state and create a persisted reconciliation request.
 
@@ -133,6 +143,10 @@ FastAPI/Pydantic framework validation errors may remain framework-shaped for API
 Dependency-blocked Service lifecycle actions should return `409 Conflict` with an impact list unless forced.
 
 Manual reconcile uses target-specific action subresources such as `POST /apps/{appInstance}/actions/reconcile`.
+
+API 0.0.1 has no rename API.
+
+Installed App and Service slugs are immutable in API 0.0.1.
 
 The backend may start with an empty database.
 

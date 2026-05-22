@@ -70,6 +70,7 @@ Current understanding:
 - Batch 31 API payload/error shape is accepted: public API paths use installed instance slugs, not opaque UUIDs; install bodies use `catalogRef` with `kind`, `name`, optional `source`, optional `instanceName`, optional `config`, and App install `bindings`; lifecycle action bodies use optional `force` and `confirm`, with `confirm` required only for destroy; mutation responses use `{ resource, reconciliation, status? }`; Nephos-owned domain errors use `{ error: { code, message, details? } }`; dependency-blocked impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability; FastAPI/Pydantic validation errors may remain framework-shaped for API 0.0.1 and are not stable Nephos product API.
 - Batch 32 database schema mechanics are accepted: database relationships use internal stable text ids, user-addressable installed resources use unique public slugs, core domain tables include `id`, `created_at`, and `updated_at`, state fields use SQLite `CHECK` constraints, SQLite foreign keys are enabled with restrictive relationships by default, lifecycle deletes happen through explicit domain transactions rather than broad cascades, JSON text columns are only for validated snapshots/flexible payloads, API 0.0.1 reconciliation requests use the minimal accepted field set, latest status snapshots are keyed by resource target, and `schema_migrations` uses `version TEXT PRIMARY KEY` plus `applied_at TEXT`.
 - Batch 33 API read/status/catalog shape is accepted: internal ids use typed prefixes plus UUID4 hex suffixes, timestamps are app-generated UTC ISO strings with `Z`, read payloads are domain snapshots with ids and slugs rather than raw DB rows, status payloads include level/lifecycle/reconciliation/reason/message/evidence/observedAt, manual reconcile uses target-specific action subresources, and read-only catalog endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}` with optional source selection.
+- Batch 34 API response field details are accepted: App read payloads expose top-level `bindings` and `routes`; Service read payloads expose top-level `provides` and `dependents`; Binding read payloads expose alias, capability, App instance, Service instance, redacted output or Secret summary, status, and timestamps; status evidence entries use `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`; catalog responses use normalized summaries by default rather than raw manifest blobs; API 0.0.1 has no rename API and installed App/Service slugs are immutable.
 
 Files likely to change:
 
@@ -121,6 +122,7 @@ Files likely to change:
 - `docs/adr/20260518-api-payload-and-error-shape.md`
 - `docs/adr/20260518-database-schema-mechanics.md`
 - `docs/adr/20260522-api-read-status-and-catalog-shape.md`
+- `docs/adr/20260522-api-response-field-details.md`
 
 Proposed steps:
 
@@ -180,6 +182,7 @@ Proposed steps:
 - Accept the API payload and error shape.
 - Accept the database schema mechanics.
 - Accept the API read/status/catalog shape.
+- Accept the API response field details.
 - Continue the interview with API implementation details or remaining open questions.
 
 Risks:
@@ -235,6 +238,9 @@ Risks:
 - Returning raw database rows as API payloads and freezing persistence shape as product API.
 - Dumping raw Kubernetes objects into status and weakening Nephos-aware status semantics.
 - Making catalog endpoints own install mutation after deciding install belongs to `/apps` and `/services`.
+- Hiding Service dependents behind another endpoint and weakening operational impact visibility.
+- Returning raw manifest blobs as catalog responses and freezing draft manifest shape too early.
+- Implementing slug rename before route, binding, and relationship consequences are designed.
 
 Validation commands:
 
@@ -263,6 +269,7 @@ Validation commands:
 - `rg -n "catalogRef|instanceName|resource.*reconciliation|dependency_blocked|requiresForce|bindingAlias|validation errors|/apps/paperless" .agents/context docs/adr PLANS.md`
 - `rg -n "internal stable text|unique public|created_at|updated_at|CHECK|foreign key|ON DELETE|schema_migrations|target_type|target_id|resource_type|resource_id|JSON text" .agents/context docs/adr PLANS.md`
 - `rg -n "appinst_|svcinst_|binding_|domain_|reconcile_|status_|createdAt|updatedAt|observedAt|/catalog/apps|/catalog/services|actions/reconcile|status payload|domain snapshots" .agents/context docs/adr PLANS.md`
+- `rg -n "bindings|routes|provides|dependents|redacted output|Secret summary|source|subject|manifestDigest|raw manifest|rename API|immutable" .agents/context docs/adr PLANS.md`
 - `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
 
 Rollback notes:
@@ -274,7 +281,7 @@ Open questions:
 
 - Manifest validation schema details.
 - Database exact full column definitions, indexes, migration/reset commands, polymorphic target reference handling, and SQLite locking behavior.
-- Catalog root config/env shape, source identifier format, duplicate-entry error shape, and catalog list/read API response field set.
+- Catalog root config/env shape, source identifier format, duplicate-entry error shape, and exact catalog summary nested fields.
 - Service operation declaration/schema/API/CLI design beyond the accepted boundary.
 - Dedicated Service sharing policy details.
 - Future resource profile design.
@@ -294,5 +301,5 @@ Open questions:
 - Backend/CLI release process and future compatibility matrix.
 - Reference scenario exact command spelling and status output.
 - Draft manifest naming and cleanup conventions.
-- Additional reconciliation request columns beyond the accepted minimum, locking, polling, retry count/backoff, and status evidence schema.
-- Exact resource-specific response fields, exact status evidence object fields, future validation error normalization, and future rename behavior for installed instance slugs.
+- Additional reconciliation request columns beyond the accepted minimum, locking, polling, retry count/backoff, and status evidence data payloads.
+- Exact App binding/route response entry fields, Service provides/dependent response entry fields, redacted Binding output/Secret summary fields, catalog summary nested fields, and future validation error normalization.

@@ -179,10 +179,11 @@ The exact resource and status snapshot schemas remain implementation details, bu
 
 Read payloads, status payloads, reconciliation request id format, and manual reconcile endpoint shape are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
+Resource-specific response fields and status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
 Validation error normalization is deferred beyond API 0.0.1 unless a later decision changes that.
 
 ## Open Questions
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
+- exact field names inside App, Service, Binding, and catalog summary nested entries
 - future validation error normalization

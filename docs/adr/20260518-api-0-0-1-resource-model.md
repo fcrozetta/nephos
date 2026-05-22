@@ -191,10 +191,15 @@ Catalog loading can stay local-filesystem based while installed desired state re
 
 Later APIs must extend this model deliberately rather than adding raw Kubernetes or CLI-shaped shortcuts.
 
+Resource-specific response fields, status evidence object fields, catalog response fields, and installed slug rename behavior are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
 ## Open Questions
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
-- exact catalog list/read response field set
+- exact field names inside App `bindings` entries
+- exact field names inside App `routes` entries
+- exact field names inside Service `provides` entries
+- exact field names inside Service `dependents` entries
+- exact redacted Binding output/Secret summary fields
+- exact catalog capability summary fields
+- exact catalog route summary fields
 - future validation error normalization
-- future rename behavior for installed instance slugs

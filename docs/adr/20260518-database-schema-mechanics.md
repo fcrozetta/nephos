@@ -127,10 +127,11 @@ Future reconciliation concurrency, retry backoff, queue leasing, and status hist
 
 Internal id and timestamp formats are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
+Status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
 ## Open Questions
 
 - exact indexes beyond required uniqueness
-- exact status evidence object fields
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - exact migration runner command

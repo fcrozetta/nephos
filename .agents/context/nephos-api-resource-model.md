@@ -73,6 +73,22 @@ Installed App and Service snapshots include:
 - `updatedAt`
 - optional latest `status`
 
+Installed App snapshots additionally include top-level:
+
+- `catalogRef`
+- `config`
+- `bindings`
+- `routes`
+- `status`
+
+Installed Service snapshots additionally include top-level:
+
+- `catalogRef`
+- `config`
+- `provides`
+- `dependents`
+- `status`
+
 Bindings and platform domains expose their internal `id` plus their public or semantic identity.
 
 Use camel case in API payloads.
@@ -154,6 +170,22 @@ Catalog detail endpoints accept optional `source` selection where duplicate cata
 
 Catalog endpoints are read-only in API 0.0.1.
 
+Catalog list and detail responses return normalized catalog summaries by default.
+
+Accepted catalog response fields:
+
+- `kind`
+- `name`
+- `displayName`
+- `description`
+- `version`
+- `source`
+- `manifestDigest`
+- capability summary
+- route summary
+
+Do not return raw manifest blobs by default.
+
 ## Bindings
 
 Bindings are first-class API/database resources.
@@ -163,6 +195,20 @@ A binding connects an App instance requirement alias to a Service instance capab
 Bindings are the source of dependent tracking.
 
 Do not infer bindings only from Kubernetes Secret metadata.
+
+Binding read payloads include:
+
+- `id`
+- `alias`
+- `capability`
+- `appInstance`
+- `serviceInstance`
+- redacted output or Secret summary
+- `status`
+- `createdAt`
+- `updatedAt`
+
+Binding output and Secret summaries must not expose secret values.
 
 ## Platform Domains
 
@@ -248,6 +294,17 @@ Accepted status payload fields:
 - `observedAt`
 
 `evidence` is an array of structured facts, not an unbounded raw Kubernetes dump.
+
+Evidence entries use:
+
+- `source`
+- `subject`
+- `reason`
+- `message`
+- `observedAt`
+- optional redacted `data`
+
+Evidence `data` is for small structured facts only.
 
 Secret values must remain redacted in status payloads.
 
@@ -375,10 +432,17 @@ API 0.0.1 defines only the resources needed for the Paperless plus PostgreSQL re
 
 Future backups, upgrades, auth/RBAC, resource profiles, remote catalogs, and generalized Service operation APIs are deferred.
 
+API 0.0.1 has no rename API.
+
+Installed App and Service slugs are immutable in API 0.0.1.
+
 ## Open Questions
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
-- exact catalog list/read response field set
+- exact field names inside App `bindings` entries
+- exact field names inside App `routes` entries
+- exact field names inside Service `provides` entries
+- exact field names inside Service `dependents` entries
+- exact redacted Binding output/Secret summary fields
+- exact catalog capability summary fields
+- exact catalog route summary fields
 - future validation error normalization
-- future rename behavior for installed instance slugs

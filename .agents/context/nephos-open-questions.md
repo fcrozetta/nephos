@@ -162,18 +162,29 @@ Accepted direction:
 - FastAPI/Pydantic framework validation errors may remain in default framework shape for API 0.0.1
 - read payloads are domain snapshots, not raw database rows
 - installed App and Service snapshots include `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`
+- App snapshots include top-level `catalogRef`, `config`, `bindings`, `routes`, and `status`
+- Service snapshots include top-level `catalogRef`, `config`, `provides`, `dependents`, and `status`
+- Binding snapshots include `id`, `alias`, `capability`, `appInstance`, `serviceInstance`, redacted output or Secret summary, `status`, `createdAt`, and `updatedAt`
 - status payloads include `level`, `lifecycle`, `reconciliation`, `reason`, `message`, `evidence`, and `observedAt`
 - status evidence is structured and must not be an unbounded raw Kubernetes dump
+- status evidence entries include `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`
 - catalog read endpoints are `GET /catalog/apps`, `GET /catalog/apps/{name}`, `GET /catalog/services`, and `GET /catalog/services/{name}`
+- catalog responses return normalized summaries with `kind`, `name`, `displayName`, `description`, `version`, `source`, `manifestDigest`, capability summary, and route summary
+- catalog responses do not return raw manifest blobs by default
+- API 0.0.1 has no rename API
+- installed App and Service slugs are immutable in API 0.0.1
 - API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
 
 Need to decide:
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
-- exact catalog list/read response field set
+- exact field names inside App `bindings` entries
+- exact field names inside App `routes` entries
+- exact field names inside Service `provides` entries
+- exact field names inside Service `dependents` entries
+- exact redacted Binding output/Secret summary fields
+- exact catalog capability summary fields
+- exact catalog route summary fields
 - future validation error normalization
-- future rename behavior for installed instance slugs
 
 ## API Lifecycle Action Shape
 
@@ -199,16 +210,21 @@ Accepted direction:
 - manual reconcile uses action subresources for App, Service, binding, and platform domain configuration targets
 - read payloads are domain snapshots, not raw database rows
 - installed App and Service snapshots include ids and slugs
+- App snapshots include top-level `bindings` and `routes`
+- Service snapshots include top-level `provides` and `dependents`
+- Binding snapshots are exposed directly with redacted output or Secret summary
 - status payloads use the accepted structured status shape
+- API 0.0.1 has no rename API and installed slugs are immutable
 - repeated lifecycle requests to the same desired state should be idempotent
 - Nephos should avoid duplicate reconciliation work when possible, but may enqueue reconciliation when needed to verify or converge runtime state
 
 Need to decide:
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
+- exact field names inside App `bindings` and `routes`
+- exact field names inside Service `provides` and `dependents`
+- exact redacted Binding output/Secret summary fields
+- exact catalog summary detail fields
 - future validation error normalization
-- future rename behavior for installed instance slugs
 
 ## API Payload And Error Shape
 
@@ -232,7 +248,9 @@ Accepted direction:
 - mutation responses use `{ resource, reconciliation, status? }`
 - `reconciliation` includes request id and state
 - read resource payloads are domain snapshots with ids and slugs where applicable
+- App, Service, and Binding response field groups are accepted
 - status payloads use the accepted structured status shape
+- status evidence entries use `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`
 - reconciliation request ids use `reconcile_<uuid4hex>`
 - Nephos-owned domain errors use `{ error: { code, message, details? } }`
 - dependency-blocked lifecycle errors use `409 Conflict`
@@ -242,10 +260,8 @@ Accepted direction:
 
 Need to decide:
 
-- exact resource-specific response fields beyond the accepted common snapshot shape
-- exact status evidence object fields
+- exact field names inside App, Service, Binding, and catalog summary nested entries
 - future validation error normalization
-- future rename behavior for installed instance slugs
 
 ## Database Desired-State Model
 
@@ -303,7 +319,6 @@ Need to decide:
 - exact migration runner command
 - exact local reset command
 - transaction retry and SQLite locking behavior
-- exact status evidence object fields
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - additional reconciliation request columns beyond the accepted API 0.0.1 minimum
@@ -347,7 +362,7 @@ Need to decide:
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
-- exact status evidence object fields for reconciliation evidence
+- exact status evidence `data` payloads for reconciliation evidence
 
 ## Secrets Details
 
@@ -610,6 +625,8 @@ Accepted direction:
 - temporary draft manifests stay under `.agents/drafts/manifests/` and remain non-canonical until API validation models exist and Fer approves promotion
 - `metadata.version` remains optional for catalog entries
 - installed records store version if present and always store the manifest digest
+- catalog responses return normalized summaries with `kind`, `name`, `displayName`, `description`, `version`, `source`, `manifestDigest`, capability summary, and route summary
+- catalog responses do not return raw manifest blobs by default
 
 Need to decide:
 
@@ -617,7 +634,8 @@ Need to decide:
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact catalog list/read API response shape
+- exact catalog capability summary fields
+- exact catalog route summary fields
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging
 
 ## Draft Manifest Naming Details

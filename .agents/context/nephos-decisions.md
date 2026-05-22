@@ -1700,3 +1700,86 @@ Catalog detail endpoints accept optional `source` selection where duplicate cata
 Catalog endpoints are read-only in API 0.0.1.
 
 Install mutation remains owned by `POST /apps` and `POST /services`.
+
+## D184: App read payloads expose bindings and routes
+
+Installed App read payloads use the accepted common snapshot fields and include top-level:
+
+- `catalogRef`
+- `config`
+- `bindings`
+- `routes`
+- `status`
+
+Do not hide App relationships under one generic relationship blob as the primary shape.
+
+## D185: Service read payloads expose provides and dependents
+
+Installed Service read payloads use the accepted common snapshot fields and include top-level:
+
+- `catalogRef`
+- `config`
+- `provides`
+- `dependents`
+- `status`
+
+Service `dependents` are included directly so Service impact is visible without requiring a separate endpoint for API 0.0.1.
+
+## D186: Binding read payloads are exposed directly
+
+Binding read payloads include:
+
+- `id`
+- `alias`
+- `capability`
+- `appInstance`
+- `serviceInstance`
+- redacted output or Secret summary
+- `status`
+- `createdAt`
+- `updatedAt`
+
+Binding output and Secret summaries must not expose secret values.
+
+## D187: Status evidence entries are structured
+
+Status evidence entries use:
+
+- `source`
+- `subject`
+- `reason`
+- `message`
+- `observedAt`
+- optional redacted `data`
+
+Evidence `data` is for small structured facts only.
+
+Do not expose raw Kubernetes objects, full Helm output, Secret values, or unbounded runtime dumps through evidence.
+
+## D188: Catalog responses use normalized summaries
+
+Catalog list and detail responses return normalized catalog summaries by default.
+
+Accepted catalog response fields:
+
+- `kind`
+- `name`
+- `displayName`
+- `description`
+- `version`
+- `source`
+- `manifestDigest`
+- capability summary
+- route summary
+
+Do not return raw manifest blobs by default.
+
+Raw or full validated manifest output, if needed later, requires an explicit response field or endpoint decision.
+
+## D189: Installed slugs are immutable in API 0.0.1
+
+API 0.0.1 has no rename API.
+
+Installed App and Service slugs are immutable in API 0.0.1.
+
+Future rename, alias, or display metadata update behavior requires a separate decision.

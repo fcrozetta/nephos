@@ -49,6 +49,19 @@ Accepted API status payload fields:
 
 It must not be an unbounded raw Kubernetes object dump.
 
+Evidence object fields:
+
+- `source`
+- `subject`
+- `reason`
+- `message`
+- `observedAt`
+- optional redacted `data`
+
+Evidence `data` is for small structured facts only.
+
+Do not expose raw Kubernetes objects, full Helm output, Secret values, or unbounded runtime dumps through evidence.
+
 Secret values must remain redacted in status payloads.
 
 ## Lifecycle State
