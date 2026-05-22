@@ -86,7 +86,12 @@ Persistence:
 - SQLite uses WAL mode for API 0.0.1
 - JSON text columns are limited to validated snapshots and flexible payloads
 - Latest status snapshots are keyed by `resource_type` and `resource_id`
-- API 0.0.1 reconciliation requests include `action`, `payload_json`, and target snapshot fields where needed
+- App and Service tables use explicit catalog identity, lifecycle, generation, config, pending destroy, and timestamp columns
+- Binding rows use explicit App/Service relationship, alias, capability, generation, output summary, and timestamp columns
+- Platform domain rows use `name`, `domain`, `is_default`, generation, and timestamps
+- Status snapshots use target identity, status fields, `evidence_json`, `observed_generation`, `observed_at`, and timestamps
+- API 0.0.1 reconciliation requests include `target_generation`, `action`, `payload_json`, and `target_snapshot_json`
+- Accepted uniqueness/indexing includes unique App slugs, unique Service slugs, unique binding alias per App, one default platform domain, unique latest status target, and reconciliation queue lookup by `state` and `created_at`
 - Manual reconcile uses target-specific action subresources
 - Catalog read endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}`
 

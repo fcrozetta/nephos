@@ -293,6 +293,12 @@ Accepted direction:
 - do not create schema imperatively in Python
 - forward-compatible migration discipline starts after the first usable version is established
 - API 0.0.1 table families are `app_instances`, `service_instances`, `bindings`, `platform_domains`, `status_snapshots`, `reconciliation_requests`, and `schema_migrations`
+- `app_instances` and `service_instances` use explicit catalog identity, lifecycle, generation, config, pending destroy, and timestamp columns
+- `bindings` use explicit App/Service relationship, alias, capability, generation, output summary, and timestamp columns
+- `platform_domains` use one row per root domain with `name`, `domain`, `is_default`, generation, and timestamps
+- `status_snapshots` use target identity, status fields, `evidence_json`, `observed_generation`, `observed_at`, and timestamps
+- `reconciliation_requests` use target identity, `target_generation`, `action`, `payload_json`, `target_snapshot_json`, state/error, and timestamps
+- accepted indexes and uniqueness rules include unique App slugs, unique Service slugs, unique binding alias per App, one default platform domain, one latest status row per target, and reconciliation queue lookup by `state` and `created_at`
 - use normalized columns for core identity, relationship, lifecycle, and lookup fields
 - use SQLite JSON text columns for snapshots and flexible payloads where useful
 - validate JSON payloads at the API/domain boundary
@@ -321,7 +327,7 @@ Accepted direction:
 - destructive lifecycle deletes happen through explicit domain transactions
 - JSON text columns are only for validated snapshots and flexible payloads
 - authoritative relationships, lifecycle state, dependency tracking, and public identity are not hidden in generic JSON blobs
-- `reconciliation_requests` include `id`, `target_type`, `target_id`, `action`, `payload_json`, target snapshot fields where needed, `state`, `error`, `created_at`, and `updated_at`
+- `reconciliation_requests` include `id`, `target_type`, `target_id`, `target_generation`, `action`, `payload_json`, `target_snapshot_json`, `state`, `error`, `created_at`, and `updated_at`
 - target snapshots are used when cleanup or retry cannot safely depend only on the current desired-state row
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - `status_snapshots` stores one latest row per `resource_type` and `resource_id`
@@ -334,15 +340,14 @@ Accepted direction:
 
 Need to decide:
 
-- exact full column definitions
-- exact indexes beyond required uniqueness
+- exact SQL column types and nullability
+- exact CHECK constraint spelling
 - exact migration runner command
 - exact local reset command
 - exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - exact target snapshot JSON fields
-- exact generation column names on reconciliation/status records
 - exact request claiming behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior
 
@@ -362,7 +367,7 @@ Accepted direction:
 - each request targets one App instance, Service instance, binding, or platform domain configuration target
 - request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
 - reconciliation request ids use `reconcile_<uuid4hex>`
-- API 0.0.1 reconciliation requests include durable action context with `action`, `payload_json`, and target snapshot fields where needed
+- API 0.0.1 reconciliation requests include durable action context with `target_generation`, `action`, `payload_json`, and `target_snapshot_json`
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - handlers must be idempotent and safe to retry
 - one serialized background worker is the initial model
@@ -382,7 +387,6 @@ Accepted direction:
 Need to decide:
 
 - exact target snapshot JSON fields
-- exact generation column names on reconciliation/status records
 - exact request claiming behavior in SQLite, if/when queue leasing becomes necessary
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior

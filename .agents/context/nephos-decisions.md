@@ -1589,9 +1589,10 @@ For API 0.0.1, `reconciliation_requests` uses bounded accepted fields:
 - `id`
 - `target_type`
 - `target_id`
+- `target_generation`
 - `action`
 - `payload_json`
-- target snapshot fields where needed
+- `target_snapshot_json`
 - `state`
 - `error`
 - `created_at`
@@ -1925,9 +1926,10 @@ After successful teardown, the desired-state row is deleted.
 
 Reconciliation requests include:
 
+- `target_generation`
 - `action`
 - `payload_json`
-- target snapshot fields where needed
+- `target_snapshot_json`
 
 Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
 
@@ -1960,3 +1962,96 @@ migrations/0000_initial.sql
 The initial migration should contain all API 0.0.1 tables and accepted constraints.
 
 Do not create schema imperatively in Python.
+
+## D207: App and Service tables use explicit domain columns
+
+`app_instances` and `service_instances` use explicit columns for:
+
+- `id`
+- `slug`
+- catalog identity, version, source, and digest
+- `lifecycle`
+- `generation`
+- `config_json`
+- `delete_requested_at`
+- `created_at`
+- `updated_at`
+
+Do not store installed App or Service identity primarily in JSON blobs.
+
+## D208: Binding rows use explicit relationship columns
+
+`bindings` uses:
+
+- `id`
+- `app_instance_id`
+- `service_instance_id`
+- `alias`
+- `capability`
+- `generation`
+- `output_summary_json`
+- `created_at`
+- `updated_at`
+
+Binding relationships are not generic JSON metadata.
+
+## D209: Platform domains are one row per root domain
+
+`platform_domains` uses:
+
+- `id`
+- `name`
+- `domain`
+- `is_default`
+- `generation`
+- `created_at`
+- `updated_at`
+
+Do not store Phase 1 root domains as an env-only config or one opaque platform config JSON blob.
+
+## D210: Status snapshots use target columns and evidence JSON
+
+`status_snapshots` uses:
+
+- `id`
+- `resource_type`
+- `resource_id`
+- `level`
+- `lifecycle`
+- `reconciliation`
+- `reason`
+- `message`
+- `evidence_json`
+- `observed_generation`
+- `observed_at`
+- `created_at`
+- `updated_at`
+
+Latest status remains one row per resource target.
+
+## D211: Reconciliation requests use target generation and snapshots
+
+`reconciliation_requests` uses:
+
+- `id`
+- `target_type`
+- `target_id`
+- `target_generation`
+- `action`
+- `payload_json`
+- `target_snapshot_json`
+- `state`
+- `error`
+- `created_at`
+- `updated_at`
+
+## D212: Initial indexes enforce accepted product rules
+
+Accepted API 0.0.1 indexes and uniqueness rules include:
+
+- unique App instance slugs
+- unique Service instance slugs
+- unique binding alias per App instance
+- one default platform domain
+- unique latest status snapshot per `resource_type` and `resource_id`
+- reconciliation queue index by `state` and `created_at`

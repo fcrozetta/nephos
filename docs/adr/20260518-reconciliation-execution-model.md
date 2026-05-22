@@ -34,9 +34,10 @@ Reconciliation requests include durable action context.
 
 Accepted request fields include:
 
+- `target_generation`
 - `action`
 - `payload_json`
-- target snapshot fields where needed
+- `target_snapshot_json`
 
 Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
 
@@ -129,15 +130,17 @@ Nephos must not mutate resources it does not own.
 
 ## Consequences
 
-Implementation needs a reconciliation request table with request target identity, state, timestamps, and error/status evidence fields.
+Implementation needs a reconciliation request table with request target identity, target generation, action context, payload/snapshot fields, state, timestamps, and error/status evidence fields.
 
-The API 0.0.1 minimum column set is refined by [Database Schema Mechanics](20260518-database-schema-mechanics.md).
+The API 0.0.1 bounded column set is refined by [Database Schema Mechanics](20260518-database-schema-mechanics.md).
 
 Manual reconcile endpoint shape and reconciliation request id format are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
 Status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
 Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
+
+Concrete reconciliation request table fields are refined by [API 0.0.1 Database Table Shape](20260522-api-0-0-1-database-table-shape.md).
 
 Mutating API handlers must not write desired state without a matching reconciliation request in the same transaction.
 
@@ -152,7 +155,6 @@ This deliberately trades throughput for clarity because Nephos is single-user/lo
 ## Open Questions
 
 - exact target snapshot JSON fields
-- exact generation column names on reconciliation/status records
 - exact request claiming behavior in SQLite, if/when queue leasing becomes necessary
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior

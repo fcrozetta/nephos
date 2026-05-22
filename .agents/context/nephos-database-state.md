@@ -38,7 +38,121 @@ Accepted table families:
 - `reconciliation_requests`
 - `schema_migrations`
 
-Exact full column sets and indexes remain implementation details, but the accepted schema mechanics below apply to the initial design.
+The accepted API 0.0.1 table shape is defined below.
+
+Exact SQL type/nullability spelling remains an implementation detail, but implementation must preserve these fields and constraints.
+
+### `app_instances`
+
+Accepted columns:
+
+- `id`
+- `slug`
+- `catalog_kind`
+- `catalog_name`
+- `catalog_version`
+- `catalog_source`
+- `manifest_digest`
+- `lifecycle`
+- `generation`
+- `config_json`
+- `delete_requested_at`
+- `created_at`
+- `updated_at`
+
+### `service_instances`
+
+Accepted columns:
+
+- `id`
+- `slug`
+- `catalog_kind`
+- `catalog_name`
+- `catalog_version`
+- `catalog_source`
+- `manifest_digest`
+- `lifecycle`
+- `generation`
+- `config_json`
+- `delete_requested_at`
+- `created_at`
+- `updated_at`
+
+### `bindings`
+
+Accepted columns:
+
+- `id`
+- `app_instance_id`
+- `service_instance_id`
+- `alias`
+- `capability`
+- `generation`
+- `output_summary_json`
+- `created_at`
+- `updated_at`
+
+### `platform_domains`
+
+Accepted columns:
+
+- `id`
+- `name`
+- `domain`
+- `is_default`
+- `generation`
+- `created_at`
+- `updated_at`
+
+### `status_snapshots`
+
+Accepted columns:
+
+- `id`
+- `resource_type`
+- `resource_id`
+- `level`
+- `lifecycle`
+- `reconciliation`
+- `reason`
+- `message`
+- `evidence_json`
+- `observed_generation`
+- `observed_at`
+- `created_at`
+- `updated_at`
+
+### `reconciliation_requests`
+
+Accepted columns:
+
+- `id`
+- `target_type`
+- `target_id`
+- `target_generation`
+- `action`
+- `payload_json`
+- `target_snapshot_json`
+- `state`
+- `error`
+- `created_at`
+- `updated_at`
+
+### `schema_migrations`
+
+Accepted columns:
+
+- `version`
+- `applied_at`
+
+Accepted indexes and uniqueness rules:
+
+- unique App instance slugs
+- unique Service instance slugs
+- unique binding alias per App instance
+- one default platform domain
+- unique latest status snapshot per `resource_type` and `resource_id`
+- reconciliation queue index by `state` and `created_at`
 
 ## Identity And Public Slugs
 
@@ -188,16 +302,17 @@ Accepted request states:
 - `failed`
 - `blocked`
 
-For API 0.0.1, keep the request table minimal.
+For API 0.0.1, keep the request table bounded.
 
 Accepted fields:
 
 - `id`
 - `target_type`
 - `target_id`
+- `target_generation`
 - `action`
 - `payload_json`
-- target snapshot fields where needed
+- `target_snapshot_json`
 - `state`
 - `error`
 - `created_at`

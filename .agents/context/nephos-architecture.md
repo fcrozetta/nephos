@@ -195,6 +195,18 @@ For Phase 1, the backend stack is:
 
 API 0.0.1 desired-state storage uses separate normalized table families for App instances, Service instances, bindings, platform domains, latest status snapshots, reconciliation requests, and schema migrations.
 
+Accepted `app_instances` and `service_instances` columns are `id`, `slug`, catalog identity/version/source/digest fields, `lifecycle`, `generation`, `config_json`, `delete_requested_at`, `created_at`, and `updated_at`.
+
+Accepted `bindings` columns are `id`, `app_instance_id`, `service_instance_id`, `alias`, `capability`, `generation`, `output_summary_json`, `created_at`, and `updated_at`.
+
+Accepted `platform_domains` columns are `id`, `name`, `domain`, `is_default`, `generation`, `created_at`, and `updated_at`.
+
+Accepted `status_snapshots` columns are target identity, status fields, `evidence_json`, `observed_generation`, `observed_at`, and timestamps.
+
+Accepted `reconciliation_requests` columns are target identity, `target_generation`, `action`, `payload_json`, `target_snapshot_json`, state/error, and timestamps.
+
+Accepted schema uniqueness includes unique App slugs, unique Service slugs, unique binding alias per App, one default platform domain, and one latest status row per resource target.
+
 Database relationships use internal stable text ids.
 
 Initial internal id format is a typed prefix plus UUID4 hex suffix.
@@ -219,7 +231,7 @@ Use restrictive relationships by default and implement destructive lifecycle del
 
 Status snapshots are stored as latest rows keyed by `resource_type` and `resource_id`.
 
-API 0.0.1 reconciliation requests include `id`, `target_type`, `target_id`, `action`, `payload_json`, target snapshot fields where needed, `state`, `error`, `created_at`, and `updated_at`.
+API 0.0.1 reconciliation requests include `id`, `target_type`, `target_id`, `target_generation`, `action`, `payload_json`, `target_snapshot_json`, `state`, `error`, `created_at`, and `updated_at`.
 
 Reconciliation and status records may record target or observed generation so stale status can be distinguished from current status.
 

@@ -137,19 +137,20 @@ Schema mechanics for internal ids, public slugs, timestamps, state constraints, 
 
 Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
 
+Concrete API 0.0.1 table fields and accepted indexes are refined by [API 0.0.1 Database Table Shape](20260522-api-0-0-1-database-table-shape.md).
+
 Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
 
 After the first usable version, schema evolution should happen through forward migrations rather than destructive resets.
 
 ## Open Questions
 
-- exact full column definitions
-- indexes and uniqueness constraints
+- exact SQL column types and nullability
+- exact CHECK constraint spelling
 - exact migration runner command
 - exact local reset command
 - exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact target snapshot JSON fields
-- exact generation column names on reconciliation/status records
 - exact request claiming behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior

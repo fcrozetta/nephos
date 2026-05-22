@@ -78,9 +78,10 @@ Reconciliation requests include durable action context.
 
 Accepted request fields include:
 
+- `target_generation`
 - `action`
 - `payload_json`
-- target snapshot fields where needed
+- `target_snapshot_json`
 
 Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
 

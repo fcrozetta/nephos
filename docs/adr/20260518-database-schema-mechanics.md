@@ -70,9 +70,10 @@ The accepted fields include:
 - `id`
 - `target_type`
 - `target_id`
+- `target_generation`
 - `action`
 - `payload_json`
-- target snapshot fields where needed
+- `target_snapshot_json`
 - `state`
 - `error`
 - `created_at`
@@ -153,14 +154,16 @@ Status evidence object fields are refined by [API Response Field Details](202605
 
 Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
 
+Concrete API 0.0.1 table fields and accepted indexes are refined by [API 0.0.1 Database Table Shape](20260522-api-0-0-1-database-table-shape.md).
+
 ## Open Questions
 
-- exact indexes beyond required uniqueness
+- exact SQL column types and nullability
+- exact CHECK constraint spelling
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - exact migration runner command
 - exact local reset command
 - exact busy timeout and transaction retry behavior
 - exact target snapshot JSON fields
-- exact generation column names on reconciliation/status records
 - retry count, backoff, and polling/wakeup behavior
