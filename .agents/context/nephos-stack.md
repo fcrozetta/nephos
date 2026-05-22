@@ -4,7 +4,9 @@
 
 Nephos is split across repositories.
 
-This repository, `nephos`, owns the backend control plane:
+This repository is the backend/API repository and should be referred to as `nephos-api` when distinguishing it from the CLI.
+
+`nephos-api` owns the backend control plane:
 
 - API
 - desired-state persistence
@@ -12,16 +14,20 @@ This repository, `nephos`, owns the backend control plane:
 - catalog and platform model
 - architecture context and ADRs
 
-The CLI lives in a separate repository:
+The CLI lives in a separate repository and should be referred to as `nephos-cli`:
 
 - GitHub: `https://github.com/fcrozetta/nephos-cli`
 - Local path: `../nephos-cli`
 
 The CLI repository is adjacent to this repository but still needs project setup/configuration.
 
-Setup UX and command implementation belong in the CLI repository after Nephos API `0.0.1` is implemented.
+Setup UX and command implementation belong in `nephos-cli` after Nephos API `0.0.1` is implemented.
 
 Do not implement CLI code in this repository unless Fer explicitly changes the repository boundary.
+
+When documentation says `nephos <command>`, it refers to the user-facing `nephos-cli` product command.
+
+Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
 
 ## Accepted Phase 1 Stack
 
@@ -92,6 +98,12 @@ Persistence:
 - Status snapshots use target identity, status fields, `evidence_json`, `observed_generation`, `observed_at`, and timestamps
 - API 0.0.1 reconciliation requests include `target_generation`, `action`, `payload_json`, and `target_snapshot_json`
 - Accepted uniqueness/indexing includes unique App slugs, unique Service slugs, unique binding alias per App, one default platform domain, unique latest status target, and reconciliation queue lookup by `state` and `created_at`
+- SQLite column types use `TEXT` for ids/slugs/enums/timestamps/JSON/digests and `INTEGER` for generation and boolean fields
+- Required identity/state/generation/timestamp columns are `NOT NULL`
+- Nullable columns are limited to optional fields such as `catalog_version`, `delete_requested_at`, optional messages/reasons/errors, and optional JSON payloads
+- CHECK constraints cover lifecycle, reconciliation request state, status level, `is_default IN (0, 1)`, and `generation >= 1`
+- Polymorphic status/reconciliation targets use type/id fields plus CHECK constraints and repository/domain validation
+- JSON columns are validated in Python/domain models, not SQLite JSON functions
 - Manual reconcile uses target-specific action subresources
 - Catalog read endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}`
 
@@ -106,6 +118,8 @@ Migrations:
 - `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
 - `schema_migrations` should exist in the initial schema
 - Forward-compatible migration discipline starts after the first usable version is established
+- migration/reset commands are backend-local `nephos-api` development/ops commands, not `nephos-cli` product commands
+- exact backend-local migration/reset command spelling remains open until package/module naming is implemented
 
 Controller/reconciler:
 
@@ -188,8 +202,8 @@ Exact developer commands are not finalized.
 Need to decide:
 
 - exact `uv` commands
-- exact local SQLite initialization/reset commands
-- exact migration command
+- exact backend-local SQLite initialization/reset command spelling
+- exact backend-local migration command spelling
 - exact K3s startup/reset workflow
 - exact integration test markers
 - backend image layout and registry

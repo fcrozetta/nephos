@@ -2055,3 +2055,61 @@ Accepted API 0.0.1 indexes and uniqueness rules include:
 - one default platform domain
 - unique latest status snapshot per `resource_type` and `resource_id`
 - reconciliation queue index by `state` and `created_at`
+
+## D213: Repository names are nephos-api and nephos-cli
+
+When distinguishing repositories, this backend/API repository is `nephos-api`.
+
+The separate user-facing CLI repository is `nephos-cli`.
+
+When documentation says `nephos <command>`, it refers to the user-facing command implemented by `nephos-cli`.
+
+Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
+
+## D214: SQLite column types and nullability are conservative
+
+Use:
+
+- `TEXT` for ids, slugs, enum values, timestamps, JSON payloads, and digests
+- `INTEGER` for `generation`
+- `INTEGER` for booleans such as `is_default`
+
+Use `NOT NULL` on required identity, state, generation, and timestamp columns.
+
+Nullable columns are allowed only for optional fields such as `catalog_version`, `delete_requested_at`, optional messages/reasons/errors, and optional JSON payloads.
+
+## D215: SQLite CHECK constraints enforce accepted states
+
+Use SQLite `CHECK` constraints for:
+
+- lifecycle state
+- reconciliation request state
+- status level
+- `is_default IN (0, 1)`
+- `generation >= 1`
+
+## D216: Polymorphic targets use type and id fields
+
+Status snapshots use `resource_type` and `resource_id`.
+
+Reconciliation requests use `target_type` and `target_id`.
+
+Use CHECK constraints for allowed target/resource types.
+
+Validate target existence in repository/domain code.
+
+Do not create separate status or reconciliation tables per target type in API 0.0.1.
+
+## D217: JSON payloads are validated in Python domain models
+
+JSON columns should default to `'{}'` or `'[]'` where the response/domain shape is always present.
+
+Validate JSON payloads in Python/domain models, not through SQLite JSON functions.
+
+## D218: Migration and reset commands are backend-local
+
+Migration and reset commands are backend-local `nephos-api` development/ops commands.
+
+They are not product CLI commands.
+
+Exact backend-local command spelling remains open until package/module naming is implemented.

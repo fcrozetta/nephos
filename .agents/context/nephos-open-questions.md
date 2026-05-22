@@ -340,13 +340,10 @@ Accepted direction:
 
 Need to decide:
 
-- exact SQL column types and nullability
-- exact CHECK constraint spelling
-- exact migration runner command
-- exact local reset command
+- exact backend-local migration command spelling
+- exact backend-local reset command spelling
 - exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
-- exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - exact target snapshot JSON fields
 - exact request claiming behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior

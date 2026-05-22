@@ -189,16 +189,14 @@ Status snapshots should enforce one latest status row per target.
 
 Reconciliation workers should use the `state, created_at` queue index for pending work selection.
 
-The exact SQL syntax, column nullability, and CHECK constraint spelling remain implementation details, but they must preserve this table shape.
+SQLite column types, nullability, CHECK constraints, polymorphic target handling, JSON validation policy, and backend-local command ownership are refined by [SQLite Column and Backend Command Mechanics](20260522-sqlite-column-and-backend-command-mechanics.md).
 
 ## Open Questions
 
-- exact SQL column types and nullability
-- exact CHECK constraint spelling
 - exact target snapshot JSON fields
 - exact `payload_json`, `output_summary_json`, and `evidence_json` contents
-- exact migration runner command
-- exact local reset command
+- exact backend-local migration command spelling
+- exact backend-local reset command spelling
 - exact busy timeout and transaction retry behavior
 - exact request claiming behavior
 - exact polling/wakeup behavior

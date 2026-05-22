@@ -26,6 +26,12 @@ Forward-compatible migration discipline starts after the first usable version is
 
 Exact migration runner and local reset commands are still open.
 
+Migration and reset commands are backend-local `nephos-api` development/ops commands.
+
+They are not product CLI commands and must not use the `nephos <command>` spelling.
+
+Exact backend command spelling remains open until package/module naming is implemented.
+
 ## API 0.0.1 Tables
 
 Accepted table families:
@@ -41,6 +47,37 @@ Accepted table families:
 The accepted API 0.0.1 table shape is defined below.
 
 Exact SQL type/nullability spelling remains an implementation detail, but implementation must preserve these fields and constraints.
+
+Accepted SQLite type/nullability rules:
+
+- use `TEXT` for ids, slugs, enum values, timestamps, JSON payloads, and digests
+- use `INTEGER` for `generation`
+- use `INTEGER` for boolean fields such as `is_default`
+- use `NOT NULL` on required identity, state, generation, and timestamp columns
+- nullable columns are allowed only for optional fields such as `catalog_version`, `delete_requested_at`, optional messages/reasons/errors, and optional JSON payloads
+
+Accepted CHECK constraints:
+
+- accepted lifecycle states
+- accepted reconciliation request states
+- accepted status levels
+- `is_default IN (0, 1)`
+- `generation >= 1`
+
+Status and reconciliation use polymorphic target fields:
+
+- `resource_type` and `resource_id` for status snapshots
+- `target_type` and `target_id` for reconciliation requests
+
+Use CHECK constraints for allowed target/resource types.
+
+Validate target existence in repository/domain code.
+
+Do not create separate status or reconciliation tables per target type in API 0.0.1.
+
+JSON columns should default to `'{}'` or `'[]'` where the response/domain shape is always present.
+
+Validate JSON payloads in Python/domain models, not through SQLite JSON functions.
 
 ### `app_instances`
 

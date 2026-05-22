@@ -12,7 +12,9 @@ The stack must preserve the boundary:
 
 intent -> desired state -> reconcile into Kubernetes
 
-The repository boundary is also part of the decision: this repository owns the backend/control-plane work, while the CLI is a separate repository.
+The repository boundary is also part of the decision: this backend/API repository owns the backend/control-plane work, while the CLI is a separate repository.
+
+When distinguishing repositories, refer to this repository as `nephos-api` and the CLI repository as `nephos-cli`.
 
 ## Decision
 
@@ -110,9 +112,13 @@ Chosen option: "Python/FastAPI backend with separate Python/Typer CLI", because 
 
 ## Consequences
 
-The backend/control-plane implementation belongs in this repository.
+The backend/control-plane implementation belongs in this repository, `nephos-api`.
 
 CLI implementation belongs in `../nephos-cli`.
+
+When documentation says `nephos <command>`, it refers to the user-facing command implemented by `nephos-cli`.
+
+Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
 
 The CLI must use the Nephos API/local controller as its product boundary.
 

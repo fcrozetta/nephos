@@ -2,7 +2,9 @@
 
 ## Repository Ownership
 
-This repository, `nephos`, owns backend/control-plane development.
+This repository is the backend/API repository and should be referred to as `nephos-api` when distinguishing it from the CLI.
+
+`nephos-api` owns backend/control-plane development.
 
 The CLI lives in the separate `nephos-cli` repository:
 
@@ -12,6 +14,10 @@ The CLI lives in the separate `nephos-cli` repository:
 CLI implementation, CLI linting, CLI tests, and CLI release workflow belong in the CLI repository.
 
 Do not add CLI implementation code to this repository unless Fer explicitly changes the repository boundary.
+
+When documentation says `nephos <command>`, it refers to the user-facing `nephos-cli` product command.
+
+Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
 
 ## Backend Local Development
 
@@ -37,6 +43,10 @@ Local development should run the backend as a local process.
 The CLI should point at the local backend/API during development.
 
 The exact developer commands are not finalized yet.
+
+Migration and reset commands are backend-local `nephos-api` development/ops commands.
+
+Exact backend-local command spelling remains open until package/module naming is implemented.
 
 ## Testing Baseline
 

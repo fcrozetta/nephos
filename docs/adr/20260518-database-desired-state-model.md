@@ -139,16 +139,16 @@ Destroy timing, durable reconciliation request action context, generation tracki
 
 Concrete API 0.0.1 table fields and accepted indexes are refined by [API 0.0.1 Database Table Shape](20260522-api-0-0-1-database-table-shape.md).
 
+SQLite column types, nullability, CHECK constraints, polymorphic target handling, JSON validation policy, and backend-local command ownership are refined by [SQLite Column and Backend Command Mechanics](20260522-sqlite-column-and-backend-command-mechanics.md).
+
 Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
 
 After the first usable version, schema evolution should happen through forward migrations rather than destructive resets.
 
 ## Open Questions
 
-- exact SQL column types and nullability
-- exact CHECK constraint spelling
-- exact migration runner command
-- exact local reset command
+- exact backend-local migration command spelling
+- exact backend-local reset command spelling
 - exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact target snapshot JSON fields

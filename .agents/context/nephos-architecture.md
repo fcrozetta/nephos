@@ -19,7 +19,9 @@ Default runtime backend:
 
 ## Repository Boundaries
 
-This repository, `nephos`, owns the backend control plane:
+This repository is the backend/API repository and should be referred to as `nephos-api` when distinguishing it from the CLI.
+
+`nephos-api` owns the backend control plane:
 
 - API
 - desired-state persistence
@@ -28,12 +30,16 @@ This repository, `nephos`, owns the backend control plane:
 - catalog model
 - architecture context and ADRs
 
-The CLI is a separate repository:
+The CLI is a separate repository and should be referred to as `nephos-cli`:
 
 - GitHub: `https://github.com/fcrozetta/nephos-cli`
 - Local path: `../nephos-cli`
 
 Do not add CLI implementation code to this repository without an explicit decision changing that boundary.
+
+When documentation says `nephos <command>`, it refers to the user-facing command implemented by `nephos-cli`.
+
+Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
 
 ## Main Components
 
