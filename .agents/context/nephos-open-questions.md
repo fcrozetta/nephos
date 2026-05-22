@@ -332,6 +332,8 @@ Accepted direction:
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - `status_snapshots` stores one latest row per `resource_type` and `resource_id`
 - `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
+- backend-local migration command is `uv run nephos-api db migrate`
+- backend-local reset command is `uv run nephos-api db reset --force`
 - API mutations that change desired state write desired-state changes and reconciliation request in one database transaction
 - destroy keeps the desired-state row present while teardown is pending
 - do not add `destroying` as a lifecycle state
@@ -340,8 +342,6 @@ Accepted direction:
 
 Need to decide:
 
-- exact backend-local migration command spelling
-- exact backend-local reset command spelling
 - exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact target snapshot JSON fields
@@ -696,8 +696,11 @@ How should the backend and CLI be packaged and distributed?
 
 Accepted direction:
 
-- backend/control plane lives in `nephos`
+- backend/control plane lives in `nephos-api`
 - CLI lives in `../nephos-cli`
+- backend Python package layout is `src/nephos_api/`
+- backend-local console command is `nephos-api`
+- FastAPI app entrypoint is `nephos_api.main:app`
 - backend Phase 1 distribution is local development process plus backend container image
 - full installer packaging is deferred
 - CLI workflow belongs to the separate CLI repository
@@ -705,7 +708,6 @@ Accepted direction:
 
 Need to decide:
 
-- backend package layout
 - backend container image strategy
 - CLI installation path
 - release process across the two repositories
@@ -720,14 +722,15 @@ What are the exact local development commands and conventions for Nephos?
 Accepted direction:
 
 - `uv` is the canonical backend Python workflow
+- backend-local migration command is `uv run nephos-api db migrate`
+- backend-local reset command is `uv run nephos-api db reset --force`
+- backend-local serve command is `uv run nephos-api serve`
+- API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
 - CLI points at local backend/API during development
 
 Need to decide:
 
-- exact `uv` commands
 - whether to use Makefile/task runner wrappers
-- how SQLite state is initialized/reset
-- how migrations are run locally
 - how K3s is started/reset for local development
 - how `../nephos-cli` points to a local backend
 

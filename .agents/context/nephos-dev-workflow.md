@@ -23,6 +23,18 @@ Backend-local development/ops commands in `nephos-api` must not use the `nephos 
 
 Use `uv` as the canonical Python workflow for backend development.
 
+Backend package layout:
+
+- `src/nephos_api/`
+
+FastAPI app entrypoint:
+
+- `nephos_api.main:app`
+
+Backend-local console command:
+
+- `nephos-api`
+
 The backend stack remains:
 
 - Python
@@ -38,15 +50,28 @@ Initial schema should live in `migrations/0000_initial.sql`.
 
 Forward-compatible migration discipline starts after the first usable version is established.
 
-Local development should run the backend as a local process.
+Accepted backend-local development commands:
+
+```bash
+uv run nephos-api db migrate
+uv run nephos-api db reset --force
+uv run nephos-api serve
+```
+
+Local development should run the backend as a local process through `uv run nephos-api serve`.
 
 The CLI should point at the local backend/API during development.
 
-The exact developer commands are not finalized yet.
-
 Migration and reset commands are backend-local `nephos-api` development/ops commands.
 
-Exact backend-local command spelling remains open until package/module naming is implemented.
+They are not product CLI commands and must not use the `nephos <command>` spelling.
+
+API 0.0.1 implementation order:
+
+1. migration and database layer
+2. API skeleton
+3. catalog loader
+4. reconciler
 
 ## Testing Baseline
 
@@ -96,12 +121,10 @@ Future strict compatibility behavior requires an explicit decision.
 
 ## Still Open
 
-- exact `uv` commands
 - exact Makefile/task runner conventions
-- exact local SQLite initialization/reset commands
-- exact migration command
 - exact K3s startup/reset workflow
 - exact integration test tags/markers
+- exact `../nephos-cli` local backend configuration convention
 - backend container image layout
 - backend image registry/release process
 - cross-repo release process

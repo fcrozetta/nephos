@@ -41,6 +41,18 @@ When documentation says `nephos <command>`, it refers to the user-facing command
 
 Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
 
+The backend Python package layout is:
+
+```text
+src/nephos_api/
+```
+
+The backend-local console command is:
+
+```text
+nephos-api
+```
+
 ## Main Components
 
 ### CLI
@@ -76,6 +88,12 @@ It should support:
 The API should own platform intent.
 
 The API/database is the canonical source of desired platform state.
+
+The FastAPI app entrypoint is:
+
+```text
+nephos_api.main:app
+```
 
 Platform configuration that affects reconciliation, such as ingress root domains, lives in the API/database as desired state.
 
@@ -192,6 +210,8 @@ For Phase 1, the backend stack is:
 
 - Python
 - FastAPI
+- `src/nephos_api/` package layout
+- `nephos_api.main:app` app entrypoint
 - SQLite
 - simple explicit SQL migrations
 - plain SQL through a small repository/data-access layer
@@ -246,6 +266,8 @@ API mutations that change desired state must write desired-state changes and the
 Backend unit tests should use mocks/fakes.
 
 Kubernetes integration tests should run against real K3s.
+
+API 0.0.1 implementation should start with the migration and database layer, then the API skeleton, then the catalog loader, then the reconciler.
 
 ### Controller / Reconciler
 

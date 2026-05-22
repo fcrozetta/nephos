@@ -58,12 +58,12 @@ Migration and reset commands are backend-local development/ops commands owned by
 
 They are not product CLI commands and must not use the `nephos <command>` spelling in this repository.
 
-Exact backend command spelling remains open until package/module naming is implemented.
+The accepted backend-local command spelling is defined by [Backend Package and Dev Command Shape](./20260522-backend-package-and-dev-command-shape.md).
 
-Acceptable future backend-local command shapes include:
+Accepted backend-local command shapes include:
 
-- `uv run nephos-api ...`
-- `uv run python -m nephos_api ...`
+- `uv run nephos-api db migrate`
+- `uv run nephos-api db reset --force`
 
 Do not document `uv run nephos ...` for backend-local commands.
 
@@ -117,7 +117,7 @@ Do not document `uv run nephos ...` for backend-local commands.
 
 - Good, because schema management belongs to `nephos-api`.
 - Good, because the product CLI boundary stays clean.
-- Bad, because exact backend command spelling still needs implementation-time naming.
+- Bad, because backend-local commands are not product UX and must stay clearly documented as developer/ops commands.
 
 ### Product CLI migration/reset commands
 
@@ -136,12 +136,10 @@ Architecture docs must refer to this repository as `nephos-api` when distinguish
 
 Any `nephos <command>` wording is reserved for the `nephos-cli` product command.
 
-Backend-local command spelling stays open until package/module naming is implemented.
+Backend-local command spelling is resolved by [Backend Package and Dev Command Shape](./20260522-backend-package-and-dev-command-shape.md).
 
 ## Open Questions
 
-- exact backend-local migration command spelling
-- exact backend-local reset command spelling
 - exact `payload_json`, `target_snapshot_json`, `output_summary_json`, and `evidence_json` contents
 - exact busy timeout and transaction retry behavior
 - exact request claiming behavior

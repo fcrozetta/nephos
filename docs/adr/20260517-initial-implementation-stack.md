@@ -20,7 +20,11 @@ When distinguishing repositories, refer to this repository as `nephos-api` and t
 
 Use Python for the Nephos backend.
 
+Use `src/nephos_api/` as the backend Python package layout.
+
 Use FastAPI for the Nephos API.
+
+Use `nephos_api.main:app` as the FastAPI app entrypoint.
 
 Use SQLite as the Phase 1 canonical desired-state database.
 
@@ -37,6 +41,16 @@ Initial schema should live in `migrations/0000_initial.sql`.
 Use the official Python Kubernetes client.
 
 Use `uv` as the canonical backend Python workflow.
+
+Expose backend-local development/ops commands through `nephos-api`.
+
+Accepted backend-local command shapes:
+
+```bash
+uv run nephos-api db migrate
+uv run nephos-api db reset --force
+uv run nephos-api serve
+```
 
 Use `pytest` and `ruff` as the backend test/lint baseline.
 
@@ -119,6 +133,8 @@ CLI implementation belongs in `../nephos-cli`.
 When documentation says `nephos <command>`, it refers to the user-facing command implemented by `nephos-cli`.
 
 Backend-local development/ops commands in `nephos-api` must not use the `nephos <command>` spelling.
+
+The accepted backend package and command details are refined in [Backend Package and Dev Command Shape](./20260522-backend-package-and-dev-command-shape.md).
 
 The CLI must use the Nephos API/local controller as its product boundary.
 

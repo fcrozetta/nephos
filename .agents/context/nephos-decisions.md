@@ -2106,10 +2106,64 @@ JSON columns should default to `'{}'` or `'[]'` where the response/domain shape 
 
 Validate JSON payloads in Python/domain models, not through SQLite JSON functions.
 
-## D218: Migration and reset commands are backend-local
+## D218: Migration and reset commands are backend-local nephos-api commands
 
 Migration and reset commands are backend-local `nephos-api` development/ops commands.
 
 They are not product CLI commands.
 
-Exact backend-local command spelling remains open until package/module naming is implemented.
+Accepted backend-local command spelling:
+
+```bash
+uv run nephos-api db migrate
+uv run nephos-api db reset --force
+```
+
+Do not document or implement backend-local migration/reset commands as `nephos <command>`.
+
+## D219: Backend package layout is src/nephos_api
+
+The backend/API Python package layout is:
+
+```text
+src/nephos_api/
+```
+
+Fer preferred the shorter `src/nephos/` shape but accepted `src/nephos_api/` to preserve the repository and command boundary with `nephos-cli`.
+
+## D220: Backend-local console command is nephos-api
+
+The backend/API repository exposes a backend-local console command named:
+
+```text
+nephos-api
+```
+
+The user-facing `nephos` product command remains owned by the separate `nephos-cli` repository.
+
+## D221: Backend serve command is nephos-api serve
+
+The accepted local backend startup command is:
+
+```bash
+uv run nephos-api serve
+```
+
+This starts the local `nephos-api` process for development.
+
+## D222: FastAPI entrypoint is nephos_api.main:app
+
+The FastAPI app entrypoint is:
+
+```text
+nephos_api.main:app
+```
+
+## D223: API 0.0.1 implementation starts with the database layer
+
+API 0.0.1 implementation order is:
+
+1. migration and database layer
+2. API skeleton
+3. catalog loader
+4. reconciler

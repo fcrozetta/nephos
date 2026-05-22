@@ -158,11 +158,11 @@ Concrete API 0.0.1 table fields and accepted indexes are refined by [API 0.0.1 D
 
 SQLite column types, nullability, CHECK constraints, polymorphic target handling, JSON validation policy, and backend-local command ownership are refined by [SQLite Column and Backend Command Mechanics](20260522-sqlite-column-and-backend-command-mechanics.md).
 
+Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
+
 ## Open Questions
 
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
-- exact backend-local migration command spelling
-- exact backend-local reset command spelling
 - exact busy timeout and transaction retry behavior
 - exact target snapshot JSON fields
 - retry count, backoff, and polling/wakeup behavior

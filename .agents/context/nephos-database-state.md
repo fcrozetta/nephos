@@ -24,13 +24,16 @@ Do not create schema imperatively in Python.
 
 Forward-compatible migration discipline starts after the first usable version is established.
 
-Exact migration runner and local reset commands are still open.
-
 Migration and reset commands are backend-local `nephos-api` development/ops commands.
 
 They are not product CLI commands and must not use the `nephos <command>` spelling.
 
-Exact backend command spelling remains open until package/module naming is implemented.
+Accepted backend-local commands:
+
+```bash
+uv run nephos-api db migrate
+uv run nephos-api db reset --force
+```
 
 ## API 0.0.1 Tables
 

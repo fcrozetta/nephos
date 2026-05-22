@@ -14,6 +14,16 @@ The backend/control-plane repository and CLI repository are separate, so local w
 
 Use `uv` as the canonical backend Python workflow in this repository.
 
+Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
+
+Accepted backend-local commands:
+
+```bash
+uv run nephos-api db migrate
+uv run nephos-api db reset --force
+uv run nephos-api serve
+```
+
 Use `pytest` and `ruff` as the required backend test/lint baseline.
 
 Use mocks/fakes for backend unit tests.

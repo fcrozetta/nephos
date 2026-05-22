@@ -226,10 +226,9 @@ Reference scenario:
 - App install behavior when setup is missing
 - binding Secret rotation behavior
 - backup guarantees
-- local development workflow
+- local development wrapper/K3s reset/local CLI configuration workflow
 - packaging/distribution
 - future remote catalog trust/signing/update behavior
-- exact developer commands
 - backend image layout and registry
 - cross-repo release process
 - exact reference scenario command spelling and status output

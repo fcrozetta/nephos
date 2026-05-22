@@ -34,10 +34,20 @@ Backend-local development/ops commands in `nephos-api` must not use the `nephos 
 Backend language:
 
 - Python
+- package layout: `src/nephos_api/`
 
 API framework:
 
 - FastAPI
+- app entrypoint: `nephos_api.main:app`
+
+Backend-local command surface:
+
+- `nephos-api`
+- `uv run nephos-api db migrate`
+- `uv run nephos-api db reset --force`
+- `uv run nephos-api serve`
+- `nephos <command>` remains reserved for the user-facing `nephos-cli` product command
 
 CLI language/framework:
 
@@ -119,7 +129,8 @@ Migrations:
 - `schema_migrations` should exist in the initial schema
 - Forward-compatible migration discipline starts after the first usable version is established
 - migration/reset commands are backend-local `nephos-api` development/ops commands, not `nephos-cli` product commands
-- exact backend-local migration/reset command spelling remains open until package/module naming is implemented
+- accepted backend-local migration command is `uv run nephos-api db migrate`
+- accepted backend-local reset command is `uv run nephos-api db reset --force`
 
 Controller/reconciler:
 
@@ -142,8 +153,9 @@ Kubernetes client:
 Local development:
 
 - `uv` is the canonical backend Python workflow
-- backend runs as a local process during development
+- backend runs as a local process during development through `uv run nephos-api serve`
 - CLI points at the local backend/API during development
+- API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
 
 Testing:
 
@@ -197,13 +209,11 @@ Nephos does not use Kubernetes `ownerReferences` to represent platform relations
 
 ## Still To Decide
 
-Exact developer commands are not finalized.
+Some local development wrapper details remain open.
 
 Need to decide:
 
-- exact `uv` commands
-- exact backend-local SQLite initialization/reset command spelling
-- exact backend-local migration command spelling
+- exact Makefile/task runner wrapper conventions
 - exact K3s startup/reset workflow
 - exact integration test markers
 - backend image layout and registry

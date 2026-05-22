@@ -191,12 +191,12 @@ Reconciliation workers should use the `state, created_at` queue index for pendin
 
 SQLite column types, nullability, CHECK constraints, polymorphic target handling, JSON validation policy, and backend-local command ownership are refined by [SQLite Column and Backend Command Mechanics](20260522-sqlite-column-and-backend-command-mechanics.md).
 
+Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
+
 ## Open Questions
 
 - exact target snapshot JSON fields
 - exact `payload_json`, `output_summary_json`, and `evidence_json` contents
-- exact backend-local migration command spelling
-- exact backend-local reset command spelling
 - exact busy timeout and transaction retry behavior
 - exact request claiming behavior
 - exact polling/wakeup behavior
