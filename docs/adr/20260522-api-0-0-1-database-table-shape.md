@@ -23,7 +23,8 @@ It does not create the migration file.
 - `catalog_kind`
 - `catalog_name`
 - `catalog_version`
-- `catalog_source`
+- `catalog_source_id`
+- `catalog_source_path`
 - `manifest_digest`
 - `lifecycle`
 - `generation`
@@ -39,7 +40,8 @@ It does not create the migration file.
 - `catalog_kind`
 - `catalog_name`
 - `catalog_version`
-- `catalog_source`
+- `catalog_source_id`
+- `catalog_source_path`
 - `manifest_digest`
 - `lifecycle`
 - `generation`
@@ -194,6 +196,8 @@ SQLite column types, nullability, CHECK constraints, polymorphic target handling
 Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
 
 Database path, migration runner behavior, SQLite busy timeout, and app-level retry policy are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
+Catalog source id/path column behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 ## Open Questions
 

@@ -54,7 +54,7 @@ Desired-state domain rows include integer `generation` tracking and increment it
 
 Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
 
-Installed App and Service records should store catalog identity and version information, including catalog kind, catalog name, catalog version when available, source path, and SHA-256 manifest digest.
+Installed App and Service records should store catalog identity and version information, including catalog kind, catalog name, catalog version when available, catalog source id, catalog source path snapshot, and SHA-256 manifest digest.
 
 Do not store a full manifest snapshot by default.
 
@@ -144,6 +144,8 @@ SQLite column types, nullability, CHECK constraints, polymorphic target handling
 Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
 
 Database path, migration runner behavior, SQLite busy timeout, and app-level retry policy are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
+Catalog source id/path storage is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
 

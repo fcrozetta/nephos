@@ -46,6 +46,17 @@ NEPHOS_API_CATALOG_ROOTS
 
 `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list, such as `:`-separated paths on macOS/Linux.
 
+Catalog source ids:
+
+- repo-shipped catalog root: `default`
+- configured local roots: `local-1`, `local-2`, `local-3`, in configured order
+
+Source ids are stable only for the current backend configuration and root order.
+
+Catalog responses expose source ids through `source`.
+
+Catalog responses do not expose raw filesystem paths by default.
+
 Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
 
 Catalog source management can move into platform configuration later by explicit decision.
@@ -98,6 +109,10 @@ Duplicate catalog entries with the same kind and name across configured roots ar
 
 Do not let later roots silently override earlier roots.
 
+Ambiguous duplicate entries return `409 Conflict` with code `catalog_entry_ambiguous`.
+
+Unknown source ids return `404 Not Found` with code `catalog_source_not_found`.
+
 By default, an installed instance name equals the catalog manifest `metadata.name`.
 
 Users may provide an explicit instance name at install time.
@@ -120,7 +135,7 @@ Install by catalog kind and name, plus optional explicit source when needed.
 
 Do not make arbitrary install-from-path the main API or UX flow.
 
-At install time, store catalog kind, catalog name, catalog version when available, catalog source path or source identifier, and SHA-256 digest of the manifest file content.
+At install time, store catalog kind, catalog name, catalog version when available, catalog source id, catalog source path snapshot, and SHA-256 digest of the manifest file content.
 
 Do not store a full manifest snapshot by default.
 
@@ -157,3 +172,5 @@ Do not introduce remote catalog fetching, signing, or OCI distribution without a
 Do not create schema files under `schemas/` until Fer approves the concrete validation schema.
 
 Catalog root environment configuration is refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).

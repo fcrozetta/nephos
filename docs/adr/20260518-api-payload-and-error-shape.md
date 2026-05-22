@@ -60,6 +60,8 @@ Accepted Service install shape:
 
 `catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
 
+`catalogRef.source` uses catalog source ids such as `default` or `local-1`.
+
 `instanceName`, `config`, and `bindings` are optional where the operation can use accepted defaults.
 
 Lifecycle action bodies use one common shape:
@@ -134,6 +136,40 @@ FastAPI/Pydantic framework validation errors may remain in their default framewo
 
 Normalize validation errors into the Nephos error envelope later by explicit decision.
 
+Ambiguous catalog entry errors use HTTP `409 Conflict`.
+
+Accepted ambiguous catalog entry error shape:
+
+```json
+{
+  "error": {
+    "code": "catalog_entry_ambiguous",
+    "message": "Catalog entry exists in multiple sources. Select a source.",
+    "details": {
+      "kind": "App",
+      "name": "paperless",
+      "sources": ["default", "local-1"]
+    }
+  }
+}
+```
+
+Missing catalog source errors use HTTP `404 Not Found`.
+
+Accepted missing catalog source error shape:
+
+```json
+{
+  "error": {
+    "code": "catalog_source_not_found",
+    "message": "Catalog source was not found.",
+    "details": {
+      "source": "local-9"
+    }
+  }
+}
+```
+
 ## Considered Options
 
 ### Instance slugs in public paths
@@ -192,6 +228,8 @@ Read payloads, status payloads, and reconciliation request id format are refined
 Resource-specific response fields, status evidence object fields, and installed slug rename behavior are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 ## Open Questions
 

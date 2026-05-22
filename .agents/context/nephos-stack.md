@@ -94,6 +94,12 @@ Persistence:
 - Nested response entry status summaries use `level`, `reason`, `message`, and `observedAt`
 - App route targets are semantic and expose `port`
 - Catalog responses use normalized summaries, not raw manifest blobs by default
+- Catalog source ids are `default` for the repo-shipped catalog root and `local-1`, `local-2`, `local-3` for configured local roots in configured order
+- Catalog source ids are stable only for the current backend configuration and root order
+- Catalog responses expose source ids through `source`, not raw filesystem paths by default
+- `catalogRef.source` and catalog detail `?source=` use source ids
+- ambiguous duplicate catalog entries return `409 Conflict` with code `catalog_entry_ambiguous`
+- unknown catalog source ids return `404 Not Found` with code `catalog_source_not_found`
 - Catalog summaries include App `requires` and `routes`, and Service `provides`
 - Catalog summary entries use normalized Nephos fields, not raw manifest blobs or Kubernetes shapes
 - Installed App and Service slugs are immutable in API 0.0.1
@@ -106,6 +112,7 @@ Persistence:
 - JSON text columns are limited to validated snapshots and flexible payloads
 - Latest status snapshots are keyed by `resource_type` and `resource_id`
 - App and Service tables use explicit catalog identity, lifecycle, generation, config, pending destroy, and timestamp columns
+- Installed App and Service rows store both catalog source id and catalog source path snapshot
 - Binding rows use explicit App/Service relationship, alias, capability, generation, output summary, and timestamp columns
 - Platform domain rows use `name`, `domain`, `is_default`, generation, and timestamps
 - Status snapshots use target identity, status fields, `evidence_json`, `observed_generation`, `observed_at`, and timestamps
@@ -184,6 +191,9 @@ Catalog bootstrap:
 - repo-shipped catalog root is `catalog/`
 - optional additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`
 - `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list
+- repo-shipped catalog source id is `default`
+- configured local source ids are `local-1`, `local-2`, `local-3` in configured order
+- source ids are stable only for the current backend configuration and root order
 - catalog roots are backend-local configuration for API 0.0.1, not platform desired state
 
 Packaging/distribution:

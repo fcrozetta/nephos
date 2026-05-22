@@ -188,6 +188,8 @@ Service install shape:
 
 `catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
 
+`catalogRef.source` uses catalog source ids such as `default` or `local-1`.
+
 `instanceName`, `config`, and `bindings` are optional where accepted defaults are available.
 
 Do not use catalog install action endpoints as the primary API shape.
@@ -200,7 +202,7 @@ The API reads local filesystem catalog manifests.
 
 API 0.0.1 reads and validates catalog manifests on demand.
 
-Installed records store catalog identity, optional version, source, and digest information.
+Installed records store catalog identity, optional version, catalog source id, catalog source path snapshot, and digest information.
 
 Do not require catalog entries to be imported into SQLite before installation in Phase 1.
 
@@ -212,6 +214,13 @@ Custom catalog roots are backend local configuration for API 0.0.1, not platform
 
 Additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`.
 
+Catalog source ids are:
+
+- `default` for the repo-shipped catalog root
+- `local-1`, `local-2`, `local-3` for configured local roots in configured order
+
+Source ids are stable only for the current backend configuration and root order.
+
 Read-only catalog endpoints are:
 
 ```text
@@ -222,6 +231,12 @@ GET /catalog/services/{name}
 ```
 
 Catalog detail endpoints accept optional `source` selection where duplicate catalog entries require disambiguation.
+
+The catalog detail `source` query parameter uses the catalog source id.
+
+Ambiguous duplicate entries return `409 Conflict` with code `catalog_entry_ambiguous`.
+
+Unknown source ids return `404 Not Found` with code `catalog_source_not_found`.
 
 Catalog endpoints are read-only in API 0.0.1.
 
@@ -238,6 +253,8 @@ Accepted catalog response fields:
 - `manifestDigest`
 - capability summary
 - route summary
+
+Catalog responses expose source ids through `source` and do not expose raw filesystem paths by default.
 
 App catalog summaries include `requires` and `routes`.
 

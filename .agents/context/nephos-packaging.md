@@ -462,7 +462,21 @@ Installed App and Service instances live in Nephos desired state, not in the cat
 
 API 0.0.1 loads catalog manifests on demand from one repo-shipped catalog root plus optional configured local filesystem roots.
 
+The repo-shipped catalog root source id is `default`.
+
+Configured local catalog roots use source ids `local-1`, `local-2`, and `local-3` in configured order.
+
+Source ids are stable only for the current backend configuration and root order.
+
 Install by catalog kind and name, plus optional explicit source when needed.
+
+Explicit source selection uses source ids.
+
+Catalog responses expose source ids through `source` and do not expose raw filesystem paths by default.
+
+Ambiguous duplicate catalog entries return `409 Conflict` with code `catalog_entry_ambiguous`.
+
+Unknown catalog source ids return `404 Not Found` with code `catalog_source_not_found`.
 
 Do not make arbitrary install-from-path the main API or UX flow.
 

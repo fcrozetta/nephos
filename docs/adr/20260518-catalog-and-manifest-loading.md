@@ -37,6 +37,19 @@ NEPHOS_API_CATALOG_ROOTS
 
 `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list, such as `:`-separated paths on macOS/Linux.
 
+Catalog source ids:
+
+- repo-shipped catalog root: `default`
+- configured local roots: `local-1`, `local-2`, `local-3`, in configured order
+
+Source ids are stable only for the current backend configuration and root order.
+
+Catalog responses expose source ids through `source`.
+
+Catalog responses do not expose raw filesystem paths by default.
+
+`sourcePath` is reserved for future backend/debug/detail contexts.
+
 Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
 
 Catalog source management can move into platform configuration later by explicit decision.
@@ -67,6 +80,10 @@ Duplicate catalog entries with the same kind and name across configured roots ar
 
 Do not let later roots silently override earlier roots.
 
+If a duplicate catalog entry is ambiguous, return `409 Conflict` with error code `catalog_entry_ambiguous` and details containing `kind`, `name`, and `sources[]`.
+
+If a caller requests an unknown source id, return `404 Not Found` with error code `catalog_source_not_found`.
+
 Validate manifests with typed Python/Pydantic domain models in API code first.
 
 Do not add canonical JSON Schema files under `schemas/` until Fer approves the concrete validation schema.
@@ -78,7 +95,8 @@ At install time, store catalog identity and version/digest information on instal
 - catalog kind
 - catalog name
 - catalog version when available
-- catalog source path or source identifier
+- catalog source id
+- catalog source path snapshot
 - SHA-256 digest of the manifest file content
 
 Do not store a full manifest snapshot by default.
@@ -99,6 +117,8 @@ The catalog reference is carried in the request body.
 The request body uses `catalogRef` with `kind`, `name`, and optional `source`.
 
 `catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
+
+`catalogRef.source` uses source ids such as `default` or `local-1`.
 
 Catalog endpoints are not the primary owner of install mutation.
 
@@ -165,9 +185,9 @@ Catalog summary nested fields are refined by [API Nested Response Entry Fields](
 
 Catalog root environment configuration is refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
 
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
+
 ## Open Questions
 
-- exact source identifier format when more than one root is configured
-- exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging

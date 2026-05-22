@@ -160,6 +160,14 @@ Ingress root domains are platform configuration resources at `/platform/config/d
 
 Read-only catalog endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}` with optional `source` selection for duplicate catalog entries.
 
+Catalog source selection uses source ids such as `default` and `local-1`.
+
+Catalog responses expose source ids through `source` and do not expose raw filesystem paths by default.
+
+Ambiguous duplicate catalog entries return `409 Conflict` with code `catalog_entry_ambiguous`.
+
+Unknown catalog source ids return `404 Not Found` with code `catalog_source_not_found`.
+
 Catalog responses return normalized summaries, not raw manifest blobs by default.
 
 App catalog summaries include `requires` and `routes`.
@@ -221,7 +229,7 @@ For Phase 1, the backend stack is:
 
 API 0.0.1 desired-state storage uses separate normalized table families for App instances, Service instances, bindings, platform domains, latest status snapshots, reconciliation requests, and schema migrations.
 
-Accepted `app_instances` and `service_instances` columns are `id`, `slug`, catalog identity/version/source/digest fields, `lifecycle`, `generation`, `config_json`, `delete_requested_at`, `created_at`, and `updated_at`.
+Accepted `app_instances` and `service_instances` columns are `id`, `slug`, catalog identity/version/source id/source path/digest fields, `lifecycle`, `generation`, `config_json`, `delete_requested_at`, `created_at`, and `updated_at`.
 
 Accepted `bindings` columns are `id`, `app_instance_id`, `service_instance_id`, `alias`, `capability`, `generation`, `output_summary_json`, `created_at`, and `updated_at`.
 
@@ -440,6 +448,12 @@ Nephos resolves App requirements to installed or installable Services.
 Phase 1 catalog source is local filesystem first.
 
 Supported Phase 1 catalog sources are repo-shipped reference entries and user-configured local filesystem paths.
+
+The repo-shipped catalog source id is `default`.
+
+Configured local catalog roots use source ids `local-1`, `local-2`, and `local-3` in configured order.
+
+Catalog source ids are stable only for the current backend configuration and root order.
 
 User-created local catalog entries are allowed in Phase 1, but there is no schema stability promise until the concrete validation schema is accepted.
 

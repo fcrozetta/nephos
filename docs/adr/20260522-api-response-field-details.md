@@ -83,6 +83,10 @@ Accepted catalog response fields:
 - capability summary
 - route summary
 
+The `source` field is a catalog source id such as `default` or `local-1`.
+
+Catalog list responses do not expose raw filesystem paths by default.
+
 Do not return raw manifest blobs by default.
 
 Raw or full validated manifest output, if needed later, requires an explicit response field or endpoint decision.
@@ -170,6 +174,8 @@ Catalog response mapping must summarize capabilities and routes without returnin
 No rename endpoints should be implemented in API 0.0.1.
 
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 ## Open Questions
 

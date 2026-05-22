@@ -141,7 +141,7 @@ Accepted direction:
 - status is separate from lifecycle state
 - API 0.0.1 should persist the latest status snapshot with reasons and evidence
 - API reads local filesystem catalog manifests
-- installed records store catalog identity, version when available, source, and manifest digest information
+- installed records store catalog identity, version when available, catalog source id, catalog source path snapshot, and manifest digest information
 - mutating API calls update desired state and create a persisted reconciliation request
 - mutating API calls return after desired state and the reconciliation request commit
 - mutating API calls should prefer `202 Accepted`
@@ -303,7 +303,7 @@ Accepted direction:
 - use SQLite JSON text columns for snapshots and flexible payloads where useful
 - validate JSON payloads at the API/domain boundary
 - installed records store catalog identity and version information
-- installed records should include catalog kind, catalog name, catalog version when available, catalog source path, and SHA-256 manifest digest
+- installed records should include catalog kind, catalog name, catalog version when available, catalog source id, catalog source path snapshot, and SHA-256 manifest digest
 - do not store a full manifest snapshot by default
 - store a full manifest snapshot only if implementation proves it is necessary for concrete behavior such as stable replay, import/export, or debugging
 - do not recompute installed desired state only from current catalog files
@@ -643,6 +643,12 @@ Accepted direction:
 - custom catalog roots are backend local configuration for API 0.0.1
 - additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`
 - `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list
+- repo-shipped catalog root source id is `default`
+- configured local roots use source ids `local-1`, `local-2`, `local-3` in configured order
+- source ids are stable only for the current backend configuration and root order
+- catalog responses expose source ids through `source`
+- catalog responses do not expose raw filesystem paths by default
+- `sourcePath` is reserved for future backend/debug/detail contexts
 - custom catalog roots are not platform desired state in SQLite for API 0.0.1
 - catalog source management can move into platform configuration later by explicit decision
 - API reads and validates catalog manifests on demand
@@ -651,13 +657,17 @@ Accepted direction:
 - directory slug and manifest `metadata.name` must match
 - do not silently normalize slug/name mismatches
 - duplicate catalog entries with the same kind and name across configured roots are an error unless the caller explicitly selects a source
+- `catalogRef.source` and catalog detail `?source=` use source ids
+- ambiguous duplicate catalog entries return `409 Conflict` with code `catalog_entry_ambiguous`
+- `catalog_entry_ambiguous` details include `kind`, `name`, and `sources[]`
+- unknown source ids return `404 Not Found` with code `catalog_source_not_found`
 - do not let later roots silently override earlier roots
 - validate manifests with typed Python/Pydantic domain models in API code first
 - do not add canonical JSON Schema files under `schemas/` until Fer approves the concrete validation schema
 - reject unknown manifest fields once canonical validation models exist
 - install by catalog kind and name, plus optional explicit source when needed
 - do not make arbitrary install-from-path the main API or UX flow
-- store catalog kind, catalog name, catalog version when available, catalog source path or source identifier, and SHA-256 manifest digest at install time
+- store catalog kind, catalog name, catalog version when available, catalog source id, catalog source path snapshot, and SHA-256 manifest digest at install time
 - do not store a full manifest snapshot by default
 - store a full manifest snapshot only if implementation proves it is necessary for concrete behavior such as stable replay, import/export, or debugging
 - temporary draft manifests stay under `.agents/drafts/manifests/` and remain non-canonical until API validation models exist and Fer approves promotion
@@ -673,8 +683,6 @@ Accepted direction:
 
 Need to decide:
 
-- exact source identifier format when more than one root is configured
-- exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging
 

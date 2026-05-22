@@ -133,7 +133,8 @@ Accepted columns:
 - `catalog_kind`
 - `catalog_name`
 - `catalog_version`
-- `catalog_source`
+- `catalog_source_id`
+- `catalog_source_path`
 - `manifest_digest`
 - `lifecycle`
 - `generation`
@@ -151,7 +152,8 @@ Accepted columns:
 - `catalog_kind`
 - `catalog_name`
 - `catalog_version`
-- `catalog_source`
+- `catalog_source_id`
+- `catalog_source_path`
 - `manifest_digest`
 - `lifecycle`
 - `generation`
@@ -333,7 +335,8 @@ This should include:
 - catalog kind
 - catalog name
 - catalog version when available
-- catalog source path
+- catalog source id
+- catalog source path snapshot
 - SHA-256 manifest digest
 
 Do not store a full manifest snapshot by default.

@@ -29,6 +29,19 @@ NEPHOS_API_CATALOG_ROOTS
 
 `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list, such as `:`-separated paths on macOS/Linux.
 
+Catalog source ids:
+
+- repo-shipped catalog root: `default`
+- configured local roots: `local-1`, `local-2`, `local-3`, in configured order
+
+Source ids are stable only for the current backend configuration and root order.
+
+Catalog responses expose source ids through `source`.
+
+Catalog responses do not expose raw filesystem paths by default.
+
+`sourcePath` is reserved for future backend/debug/detail contexts and is not part of default catalog list output.
+
 Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
 
 Catalog source management can become platform configuration later by explicit decision.
@@ -53,6 +66,8 @@ GET /catalog/services/{name}
 ```
 
 Catalog detail endpoints accept optional `source` selection where duplicate catalog entries require disambiguation.
+
+The `source` query parameter uses source ids such as `default` or `local-1`.
 
 Catalog endpoints are for discovery and inspection.
 
@@ -128,6 +143,12 @@ Duplicate catalog entries with the same kind and name across configured roots ar
 
 Do not let later roots silently override earlier roots.
 
+Ambiguous duplicate entries return `409 Conflict` with Nephos domain error code `catalog_entry_ambiguous`.
+
+`catalog_entry_ambiguous` details include `kind`, `name`, and `sources[]` as source ids.
+
+If a caller requests an unknown source id, return `404 Not Found` with error code `catalog_source_not_found`.
+
 ## Validation
 
 Validate manifests with typed Python/Pydantic domain models in API code first.
@@ -157,6 +178,8 @@ The request body uses `catalogRef` with `kind`, `name`, and optional `source`.
 
 `catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
 
+`catalogRef.source` uses source ids such as `default` or `local-1`.
+
 Catalog endpoints are not the primary owner of install mutation.
 
 Do not make arbitrary install-from-path the main API or UX flow.
@@ -168,7 +191,8 @@ At install time, store:
 - catalog kind
 - catalog name
 - catalog version when available
-- catalog source path or source identifier
+- catalog source id
+- catalog source path snapshot
 - SHA-256 digest of the manifest file content
 
 Do not store a full manifest snapshot by default.

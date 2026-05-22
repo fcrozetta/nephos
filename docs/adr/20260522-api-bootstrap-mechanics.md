@@ -167,7 +167,7 @@ Raw `uv run nephos-api ...`, `uv run pytest ...`, and `uv run ruff ...` commands
 
 - Good, because local catalog iteration is possible without platform config.
 - Good, because multiple roots can be tested early.
-- Bad, because source identifier behavior still needs a precise implementation choice.
+- Bad, because source identifier behavior needed a separate decision.
 
 ### Pytest `unit`, `integration`, and `k3s` markers
 
@@ -192,14 +192,14 @@ SQLite setup must enable foreign keys, WAL mode, and a 5000 ms busy timeout.
 
 Catalog loading must always include the repo `catalog/` root and may include additional roots from `NEPHOS_API_CATALOG_ROOTS`.
 
+Catalog source identifier behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
+
 Backend tests must use the accepted markers and keep K3s tests out of the default fast test command.
 
 Do not add Makefile or task-runner wrapper contracts for API 0.0.1 unless a later decision changes this.
 
 ## Open Questions
 
-- exact source identifier format when more than one catalog root is configured
-- exact duplicate catalog entry error shape
 - exact K3s startup/reset workflow
 - integration test setup/teardown
 - whether CI runs K3s integration tests by default

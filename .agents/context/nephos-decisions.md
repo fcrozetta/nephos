@@ -1223,7 +1223,7 @@ Do not use unvalidated JSON blobs as the main domain model.
 
 Installed App and Service records store catalog identity and version information.
 
-This should include catalog kind, catalog name, catalog version when available, catalog source path, and SHA-256 manifest digest.
+This should include catalog kind, catalog name, catalog version when available, catalog source id, catalog source path snapshot, and SHA-256 manifest digest.
 
 Do not store a full manifest snapshot by default.
 
@@ -1317,7 +1317,7 @@ Do not make arbitrary install-from-path the main API or UX flow.
 
 ## D144: Installed catalog metadata stores digest by default
 
-At install time, store catalog kind, catalog name, catalog version when available, catalog source path or source identifier, and SHA-256 digest of the manifest file content.
+At install time, store catalog kind, catalog name, catalog version when available, catalog source id, catalog source path snapshot, and SHA-256 digest of the manifest file content.
 
 Do not store a full manifest snapshot by default.
 
@@ -2283,3 +2283,74 @@ uv run pytest -m k3s
 Makefile and task-runner wrappers are deferred.
 
 Raw `uv run nephos-api ...`, `uv run pytest ...`, and `uv run ruff ...` commands are the accepted local command surface until implementation proves wrappers are useful.
+
+## D231: API 0.0.1 catalog source ids are default and local-N
+
+The repo-shipped catalog root uses source id:
+
+```text
+default
+```
+
+Additional roots from `NEPHOS_API_CATALOG_ROOTS` use source ids in configured order:
+
+```text
+local-1
+local-2
+local-3
+```
+
+Source ids are stable only for the current backend configuration and root order.
+
+Catalog responses expose source ids through `source`.
+
+Catalog responses do not expose raw filesystem paths by default.
+
+`sourcePath` is reserved for future backend/debug/detail contexts.
+
+## D232: Catalog source selection uses source ids
+
+Explicit source selection uses source ids in:
+
+- `catalogRef.source`
+- catalog detail `?source=`
+
+Do not use raw filesystem paths as catalog source identifiers in API 0.0.1.
+
+## D233: Ambiguous catalog entries return catalog_entry_ambiguous
+
+If a catalog kind/name exists in more than one configured source and the caller does not provide `source`, return HTTP `409 Conflict`.
+
+Use Nephos-owned domain error code:
+
+```text
+catalog_entry_ambiguous
+```
+
+Error details include `kind`, `name`, and `sources[]` as source ids.
+
+Do not silently pick the first matching catalog root.
+
+## D234: Missing catalog source ids return catalog_source_not_found
+
+If a caller provides a source id that does not exist in the current backend configuration, return HTTP `404 Not Found`.
+
+Use Nephos-owned domain error code:
+
+```text
+catalog_source_not_found
+```
+
+Error details include the requested `source`.
+
+## D235: Installed records store source id and source path
+
+Persisted installed App and Service records store both:
+
+- catalog source id
+- catalog source path snapshot
+
+The API 0.0.1 database columns are:
+
+- `catalog_source_id`
+- `catalog_source_path`

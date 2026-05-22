@@ -102,6 +102,10 @@ GET /catalog/services/{name}
 
 Catalog detail endpoints accept optional `source` selection where duplicate catalog entries require disambiguation.
 
+The `source` query parameter uses catalog source ids such as `default` or `local-1`.
+
+Catalog responses expose source ids through `source` and do not expose raw filesystem paths by default.
+
 Catalog endpoints are read-only in API 0.0.1.
 
 Install mutation remains owned by:
@@ -189,6 +193,8 @@ Future APIs may add richer status evidence and catalog response fields without c
 Resource-specific response fields, status evidence object fields, catalog response fields, and installed slug rename behavior are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 ## Open Questions
 

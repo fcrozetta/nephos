@@ -78,6 +78,7 @@ Current understanding:
 - Batch 39 SQLite and command-boundary mechanics are accepted: refer to this backend/API repo as `nephos-api` when distinguishing from `nephos-cli`; `nephos <command>` belongs to the user-facing `nephos-cli` product command; backend-local migration/reset commands are `nephos-api` dev/ops commands, with exact spelling resolved in Batch 40; SQLite uses TEXT for ids/slugs/enums/timestamps/JSON/digests, INTEGER for generation/booleans, narrow NOT NULL rules, CHECK constraints for state/is_default/generation, polymorphic type/id targets with domain validation, and Python/domain validation for JSON payloads.
 - Batch 40 backend package and dev command shape is accepted: this repository uses `src/nephos_api/`, exposes backend-local `nephos-api` commands, uses `nephos_api.main:app` as the FastAPI entrypoint, accepts `uv run nephos-api db migrate`, `uv run nephos-api db reset --force`, and `uv run nephos-api serve`, keeps `nephos <command>` reserved for `nephos-cli`, and starts API 0.0.1 implementation with the migration/database layer before API skeleton, catalog loader, and reconciler.
 - Batch 41 API bootstrap mechanics are accepted: API 0.0.1 backend bootstrap config is env-only with `NEPHOS_API_DB_PATH` and `NEPHOS_API_CATALOG_ROOTS`; SQLite defaults to `.nephos/state/nephos.db`; migrations apply `*.sql` files lexically and record filename-stem versions; dirty migration state fails without automatic repair; rollback/downgrade are out of scope; SQLite uses foreign keys, WAL, and `busy_timeout=5000` with no app-level write retry; repo catalog root is `catalog/`; pytest markers are `unit`, `integration`, and `k3s`; default backend tests exclude `k3s`; Makefile/task-runner wrappers are deferred.
+- Batch 42 catalog source identity and errors are accepted: repo-shipped catalog source id is `default`; configured local roots use `local-1`, `local-2`, and `local-3` in configured order; source ids are stable only for the current backend configuration/order; API responses expose source ids but not raw paths by default; `catalogRef.source` and catalog detail `?source=` use source ids; ambiguous duplicate entries return `409 Conflict` with code `catalog_entry_ambiguous`; missing source ids return `404 Not Found` with code `catalog_source_not_found`; installed App/Service rows store `catalog_source_id` and `catalog_source_path`.
 
 Files likely to change:
 
@@ -292,7 +293,6 @@ Rollback notes:
 Open questions:
 
 - Manifest validation schema details.
-- Catalog source identifier format and duplicate-entry error shape.
 - Service operation declaration/schema/API/CLI design beyond the accepted boundary.
 - Dedicated Service sharing policy details.
 - Future resource profile design.

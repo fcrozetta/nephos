@@ -27,6 +27,8 @@ POST /services
 
 The request body uses `catalogRef` and carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
 
+`catalogRef.source` uses catalog source ids such as `default` or `local-1`.
+
 Accepted App install shape:
 
 ```json
@@ -184,6 +186,8 @@ The exact resource and status snapshot schemas remain implementation details, bu
 Read payloads, status payloads, reconciliation request id format, and manual reconcile endpoint shape are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
 Resource-specific response fields and status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
+
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
 

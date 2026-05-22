@@ -38,7 +38,7 @@ Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
 
 Catalog App and Service manifests are separate from installed instances.
 
-The API reads local filesystem catalog manifests and installation records store catalog identity, version when available, source, and manifest digest information.
+The API reads local filesystem catalog manifests and installation records store catalog identity, version when available, catalog source id, catalog source path snapshot, and manifest digest information.
 
 Do not require catalog entries to be imported into the database before installation in Phase 1.
 
@@ -50,6 +50,8 @@ POST /services
 ```
 
 The request body uses `catalogRef` and carries the catalog reference, optional explicit source, instance name, config, and binding/provider choices.
+
+`catalogRef.source` uses catalog source ids such as `default` or `local-1`.
 
 Do not put install mutation under catalog endpoints as the primary API shape.
 
@@ -200,6 +202,8 @@ Resource-specific response fields, status evidence object fields, catalog respon
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
 
 Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
+
+Catalog source identity and error behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
 ## Open Questions
 
