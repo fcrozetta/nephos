@@ -1,0 +1,35 @@
+# NON-CANONICAL DRAFT.
+# This sketch is for schema discussion only.
+# Do not implement against this file as a stable contract.
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+  displayName: PostgreSQL
+  description: Relational database Service exposing the postgres capability.
+  version: 0.0.1
+spec:
+  provides:
+    - capability: postgres
+      as: database
+  bindings:
+    outputs:
+      - name: connection
+        target: app-secret
+        # Logical output fields: host, port, database, username, password, uri.
+        # Secret keys use the same exact lowercase names.
+        # No Phase 1 manifest fields: syntax.
+  provisioning:
+    # Accepted Phase 1 modes: app-scoped-resource, none.
+    # Exact provisioning execution mechanism is open.
+    mode: app-scoped-resource
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.invalid/postgres
+      name: postgresql
+      version: <pinned-chart-version>
+    values:
+      # Reserved for Nephos-owned mapping, not raw user-facing Helm values.
+      mappings: []
+  operations: []

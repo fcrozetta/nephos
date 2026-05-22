@@ -1,0 +1,154 @@
+# Nephos Health And Status
+
+## Core Decision
+
+Nephos status is Nephos-aware.
+
+Nephos aggregates status from:
+
+- Nephos desired state
+- reconciliation state
+- Kubernetes runtime state
+- bindings
+- dependencies
+- routes
+- storage
+- backup status
+
+Kubernetes readiness is an input, not the whole status model.
+
+## Health Status
+
+Health status answers whether an entity that should be operating is operating correctly.
+
+Accepted health status levels:
+
+- `unknown`
+- `pending`
+- `healthy`
+- `degraded`
+- `blocked`
+- `stopped`
+- `not_applicable`
+
+Every status must include reasons and/or evidence.
+
+Do not show opaque green/red status without explaining why.
+
+Accepted API status payload fields:
+
+- `level`
+- `lifecycle`
+- `reconciliation`
+- `reason`
+- `message`
+- `evidence`
+- `observedAt`
+
+`evidence` is an array of structured facts.
+
+It must not be an unbounded raw Kubernetes object dump.
+
+Evidence object fields:
+
+- `source`
+- `subject`
+- `reason`
+- `message`
+- `observedAt`
+- optional redacted `data`
+
+Evidence `data` is for small structured facts only.
+
+Do not expose raw Kubernetes objects, full Helm output, Secret values, or unbounded runtime dumps through evidence.
+
+Secret values must remain redacted in status payloads.
+
+## Lifecycle State
+
+Lifecycle state answers what Nephos intends or has done with the entity.
+
+Lifecycle states include:
+
+- installed
+- running
+- stopped
+- disabled
+- removed
+- destroyed
+
+`removed` and `destroyed` are lifecycle states, not health statuses.
+
+For API 0.0.1, `destroyed` is terminal history or absent after deletion, not a normal active desired-state lifecycle value.
+
+For removed or destroyed entities, health is usually `not_applicable`.
+
+## Phase 1 Scope
+
+Phase 1 status is Nephos-aware but minimal.
+
+Include:
+
+- desired lifecycle state
+- reconciliation state
+- latest reconciliation request state
+- Kubernetes object existence/readiness
+- binding resolved/unresolved
+- dependency availability
+- route known/unknown
+- canonical route URL and alias URLs for Apps with routes
+- backup status as `unsupported`
+- Service dependent impact
+
+Do not implement deep app-specific probes in Phase 1 unless a specific App or Service requires it later.
+
+The reconciler writes latest status snapshots with reasons and evidence.
+
+Reconciliation failure does not roll back desired state.
+
+## Entity Status
+
+Nephos should expose status for:
+
+- Cluster
+- App
+- Service instance
+- Binding
+- Capability provider
+- Route/Ingress
+- Storage resource
+- Backup policy/status
+
+## Status Reasons And Evidence
+
+A status should include enough explanation to answer why.
+
+Examples:
+
+- `blocked`: required `postgres` capability has no eligible Service instance
+- `degraded`: Kubernetes Deployment exists but available replicas are below desired
+- `pending`: reconciliation has not created runtime objects yet
+- `stopped`: desired lifecycle state is stopped and replicas are zero
+- `not_applicable`: entity is destroyed
+- `healthy`: binding resolved and Kubernetes readiness is satisfied
+
+## Service Impact
+
+Service status must include dependent App impact.
+
+Example:
+
+- Service instance health: `healthy`
+- dependent impact: stopping affects `paperless`, `gitea`, and `immich`
+
+Dependent impact is operational status, not health by itself.
+
+## Backup Status
+
+Backup status participates in aggregate status.
+
+In Phase 1, backup status may be `unsupported`.
+
+This is intentional.
+
+Unsupported backup status is better than fake backup guarantees.

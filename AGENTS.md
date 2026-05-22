@@ -1,435 +1,377 @@
-# agents.md — Nephos Core (Public)
+## Nephos Agent Guide
 
-This repository contains **Nephos Core**: a local, container-first “platform engine” that provides shared infrastructure services (DBs, vaults, tunnels, config/feature flags, monitoring, etc.) and a **plugin mechanism** so other repositories can integrate as Nephos-compatible service packs.
+### Overview
 
-- **Developer** = the human author/maintainer of Nephos.
-- **Agent** = the AI assistant operating on this repo.
+Nephos is a platform control plane for composable self-hosted infrastructure.
 
-This file is intentionally detailed so the Agent can reason correctly about architecture, constraints, workflows, and trade-offs without hallucinating. It is **public**: avoid embedding secrets, private endpoints, personal details, or operational security specifics.
+Nephos manages:
 
----
+- Apps
+- Services
+- Capabilities
+- Bindings
+- Platform lifecycle
 
-## 1) What Nephos is (and is not)
+Nephos intentionally operates above raw container/runtime orchestration abstractions.
 
-### 1.1 Nephos is
-
-A **portable platform runtime** for self-hosted services, designed to feel like “your own cloud on any machine”:
-
-- One central “platform” that can bring up shared, reusable infrastructure services with **stable names**.
-- Tenant apps (other repos) can reference those services and behave consistently across Nephos installs.
-- Plugins can be “dropped in” with minimal friction.
-
-### 1.2 Nephos is not
-
-- Not a centralized SaaS control plane.
-- Not an enterprise multi-tenant platform (no RBAC labyrinth, no complex tenancy isolation by default).
-- Not “edit everyone’s Docker Compose workflow” — adoption must be low-friction.
+The goal is to provide a unified platform experience for self-hosted infrastructure while remaining local-first, developer-friendly, and operationally transparent.
 
 ---
 
-## 2) Core product constraints (non-negotiable)
+## Core Concepts
 
-### 2.1 “Bring your own app” compatibility
+### Apps
 
-Other people’s repos should remain runnable **as they are** (e.g., via `docker compose up`).
+Apps are user-facing workloads/products.
 
-**Nephos compatibility should be opt-in**:
+Examples include:
 
-- Add a single file (typically `nephos.yml`) and the repo becomes Nephos-compatible.
-- Avoid forcing users to restructure their app around Nephos conventions.
+- media systems
+- source control platforms
+- document management systems
+- dashboards
+- personal cloud applications
+- AI applications
 
-### 2.2 Avoid “Nexus Compose” synchronization trap
+Apps:
 
-A naive solution is “one master compose” + “per-app compose” that must stay in sync. That creates:
-
-- dual-source-of-truth drift
-- brittle upgrades
-- nasty merge conflicts
-- adoption friction (“now you must maintain two things”)
-
-**We do not do that.**
-
-### 2.3 Container-first, no host installs by default
-
-Nephos should keep the developer machine clean and reduce host-level trust:
-
-- Prefer container execution for Nephos core services.
-- Prefer controlled entrypoints (CLI/Make targets) rather than “user manually runs random commands.”
-
-### 2.4 Architectural debt policy (strict)
-
-Debt is acceptable only if it is:
-
-- **Tracked debt**: explicit TODO/issue + exit criteria
-- **Scoped debt**: localized and replaceable
-
-Silent/spreading debt is not allowed.
+- consume capabilities exposed by Services
+- may expose ingress/routes
+- may persist data
+- may depend on one or more Services
+- are installable/removable independently
 
 ---
 
-## 3) Mental model: Platform + Plugins + Tenants
+### Services
 
-### 3.1 Platform (Nephos Core)
+Services are shared platform infrastructure/capabilities.
 
-Nephos Core provides:
+Examples include:
 
-- Service discovery (stable DNS/service names inside Nephos networks)
-- Shared infra services (“platform services”)
-- A standard contract for plugins
-- Tooling to start/stop/inspect everything
+- PostgreSQL
+- Redis
+- Object Storage
+- Search engines
+- Graph databases
+- Queues
+- SMTP
+- Authentication providers
+- AI inference backends
 
-### 3.2 Plugins (external repos)
+Services:
 
-A plugin is a **service pack** (one repo) that Nephos can load. Plugins can provide:
+- expose capabilities
+- may be shared across Apps
+- may provision app-scoped resources
+- are lifecycle-managed by Nephos
 
-- additional services (e.g., a DB engine variant, metrics stack, queue stack, dashboards)
-- optional provisioning hooks (migrations, initialization)
-- optional health checks and readiness semantics
-
-Key properties:
-
-- Plugins should be easy to write.
-- Plugins can be loaded from Git or local paths.
-- Plugins are not assumed to be centrally verified.
-
-### 3.3 Tenants (apps)
-
-A tenant is a normal app repo that can run standalone.
-When a `nephos.yml` is present, Nephos can:
-
-- provision it into the platform network
-- provide it platform service endpoints
-- optionally attach it to platform tooling (logs, status, lifecycle)
+Do not refer to Services as plugins.
 
 ---
 
-## 4) Nephos contract: `nephos.yml` (conceptual)
+### Capabilities
 
-**Goal**: one small file that makes a repo compatible.
+Capabilities are typed platform features exposed by Services and consumed by Apps.
 
-The exact schema may evolve, but the intent is stable:
+Examples:
 
-- declare what services the tenant needs from the platform
-- declare what services the tenant itself provides (optional)
-- declare networking expectations (ports, domains, subdomains, internal service names)
-- declare lifecycle hooks (optional) in a safe, predictable way
+- postgres
+- sql
+- redis
+- s3
+- graph-db
+- document-db
+- search
+- kv
+- smtp
+- auth
 
-Design principles for the contract:
-
-- Avoid overfitting: keep it minimal.
-- Make it composable: tenant config shouldn’t need platform internals.
-- No “magic discovery” that breaks reproducibility.
-- Prefer explicitness over “auto-detect everything”.
-
----
-
-## 5) Naming + service identity rules
-
-### 5.1 Stable service names
-
-Platform services must have stable identifiers so tenants can depend on them:
-
-- consistent internal DNS name
-- consistent port mapping semantics
-- consistent credentials injection mechanism (never hardcoded in public configs)
-
-### 5.2 Naming conventions
-
-Nephos uses mythic naming themes for components. Keep it consistent:
-
-- “Titan-class” names for foundational infrastructure
-- “Olympian-class” names for operational tools
-- Abstract concept names for protocols/layers
-
-This is aesthetic **and** functional: it prevents “random service naming soup” over time.
+Apps should depend on capabilities rather than concrete infrastructure whenever possible.
 
 ---
 
-## 6) Security posture (pragmatic, not performative)
+## Runtime Model
 
-### 6.1 The threat reality
+### Default Runtime
 
-Nephos loads plugins that may not be verified. That’s inherently risky.
-The platform must make unsafe choices hard by default.
+Nephos targets Kubernetes as its runtime substrate.
 
-### 6.2 Default safe-ish boundaries
+Default backend:
 
-- Run plugins in containers on isolated networks where possible.
-- Prefer read-only mounts unless explicitly required.
-- Minimize host socket exposure (e.g., Docker socket) unless unavoidable.
-- Explicitly separate “platform secrets” from plugin source trees.
+- K3s
 
-### 6.3 Secrets
+Other Kubernetes backends may be supported later through cluster adapters.
 
-Never commit secrets. Ever.
-Mechanisms (implementation may vary):
+Examples:
 
-- `.env` files excluded from git
-- secret stores (vault-like)
-- environment injection via CLI/runner
+- kind
+- minikube
+- external kubeconfig environments
 
----
+Kubernetes compatibility primarily exists above the Kubernetes API layer.
 
-## 7) Execution model & UX
-
-### 7.1 Users shouldn’t hand-compose the orchestra
-
-Nephos provides a single “start” path:
-
-- `nephos up` (CLI) **or**
-- `make up` (developer-friendly wrappers)
-
-The user should not need to:
-
-- pick which compose file to run
-- manually wire networks
-- manually set service endpoints
-
-### 7.2 Deterministic lifecycle
-
-Bring-up should be repeatable:
-
-- deterministic naming
-- deterministic networks
-- deterministic volumes
-- explicit versions
+Cluster lifecycle management remains backend-specific.
 
 ---
 
-## 8) Agent operating rules (how the Agent should work in this repo)
+## Ownership Boundary
 
-### 8.1 Default stance
+### Nephos Owns
 
-Assume proposals are wrong until defended.
-Be adversarial in a constructive way: the goal is truth and leverage, not politeness.
+Nephos owns:
 
-### 8.2 Questions (blocking vs non-blocking)
-
-The Agent must ask **all blocking questions** before making a decisive call.
-Blocking questions are those that materially change:
-
-- architecture choice
-- data model
-- compatibility contract
-- security posture
-- UX entrypoints
-
-If the Developer says “assume X” / “proceed” / “stop questioning”, the Agent stops asking and executes.
-
-### 8.3 Modes
-
-- **Dev Mode**: implementation, debugging, tooling; concise, direct.
-- **Arch Mode**: system design; dense, trade-offs, second-order effects, long-term debt analysis.
-
-If unclear, default to Dev Mode, but switch to Arch Mode when the change touches:
-
-- plugin contract
-- lifecycle orchestration
-- compatibility guarantees
-- security boundaries
-- “what breaks in 6 months”
-
-### 8.4 Second-order effects policy
-
-Every meaningful change must include:
-
-- what breaks in 6 months
-- upgrade/migration pain
-- maintenance cost
-- “future you will hate this because…”
-
-### 8.5 Don’t over-tool
-
-Tooling is not the product. The product is:
-
-- the contract
-- the platform runtime behavior
-- the plugin architecture
-- the operator UX (CLI/Make)
-
-The Agent should call out “tooling distraction” when it’s stealing leverage from data/architecture.
+- app catalog
+- service catalog
+- dependency resolution
+- capability binding
+- resource provisioning
+- secrets injection policy
+- lifecycle state
+- health/status aggregation
+- ingress abstraction
+- backup semantics
+- platform relationships
 
 ---
 
-## 9) Repository expectations (structure + docs)
+### Kubernetes Owns
 
-This section describes how the repo *should* be reasoned about. If the repo differs, the Agent should adapt but keep the intent.
+Kubernetes owns:
 
-### 9.1 Suggested high-level layout
+- scheduling
+- networking primitives
+- deployments/statefulsets
+- services
+- PVCs
+- secrets/configmaps
+- ingress resources
+- health probes
+- runtime orchestration
 
-- `cmd/` or `src/` — CLI entrypoint / core runtime
-- `core/` — platform definitions (networks, service registry, orchestration)
-- `plugins/` — optional built-in plugins (examples, reference packs)
-- `schemas/` — `nephos.yml` JSON schema (or equivalent) + versioning notes
-- `docs/` — architecture notes, plugin author guide, contract reference
-- `examples/` — sample tenant repo layouts + minimal `nephos.yml`
-
-### 9.2 Documentation rules
-
-- Every contract change requires a doc update (schema + examples).
-- Every breaking change must be versioned and migration-noted.
+Nephos should not reimplement Kubernetes behavior.
 
 ---
 
-## 10) Plugin mechanism (design intent)
+## Command Model
 
-The plugin system must support:
+### Cluster Commands
 
-- loading plugin manifests from:
-  - local filesystem paths
-  - Git URLs / refs (pin versions)
-- exposing services to the platform network with stable naming
-- optionally contributing dashboards/configs/alerts (if monitoring exists)
-- clean teardown (no orphan volumes/networks unless explicitly persistent)
+Cluster commands manage the Kubernetes substrate itself.
 
-Non-goals (for now):
+Examples:
 
-- centralized marketplace
-- plugin signature verification (can be explored later)
-- multi-user tenancy complexity
-
----
-
-## 11) Compatibility strategy (the “one file” promise)
-
-The Agent must protect the adoption promise:
-
-- Tenants should not have to change their compose.
-- Nephos should adapt around tenants, not the other way around.
-
-Therefore, the Agent should prefer:
-
-- adapters/wrappers
-- external overlays
-- generated wiring
-- explicit mapping layers
-
-…over “rewrite the tenant”.
+```bash
+nephos cluster init
+nephos cluster up
+nephos cluster down
+nephos cluster status
+nephos cluster destroy
+```
 
 ---
 
-## 12) Versioning & stability
+### App Commands
 
-Nephos is a platform. Platforms rot unless versioned intentionally.
+App commands manage user-facing workloads.
 
-Rules:
+Examples:
 
-- `nephos.yml` must be versioned.
-- Plugins should declare compatibility ranges.
-- Nephos core should provide a compatibility test harness:
-  - validate manifest
-  - validate service wiring
-  - validate basic lifecycle
-
----
-
-## 13) Observability (optional but inevitable)
-
-If monitoring/logging exists:
-
-- platform should provide a unified “status” view:
-  - what’s up
-  - what’s failing
-  - where logs are
-  - how to inspect health
-
-But avoid building a cathedral:
-
-- start with `nephos status`, `nephos logs`, `nephos ps`
-- add metrics later if the contract stabilizes
+```bash
+nephos app install
+nephos app start
+nephos app stop
+nephos app remove
+nephos app destroy
+```
 
 ---
 
-## 14) Implementation principles (biases)
+### Service Commands
 
-The Agent should bias toward:
+Service commands manage shared platform infrastructure.
 
-- explicit contracts over implicit magic
-- reproducibility over cleverness
-- small, composable primitives
-- minimal operational footprint
-- stable naming and predictable networks
-- upgrades that don’t require archaeology
+Examples:
 
-Avoid:
+```bash
+nephos service install
+nephos service start
+nephos service stop
+nephos service remove
+nephos service destroy
+```
 
-- “one giant compose to rule them all”
-- hidden dependencies on developer machine state
-- fragile heuristics that guess tenant intent
-- silent breaking changes
+Stopping Services should be dependency-aware.
 
 ---
 
-## 15) How the Agent should respond in PRs/issues
+## Lifecycle Semantics
 
-When asked to design/implement something, the Agent should produce:
+Lifecycle operations modify desired state and reconcile into Kubernetes.
 
-- a minimal plan
-- explicit assumptions
-- failure modes
-- migration/compat considerations
-- tests or verification steps
-
-When unsure:
-
-- ask only **blocking** questions
-- otherwise proceed with reasonable assumptions and mark them clearly
+Lifecycle operations should not map directly to raw Kubernetes deletion commands.
 
 ---
 
-## 16) Public redlines
+### stop
 
-Never include in this repo (or this file):
+Stopping an App should:
 
-- credentials, tokens, private hostnames
-- personal addresses or schedules
-- unredacted internal infrastructure identifiers
-- anything that makes targeted compromise easier
+- scale workloads to zero
+- suspend scheduled jobs where applicable
+- preserve data and metadata
 
-If a design requires secrets, describe the mechanism abstractly.
+Stopping should preserve:
 
----
-
-## 17) Current known goals (snapshot)
-
-Nephos Core aims to provide:
-
-- a recognizable platform bundle of shared services
-- a plugin loader for service packs
-- a tenant compatibility contract via `nephos.yml`
-- a single user entrypoint via CLI/Make
-
-Core tension to manage:
-
-- power vs simplicity
-- flexibility vs determinism
-- plugin freedom vs security sanity
-- “drop-in compatibility” vs “clean architecture”
-
-The Agent must keep this tension explicit and avoid accidental drift into:
-
-- enterprise cosplay
-- centralized governance assumptions
-- tenant workflow invasion
+- PVCs
+- Secrets
+- ConfigMaps
+- bindings
+- backups
+- service relationships
+- lifecycle metadata
 
 ---
 
-## 18) Agent memory (`.ai/`)
+### start
 
-Nephos uses a repository-local agent memory directory:
+Restore previous desired runtime state.
 
-- Path: `.ai/`
-- Primary file: `.ai/claims.yaml`
-- Support file: `.ai/README.md` (rules and format)
+---
 
-Mandatory behavior for every agent session:
+### disable
 
-- Treat `.ai/claims.yaml` as canonical memory for explicit claims, assumptions, and decisions.
-- Keep timestamps at two levels:
-  - file level (`meta.updated_at`)
-  - claim level (`updated_at` on each changed claim)
-- Use UTC ISO-8601 timestamps.
-- When asked to "remember" something, write or update a claim in `.ai/claims.yaml` before ending the turn.
-- Keep content machine-optimized: concise, typed entries (`decision`, `assumption`, `fact`, `risk`).
-- Treat `.ai` as public project context: do not store private machine paths, user-local metadata, personal details, or secrets.
-- If context grows, add topic-specific files under `.ai/topics/` and keep `claims.yaml` as index/canonical source.
+Prevent automatic reconciliation/startup.
+
+---
+
+### remove
+
+Remove deployed runtime objects while optionally preserving persistent data.
+
+---
+
+### destroy
+
+Delete all runtime objects and persistent data.
+
+---
+
+## Architectural Guardrails
+
+Nephos is a platform control plane, not Kubernetes exposed directly to users.
+
+Kubernetes is the runtime substrate.
+Nephos owns platform intent, relationships, lifecycle semantics, and capability binding.
+
+The core differentiator is composable self-hosted infrastructure through Apps, Services, capabilities, bindings, and platform-level relationships.
+
+Do not turn Nephos into generic container/runtime management.
+Do not tie Nephos directly to any external deployment platform.
+
+---
+
+## Architectural Direction
+
+Nephos is designed around:
+
+- composable infrastructure
+- platform-level relationships
+- capability binding
+- operational transparency
+- local-first infrastructure ownership
+
+The core abstraction is:
+
+- Apps consume capabilities exposed by Services.
+
+---
+
+### Context Loading
+
+Before making architectural changes, read:
+
+- `.agents/context/nephos-vision.md`
+- `.agents/context/nephos-glossary.md`
+- `.agents/context/nephos-architecture.md`
+- `.agents/context/nephos-api-resource-model.md`
+- `.agents/context/nephos-database-state.md`
+- `.agents/context/nephos-catalog-loading.md`
+- `.agents/context/nephos-reconciliation.md`
+- `.agents/context/nephos-decisions.md`
+- `.agents/context/nephos-naming-and-metadata.md`
+- `.agents/context/nephos-open-questions.md`
+- `docs/adr/`
+
+For multi-step implementation work, create or update a plan using `PLANS.md` before editing code.
+
+Do not infer missing architecture. If a decision is not documented, record it as an open question before implementing.
+
+### Architecture Documentation Writes
+
+Before writing or changing architecture context or ADR files, tell Fer explicitly which context files or ADRs need to change and why.
+
+Do not silently add, accept, or reshape architectural decisions in `.agents/context/`, `docs/adr/`, `examples/`, or `schemas/`.
+
+If Fer has not selected a decision, keep it in `.agents/context/nephos-open-questions.md` or in a draft ADR.
+
+### ADR Requirements
+
+Create or update an ADR when a change affects:
+
+- architecture structure
+- lifecycle semantics
+- source of truth
+- manifest or schema shape
+- runtime boundaries
+- auth or security model
+- backup or data lifecycle semantics
+- public API or CLI contract
+- catalog behavior
+- Phase 1 scope
+
+Use ADR statuses consistently:
+
+- `draft`: unresolved or exploratory
+- `proposed`: candidate direction awaiting Fer confirmation
+- `accepted`: Fer confirmed the decision
+- `rejected`: explicitly not chosen
+- `deprecated`: no longer recommended
+- `superseded`: replaced by a later ADR
+
+Accepted ADRs are durable. Material changes to accepted decisions should normally create a new ADR that supersedes or amends the earlier decision.
+
+### Agent Uncertainty Rule
+
+If architecture is unclear, ask Fer or record an open question before implementing.
+
+Low-level implementation details may be chosen pragmatically when they are consistent with accepted ADRs and context.
+
+### Schema And Example Workflow
+
+Do not add canonical schema files under `schemas/` until Fer approves the concrete validation schema.
+
+Do not add canonical examples under `examples/` until Fer approves the manifest or example shape.
+
+Temporary draft manifests are allowed while designing schemas, but they must live in `.agents/drafts/manifests/`, be labeled non-canonical, and not be treated as source of truth.
+
+Draft manifests must be deleted, moved, or converted after Fer accepts the schema/example shape.
+
+### Change Discipline
+
+Any PR, commit, or agent change that alters architecture or public contracts must update ADRs, context, or open questions in the same change.
+
+Keep architecture decision batches in separate commits when feasible.
+
+---
+
+## Documentation
+
+Detailed architecture and decision records are located in:
+
+```text
+.agents/context/
+docs/adr/
+```
+
+Agents working on Nephos should consult those documents before making architectural changes.
