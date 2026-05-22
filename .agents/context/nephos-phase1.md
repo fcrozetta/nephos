@@ -226,7 +226,7 @@ Reference scenario:
 - App install behavior when setup is missing
 - binding Secret rotation behavior
 - backup guarantees
-- local development wrapper/K3s reset/local CLI configuration workflow
+- K3s reset/local CLI configuration workflow
 - packaging/distribution
 - future remote catalog trust/signing/update behavior
 - backend image layout and registry

@@ -143,13 +143,14 @@ SQLite column types, nullability, CHECK constraints, polymorphic target handling
 
 Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
 
+Database path, migration runner behavior, SQLite busy timeout, and app-level retry policy are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
 Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
 
 After the first usable version, schema evolution should happen through forward migrations rather than destructive resets.
 
 ## Open Questions
 
-- exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact target snapshot JSON fields
 - exact request claiming behavior, if/when queue leasing becomes necessary

@@ -138,10 +138,11 @@ Any `nephos <command>` wording is reserved for the `nephos-cli` product command.
 
 Backend-local command spelling is resolved by [Backend Package and Dev Command Shape](./20260522-backend-package-and-dev-command-shape.md).
 
+SQLite busy timeout and app-level retry policy are resolved by [API Bootstrap Mechanics](./20260522-api-bootstrap-mechanics.md).
+
 ## Open Questions
 
 - exact `payload_json`, `target_snapshot_json`, `output_summary_json`, and `evidence_json` contents
-- exact busy timeout and transaction retry behavior
 - exact request claiming behavior
 - exact polling/wakeup behavior
 - exact retry count and backoff behavior

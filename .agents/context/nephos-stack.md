@@ -63,6 +63,9 @@ Frontend:
 Persistence:
 
 - SQLite is the canonical Phase 1 desired-state database
+- `NEPHOS_API_DB_PATH` sets the SQLite database path
+- default SQLite database path is `.nephos/state/nephos.db` relative to the backend process working directory
+- backend bootstrap configuration uses environment variables only for API 0.0.1
 - The Nephos API/database is the source of truth for desired platform state
 - Use plain SQL through a small repository/data-access layer
 - Do not introduce a full ORM for API 0.0.1
@@ -125,12 +128,19 @@ Migrations:
 - Initial schema should live in `migrations/0000_initial.sql`
 - `migrations/0000_initial.sql` contains all API 0.0.1 tables and accepted constraints
 - do not create schema imperatively in Python
+- migration runner applies pending `*.sql` files in lexical filename order
+- migration version is the filename stem, such as `0000_initial`
 - `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
 - `schema_migrations` should exist in the initial schema
+- record migration versions only after successful migration execution
+- fail rather than automatically repairing dirty or inconsistent migration state
+- rollback and downgrade commands are not part of API 0.0.1
 - Forward-compatible migration discipline starts after the first usable version is established
 - migration/reset commands are backend-local `nephos-api` development/ops commands, not `nephos-cli` product commands
 - accepted backend-local migration command is `uv run nephos-api db migrate`
 - accepted backend-local reset command is `uv run nephos-api db reset --force`
+- SQLite connections use `PRAGMA foreign_keys=ON`, `PRAGMA journal_mode=WAL`, and `PRAGMA busy_timeout=5000`
+- no app-level SQLite write retry logic in API 0.0.1
 
 Controller/reconciler:
 
@@ -156,6 +166,7 @@ Local development:
 - backend runs as a local process during development through `uv run nephos-api serve`
 - CLI points at the local backend/API during development
 - API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
+- Makefile and task-runner wrappers are deferred; raw `uv run ...` commands are the accepted local command surface
 
 Testing:
 
@@ -163,6 +174,17 @@ Testing:
 - `ruff` for backend linting/formatting checks
 - mocks/fakes for backend unit tests
 - real K3s for Kubernetes integration tests
+- accepted pytest markers are `unit`, `integration`, and `k3s`
+- tests marked `k3s` require real K3s and should also be marked `integration`
+- default backend test command is `uv run pytest -m "not k3s"`
+- explicit K3s integration test command is `uv run pytest -m k3s`
+
+Catalog bootstrap:
+
+- repo-shipped catalog root is `catalog/`
+- optional additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`
+- `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list
+- catalog roots are backend-local configuration for API 0.0.1, not platform desired state
 
 Packaging/distribution:
 
@@ -209,12 +231,11 @@ Nephos does not use Kubernetes `ownerReferences` to represent platform relations
 
 ## Still To Decide
 
-Some local development wrapper details remain open.
+Some runtime, testing, and distribution details remain open.
 
 Need to decide:
 
-- exact Makefile/task runner wrapper conventions
 - exact K3s startup/reset workflow
-- exact integration test markers
+- integration test setup/teardown and CI policy
 - backend image layout and registry
 - cross-repo release process

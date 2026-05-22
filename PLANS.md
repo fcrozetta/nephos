@@ -77,6 +77,7 @@ Current understanding:
 - Batch 38 API 0.0.1 database table shape is accepted: App/Service tables use explicit catalog identity, lifecycle, generation, config, pending destroy, and timestamp columns; bindings use explicit App/Service relationship, alias, capability, generation, output summary, and timestamp columns; platform domains are one row per root domain; status snapshots use target/status columns plus evidence JSON and observed generation; reconciliation requests use target generation, action, payload JSON, and target snapshot JSON; indexes enforce unique slugs, binding alias per App, one default domain, one latest status per target, and reconciliation queue lookup by state/created_at.
 - Batch 39 SQLite and command-boundary mechanics are accepted: refer to this backend/API repo as `nephos-api` when distinguishing from `nephos-cli`; `nephos <command>` belongs to the user-facing `nephos-cli` product command; backend-local migration/reset commands are `nephos-api` dev/ops commands, with exact spelling resolved in Batch 40; SQLite uses TEXT for ids/slugs/enums/timestamps/JSON/digests, INTEGER for generation/booleans, narrow NOT NULL rules, CHECK constraints for state/is_default/generation, polymorphic type/id targets with domain validation, and Python/domain validation for JSON payloads.
 - Batch 40 backend package and dev command shape is accepted: this repository uses `src/nephos_api/`, exposes backend-local `nephos-api` commands, uses `nephos_api.main:app` as the FastAPI entrypoint, accepts `uv run nephos-api db migrate`, `uv run nephos-api db reset --force`, and `uv run nephos-api serve`, keeps `nephos <command>` reserved for `nephos-cli`, and starts API 0.0.1 implementation with the migration/database layer before API skeleton, catalog loader, and reconciler.
+- Batch 41 API bootstrap mechanics are accepted: API 0.0.1 backend bootstrap config is env-only with `NEPHOS_API_DB_PATH` and `NEPHOS_API_CATALOG_ROOTS`; SQLite defaults to `.nephos/state/nephos.db`; migrations apply `*.sql` files lexically and record filename-stem versions; dirty migration state fails without automatic repair; rollback/downgrade are out of scope; SQLite uses foreign keys, WAL, and `busy_timeout=5000` with no app-level write retry; repo catalog root is `catalog/`; pytest markers are `unit`, `integration`, and `k3s`; default backend tests exclude `k3s`; Makefile/task-runner wrappers are deferred.
 
 Files likely to change:
 
@@ -291,8 +292,7 @@ Rollback notes:
 Open questions:
 
 - Manifest validation schema details.
-- SQLite busy timeout and transaction retry behavior.
-- Catalog root config/env shape, source identifier format, and duplicate-entry error shape.
+- Catalog source identifier format and duplicate-entry error shape.
 - Service operation declaration/schema/API/CLI design beyond the accepted boundary.
 - Dedicated Service sharing policy details.
 - Future resource profile design.
@@ -307,8 +307,8 @@ Open questions:
 - App install behavior when setup is missing.
 - Secret rotation details.
 - Catalog source/trust beyond local filesystem.
-- Local development wrapper, K3s reset, and `../nephos-cli` local backend configuration details.
-- Testing command/marker/CI details.
+- K3s reset and `../nephos-cli` local backend configuration details.
+- Integration test setup/teardown, K3s CI behavior, fixture strategy, and coverage expectations.
 - Backend/CLI release process and future compatibility matrix.
 - Reference scenario exact command spelling and status output.
 - Draft manifest naming and cleanup conventions.

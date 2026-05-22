@@ -210,6 +210,8 @@ Install by catalog kind and name, plus optional explicit source when needed.
 
 Custom catalog roots are backend local configuration for API 0.0.1, not platform desired state.
 
+Additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`.
+
 Read-only catalog endpoints are:
 
 ```text

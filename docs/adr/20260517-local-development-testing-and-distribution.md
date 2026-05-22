@@ -30,6 +30,28 @@ Use mocks/fakes for backend unit tests.
 
 Use real K3s for Kubernetes integration tests.
 
+Use pytest markers:
+
+- `unit`
+- `integration`
+- `k3s`
+
+Tests marked `k3s` require real K3s and should also be marked `integration`.
+
+Default backend test command:
+
+```bash
+uv run pytest -m "not k3s"
+```
+
+Explicit K3s integration test command:
+
+```bash
+uv run pytest -m k3s
+```
+
+Makefile and task-runner wrappers are deferred for API 0.0.1.
+
 Phase 1 backend distribution is:
 
 - local development process for developers
@@ -76,6 +98,8 @@ Unit tests can run without a Kubernetes cluster.
 
 Integration tests require K3s and should be separated from fast unit tests.
 
+K3s-dependent tests do not run in the default backend test command.
+
 The backend can be packaged for runtime without solving the full installer story.
 
 Cross-repo release discipline is still needed later.
@@ -87,3 +111,5 @@ The CLI/backend mismatch behavior is intentionally permissive in Phase 1, so API
 Do not add CLI implementation code to this repository.
 
 Do not add strict CLI/backend compatibility gates without a new decision.
+
+API bootstrap environment, migration runner, catalog root, SQLite timeout, and wrapper details are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).

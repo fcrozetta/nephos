@@ -126,9 +126,10 @@ Architecture docs must keep `nephos-api` backend-local commands separate from `n
 
 API 0.0.1 implementation should begin with the migration/database layer before API endpoints, catalog loading, or reconciliation logic.
 
+Makefile and task-runner wrappers are deferred by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
 ## Open Questions
 
-- exact Makefile or task-runner wrapper conventions, if any
 - exact K3s startup/reset workflow
 - backend container image layout and registry
 - cross-repository release process between `nephos-api` and `nephos-cli`

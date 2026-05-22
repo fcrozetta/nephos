@@ -1265,7 +1265,17 @@ API 0.0.1 does not require an audit/history table for destroyed resources.
 
 API 0.0.1 supports one repo-shipped catalog root and optional configured local filesystem catalog roots.
 
-Custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config.
+The repo-shipped catalog root is:
+
+```text
+catalog/
+```
+
+Additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`.
+
+`NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list.
+
+Custom catalog roots are backend local configuration for API 0.0.1.
 
 Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
 
@@ -1950,6 +1960,7 @@ API 0.0.1 uses:
 - short explicit transactions
 - `PRAGMA foreign_keys=ON`
 - `PRAGMA journal_mode=WAL`
+- `PRAGMA busy_timeout=5000`
 
 ## D206: Initial migration contains the API 0.0.1 schema
 
@@ -2167,3 +2178,108 @@ API 0.0.1 implementation order is:
 2. API skeleton
 3. catalog loader
 4. reconciler
+
+## D224: API bootstrap config is env-only for 0.0.1
+
+API 0.0.1 backend bootstrap configuration uses environment variables only.
+
+Do not add a backend local config file for API 0.0.1.
+
+Do not store backend bootstrap configuration in the Nephos desired-state database.
+
+Accepted bootstrap environment variables:
+
+- `NEPHOS_API_DB_PATH`
+- `NEPHOS_API_CATALOG_ROOTS`
+
+## D225: SQLite DB path uses NEPHOS_API_DB_PATH
+
+`NEPHOS_API_DB_PATH` sets the SQLite database path.
+
+If unset, default to:
+
+```text
+.nephos/state/nephos.db
+```
+
+The default path is relative to the backend process working directory.
+
+## D226: Migration runner applies SQL files lexically
+
+`uv run nephos-api db migrate` applies pending `*.sql` files from `migrations/` in lexical filename order.
+
+Use the migration filename stem as the `schema_migrations.version` value.
+
+Example:
+
+```text
+migrations/0000_initial.sql -> 0000_initial
+```
+
+Record a migration version only after the migration succeeds.
+
+Run each migration in an explicit transaction where SQLite allows it.
+
+Dirty or inconsistent migration state fails rather than attempting automatic repair.
+
+Rollback and downgrade commands are not part of API 0.0.1.
+
+## D227: SQLite uses 5000 ms busy timeout and no app-level write retry
+
+SQLite connections should use:
+
+```sql
+PRAGMA foreign_keys=ON;
+PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
+```
+
+Keep transactions short and explicit.
+
+Do not add app-level SQLite write retry logic for API 0.0.1.
+
+## D228: Additional catalog roots use NEPHOS_API_CATALOG_ROOTS
+
+The repo-shipped catalog root is:
+
+```text
+catalog/
+```
+
+Additional local catalog roots are configured with:
+
+```text
+NEPHOS_API_CATALOG_ROOTS
+```
+
+`NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list.
+
+Configured catalog roots are backend-local configuration for API 0.0.1, not platform desired state.
+
+## D229: Backend pytest markers are unit integration k3s
+
+Use these pytest markers:
+
+- `unit`
+- `integration`
+- `k3s`
+
+Tests marked `k3s` require a real K3s cluster and should also be marked `integration`.
+
+Default backend test command:
+
+```bash
+uv run pytest -m "not k3s"
+```
+
+Explicit K3s integration test command:
+
+```bash
+uv run pytest -m k3s
+```
+
+## D230: Makefile and task-runner wrappers are deferred
+
+Makefile and task-runner wrappers are deferred.
+
+Raw `uv run nephos-api ...`, `uv run pytest ...`, and `uv run ruff ...` commands are the accepted local command surface until implementation proves wrappers are useful.

@@ -58,6 +58,19 @@ uv run nephos-api db reset --force
 uv run nephos-api serve
 ```
 
+Backend bootstrap configuration for API 0.0.1 uses environment variables only.
+
+Accepted backend bootstrap environment variables:
+
+- `NEPHOS_API_DB_PATH`
+- `NEPHOS_API_CATALOG_ROOTS`
+
+If `NEPHOS_API_DB_PATH` is unset, the SQLite database path defaults to `.nephos/state/nephos.db` relative to the backend process working directory.
+
+If `NEPHOS_API_CATALOG_ROOTS` is set, it is parsed as a platform path-list of additional local catalog roots.
+
+Do not add a backend local config file or DB-stored bootstrap config for API 0.0.1.
+
 Local development should run the backend as a local process through `uv run nephos-api serve`.
 
 The CLI should point at the local backend/API during development.
@@ -86,6 +99,30 @@ Use real K3s for Kubernetes integration tests.
 Unit tests should not require a Kubernetes cluster.
 
 Integration tests that verify reconciliation into Kubernetes should run against K3s.
+
+Use pytest markers:
+
+- `unit`
+- `integration`
+- `k3s`
+
+Tests marked `k3s` require a real K3s cluster and should also be marked `integration`.
+
+Default backend test command:
+
+```bash
+uv run pytest -m "not k3s"
+```
+
+Explicit K3s integration test command:
+
+```bash
+uv run pytest -m k3s
+```
+
+Makefile and task-runner wrappers are deferred.
+
+Raw `uv run nephos-api ...`, `uv run pytest ...`, and `uv run ruff ...` commands are the accepted local command surface until implementation proves wrappers are useful.
 
 ## Packaging And Distribution
 
@@ -121,9 +158,8 @@ Future strict compatibility behavior requires an explicit decision.
 
 ## Still Open
 
-- exact Makefile/task runner conventions
 - exact K3s startup/reset workflow
-- exact integration test tags/markers
+- integration test setup/teardown and CI policy
 - exact `../nephos-cli` local backend configuration convention
 - backend container image layout
 - backend image registry/release process

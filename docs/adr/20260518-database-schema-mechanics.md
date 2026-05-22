@@ -51,6 +51,7 @@ SQLite initialization must enable:
 ```sql
 PRAGMA foreign_keys=ON;
 PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
 ```
 
 Use restrictive relationships by default.
@@ -160,9 +161,10 @@ SQLite column types, nullability, CHECK constraints, polymorphic target handling
 
 Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
 
+SQLite busy timeout and app-level retry policy are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
 ## Open Questions
 
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
-- exact busy timeout and transaction retry behavior
 - exact target snapshot JSON fields
 - retry count, backoff, and polling/wakeup behavior

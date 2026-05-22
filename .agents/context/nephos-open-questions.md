@@ -334,6 +334,16 @@ Accepted direction:
 - `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
 - backend-local migration command is `uv run nephos-api db migrate`
 - backend-local reset command is `uv run nephos-api db reset --force`
+- backend bootstrap config uses environment variables only for API 0.0.1
+- `NEPHOS_API_DB_PATH` sets the SQLite database path
+- default SQLite path is `.nephos/state/nephos.db`
+- migration runner applies pending `*.sql` files in lexical filename order
+- migration version is the filename stem, such as `0000_initial`
+- migration runner records versions only after successful execution
+- dirty or inconsistent migration state fails instead of automatic repair
+- rollback and downgrade commands are out of API 0.0.1
+- SQLite connections use `PRAGMA foreign_keys=ON`, `PRAGMA journal_mode=WAL`, and `PRAGMA busy_timeout=5000`
+- no app-level SQLite write retry logic in API 0.0.1
 - API mutations that change desired state write desired-state changes and reconciliation request in one database transaction
 - destroy keeps the desired-state row present while teardown is pending
 - do not add `destroying` as a lifecycle state
@@ -342,7 +352,6 @@ Accepted direction:
 
 Need to decide:
 
-- exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact target snapshot JSON fields
 - exact request claiming behavior, if/when queue leasing becomes necessary
@@ -630,7 +639,10 @@ Accepted direction:
 
 - API 0.0.1 supports one repo-shipped catalog root
 - API 0.0.1 supports optional configured local filesystem catalog roots
-- custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config
+- repo-shipped catalog root is `catalog/`
+- custom catalog roots are backend local configuration for API 0.0.1
+- additional local catalog roots are configured with `NEPHOS_API_CATALOG_ROOTS`
+- `NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list
 - custom catalog roots are not platform desired state in SQLite for API 0.0.1
 - catalog source management can move into platform configuration later by explicit decision
 - API reads and validates catalog manifests on demand
@@ -661,7 +673,6 @@ Accepted direction:
 
 Need to decide:
 
-- exact backend config/env variable shape for custom local catalog roots
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
@@ -726,11 +737,14 @@ Accepted direction:
 - backend-local reset command is `uv run nephos-api db reset --force`
 - backend-local serve command is `uv run nephos-api serve`
 - API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
+- backend bootstrap configuration uses environment variables only
+- no backend local config file for API 0.0.1
+- no DB-stored backend bootstrap config for API 0.0.1
+- Makefile and task-runner wrappers are deferred
 - CLI points at local backend/API during development
 
 Need to decide:
 
-- whether to use Makefile/task runner wrappers
 - how K3s is started/reset for local development
 - how `../nephos-cli` points to a local backend
 
@@ -746,12 +760,14 @@ Accepted direction:
 - `ruff` for backend linting/formatting checks
 - mocks/fakes for unit tests
 - real K3s for Kubernetes integration tests
+- pytest markers are `unit`, `integration`, and `k3s`
+- tests marked `k3s` require real K3s and should also be marked `integration`
+- default backend test command is `uv run pytest -m "not k3s"`
+- explicit K3s integration test command is `uv run pytest -m k3s`
 - CLI tests live in the separate CLI repository
 
 Need to decide:
 
-- exact test command names
-- pytest marker names
 - integration test setup/teardown
 - whether CI runs K3s integration tests by default
 - fixture strategy for Kubernetes clients

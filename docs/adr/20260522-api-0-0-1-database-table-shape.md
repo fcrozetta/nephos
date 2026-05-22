@@ -193,11 +193,12 @@ SQLite column types, nullability, CHECK constraints, polymorphic target handling
 
 Backend-local command spelling is refined by [Backend Package and Dev Command Shape](20260522-backend-package-and-dev-command-shape.md).
 
+Database path, migration runner behavior, SQLite busy timeout, and app-level retry policy are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
 ## Open Questions
 
 - exact target snapshot JSON fields
 - exact `payload_json`, `output_summary_json`, and `evidence_json` contents
-- exact busy timeout and transaction retry behavior
 - exact request claiming behavior
 - exact polling/wakeup behavior
 - exact retry count and backoff behavior

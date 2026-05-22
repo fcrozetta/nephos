@@ -136,6 +136,8 @@ Backend-local development/ops commands in `nephos-api` must not use the `nephos 
 
 The accepted backend package and command details are refined in [Backend Package and Dev Command Shape](./20260522-backend-package-and-dev-command-shape.md).
 
+API bootstrap environment, migration runner, catalog root, SQLite timeout, and test marker details are refined by [API Bootstrap Mechanics](./20260522-api-bootstrap-mechanics.md).
+
 The CLI must use the Nephos API/local controller as its product boundary.
 
 The backend must expose stable enough API contracts for the CLI to operate without embedding backend internals.

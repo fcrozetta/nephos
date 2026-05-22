@@ -26,7 +26,21 @@ Supported Phase 1 sources:
 
 API 0.0.1 supports one repo-shipped catalog root plus optional configured local filesystem catalog roots.
 
-Custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config.
+The repo-shipped catalog root is:
+
+```text
+catalog/
+```
+
+Custom catalog roots are backend local configuration for API 0.0.1.
+
+Additional local catalog roots are configured with:
+
+```text
+NEPHOS_API_CATALOG_ROOTS
+```
+
+`NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list, such as `:`-separated paths on macOS/Linux.
 
 Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
 

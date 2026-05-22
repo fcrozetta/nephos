@@ -251,7 +251,7 @@ JSON text columns must not hide authoritative relationships, lifecycle state, de
 
 Use SQLite `CHECK` constraints for accepted enum-like state fields and enable SQLite foreign keys.
 
-SQLite initialization must enable foreign keys and WAL mode.
+SQLite initialization must enable foreign keys, WAL mode, and a 5000 ms busy timeout.
 
 Use restrictive relationships by default and implement destructive lifecycle deletes through explicit domain transactions, not broad cascades.
 

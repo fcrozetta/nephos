@@ -129,15 +129,16 @@ Desired-state tables need generation tracking and mutation code must bump the co
 
 Status freshness should compare observed generation against current desired-state generation where applicable.
 
-SQLite initialization must enable foreign keys and WAL mode.
+SQLite initialization must enable foreign keys, WAL mode, and a 5000 ms busy timeout.
 
 The first implementation can stay single-process and serialized, but must keep transactions short.
 
 Concrete API 0.0.1 table fields and accepted indexes are refined by [API 0.0.1 Database Table Shape](20260522-api-0-0-1-database-table-shape.md).
 
+SQLite busy timeout and app-level retry policy are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
 ## Open Questions
 
 - exact target snapshot JSON fields
-- exact busy timeout and transaction retry behavior
 - exact polling/wakeup behavior
 - exact retry count and backoff behavior

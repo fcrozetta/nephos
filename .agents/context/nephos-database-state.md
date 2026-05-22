@@ -35,6 +35,48 @@ uv run nephos-api db migrate
 uv run nephos-api db reset --force
 ```
 
+## Bootstrap Configuration
+
+API 0.0.1 uses environment variables for backend bootstrap configuration.
+
+Accepted database path variable:
+
+```text
+NEPHOS_API_DB_PATH
+```
+
+If unset, default to:
+
+```text
+.nephos/state/nephos.db
+```
+
+The default path is relative to the backend process working directory.
+
+Do not add a backend local config file for API 0.0.1.
+
+Do not store backend bootstrap configuration in the desired-state database.
+
+## Migration Runner
+
+`uv run nephos-api db migrate` applies pending `*.sql` files from `migrations/` in lexical filename order.
+
+Use the migration filename stem as `schema_migrations.version`.
+
+Example:
+
+```text
+migrations/0000_initial.sql -> 0000_initial
+```
+
+Record a migration version only after the migration succeeds.
+
+Run each migration in an explicit transaction where SQLite allows it.
+
+If migration state is dirty or inconsistent, fail rather than attempting automatic repair.
+
+Rollback and downgrade commands are not part of API 0.0.1.
+
 ## API 0.0.1 Tables
 
 Accepted table families:
@@ -386,7 +428,10 @@ SQLite initialization must enable:
 ```sql
 PRAGMA foreign_keys=ON;
 PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
 ```
+
+Do not add app-level write retry logic for API 0.0.1.
 
 ## Migration Tracking
 

@@ -21,7 +21,21 @@ API 0.0.1 supports:
 - one repo-shipped catalog root
 - optional configured local filesystem catalog roots
 
-Custom catalog roots are backend local configuration for API 0.0.1, such as environment or backend config.
+The repo-shipped catalog root is:
+
+```text
+catalog/
+```
+
+Custom catalog roots are backend local configuration for API 0.0.1.
+
+Additional local catalog roots are configured with:
+
+```text
+NEPHOS_API_CATALOG_ROOTS
+```
+
+`NEPHOS_API_CATALOG_ROOTS` is parsed as a platform path-list, such as `:`-separated paths on macOS/Linux.
 
 Do not store custom catalog roots as platform desired state in SQLite for API 0.0.1.
 
@@ -149,9 +163,10 @@ Catalog response fields are refined by [API Response Field Details](20260522-api
 
 Catalog summary nested fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
 
+Catalog root environment configuration is refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
 ## Open Questions
 
-- exact backend config/env variable shape for custom local catalog roots
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
