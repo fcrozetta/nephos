@@ -275,6 +275,10 @@ Backend unit tests should use mocks/fakes.
 
 Kubernetes integration tests should run against real K3s.
 
+K3s integration tests require a pre-existing reachable cluster and explicit `NEPHOS_API_RUN_K3S_TESTS=1` opt-in.
+
+K3s integration tests use generated namespaces and must clean up only generated labeled resources they created.
+
 API 0.0.1 implementation should start with the migration and database layer, then the API skeleton, then the catalog loader, then the reconciler.
 
 ### Controller / Reconciler
@@ -314,6 +318,14 @@ The reconciler should be isolated behind module boundaries so it can later move 
 Phase 1 should detect and report drift.
 
 Nephos may reconcile Nephos-owned resources when desired state is explicit or manual reconciliation is requested, but must not mutate Kubernetes resources it does not own.
+
+The reconciler/runtime backend uses normal Kubernetes client configuration resolution by default.
+
+`NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT` are optional backend overrides.
+
+Cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now.
+
+`nephos-api` must not install, start, stop, reset, or destroy K3s.
 
 ### Kubernetes Runtime
 

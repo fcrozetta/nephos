@@ -2354,3 +2354,61 @@ The API 0.0.1 database columns are:
 
 - `catalog_source_id`
 - `catalog_source_path`
+
+## D236: Nephos API tests do not manage K3s lifecycle
+
+`nephos-api` tests do not install, start, stop, reset, or destroy K3s.
+
+K3s integration tests require a pre-existing reachable K3s cluster.
+
+## D237: Kubernetes target selection uses standard config with env overrides
+
+Backend runtime and K3s integration tests use normal Kubernetes client configuration resolution by default.
+
+API 0.0.1 supports optional overrides:
+
+- `NEPHOS_API_KUBECONFIG`
+- `NEPHOS_API_KUBE_CONTEXT`
+
+If those variables are unset, the backend and tests use the standard active kubeconfig/context resolution.
+
+## D238: K3s tests require explicit opt-in and preflight
+
+K3s integration tests require:
+
+- `NEPHOS_API_RUN_K3S_TESTS=1`
+- Kubernetes API reachability
+
+The initial safety guard is explicit opt-in plus API reachability.
+
+Stricter allowed-context/server checks may be added later.
+
+## D239: Default CI excludes K3s integration tests
+
+Default CI runs unit and non-K3s tests only.
+
+K3s integration tests are local/manual until a later CI decision defines a K3s job.
+
+## D240: K3s integration tests use generated labeled namespaces
+
+K3s integration tests use generated test namespaces.
+
+Generated test namespaces and test-owned resources must use:
+
+```text
+app.kubernetes.io/managed-by: nephos
+```
+
+Test cleanup may delete only generated test namespaces/resources that it created and labeled.
+
+## D241: Backend runtime uses the same Kubernetes target resolution as tests
+
+The runtime backend uses the same kubeconfig/context resolution as K3s integration tests.
+
+`NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT` apply to both.
+
+## D242: Cluster lifecycle remains outside nephos-api
+
+Cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now.
+
+`nephos-api` reconciles into Kubernetes, but it must not start K3s itself.

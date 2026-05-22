@@ -79,6 +79,7 @@ Current understanding:
 - Batch 40 backend package and dev command shape is accepted: this repository uses `src/nephos_api/`, exposes backend-local `nephos-api` commands, uses `nephos_api.main:app` as the FastAPI entrypoint, accepts `uv run nephos-api db migrate`, `uv run nephos-api db reset --force`, and `uv run nephos-api serve`, keeps `nephos <command>` reserved for `nephos-cli`, and starts API 0.0.1 implementation with the migration/database layer before API skeleton, catalog loader, and reconciler.
 - Batch 41 API bootstrap mechanics are accepted: API 0.0.1 backend bootstrap config is env-only with `NEPHOS_API_DB_PATH` and `NEPHOS_API_CATALOG_ROOTS`; SQLite defaults to `.nephos/state/nephos.db`; migrations apply `*.sql` files lexically and record filename-stem versions; dirty migration state fails without automatic repair; rollback/downgrade are out of scope; SQLite uses foreign keys, WAL, and `busy_timeout=5000` with no app-level write retry; repo catalog root is `catalog/`; pytest markers are `unit`, `integration`, and `k3s`; default backend tests exclude `k3s`; Makefile/task-runner wrappers are deferred.
 - Batch 42 catalog source identity and errors are accepted: repo-shipped catalog source id is `default`; configured local roots use `local-1`, `local-2`, and `local-3` in configured order; source ids are stable only for the current backend configuration/order; API responses expose source ids but not raw paths by default; `catalogRef.source` and catalog detail `?source=` use source ids; ambiguous duplicate entries return `409 Conflict` with code `catalog_entry_ambiguous`; missing source ids return `404 Not Found` with code `catalog_source_not_found`; installed App/Service rows store `catalog_source_id` and `catalog_source_path`.
+- Batch 43 K3s dev integration mechanics are accepted: `nephos-api` tests require a pre-existing reachable K3s cluster and must not install/start/stop/reset/destroy K3s; backend runtime and K3s tests use normal Kubernetes client config resolution with optional `NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT`; K3s tests require `NEPHOS_API_RUN_K3S_TESTS=1` plus Kubernetes API reachability; default CI excludes K3s integration; K3s tests use generated namespaces/resources labeled `app.kubernetes.io/managed-by: nephos`; cleanup is limited to generated labeled test resources; cluster setup/lifecycle remains user-managed or `nephos-cli`-managed.
 
 Files likely to change:
 
@@ -307,8 +308,9 @@ Open questions:
 - App install behavior when setup is missing.
 - Secret rotation details.
 - Catalog source/trust beyond local filesystem.
-- K3s reset and `../nephos-cli` local backend configuration details.
-- Integration test setup/teardown, K3s CI behavior, fixture strategy, and coverage expectations.
+- `../nephos-cli` local backend configuration details.
+- Exact `nephos-cli` cluster setup/reset workflow.
+- Exact generated K3s test namespace name format, stricter allowed-context/server safety checks, future K3s CI job shape, Kubernetes client fixture implementation, and coverage expectations.
 - Backend/CLI release process and future compatibility matrix.
 - Reference scenario exact command spelling and status output.
 - Draft manifest naming and cleanup conventions.

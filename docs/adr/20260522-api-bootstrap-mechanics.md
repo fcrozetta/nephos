@@ -32,6 +32,8 @@ Accepted bootstrap environment variables:
 
 - `NEPHOS_API_DB_PATH`
 - `NEPHOS_API_CATALOG_ROOTS`
+- `NEPHOS_API_KUBECONFIG`
+- `NEPHOS_API_KUBE_CONTEXT`
 
 Use `NEPHOS_API_DB_PATH` for the SQLite database path.
 
@@ -90,6 +92,17 @@ Use `NEPHOS_API_CATALOG_ROOTS` as an optional path-list for additional local cat
 Parse `NEPHOS_API_CATALOG_ROOTS` with the host platform path-list separator, such as `:` on macOS/Linux.
 
 Configured catalog roots are backend-local configuration for API 0.0.1, not platform desired state.
+
+Kubernetes target selection is refined by [K3s Dev Integration Mechanics](20260522-k3s-dev-integration-mechanics.md).
+
+API 0.0.1 supports optional Kubernetes target overrides:
+
+```text
+NEPHOS_API_KUBECONFIG
+NEPHOS_API_KUBE_CONTEXT
+```
+
+If unset, backend runtime and K3s integration tests use normal Kubernetes client configuration resolution.
 
 Use these pytest markers:
 
@@ -196,12 +209,14 @@ Catalog source identifier behavior is refined by [Catalog Source Identity and Er
 
 Backend tests must use the accepted markers and keep K3s tests out of the default fast test command.
 
+K3s test execution and Kubernetes target selection are refined by [K3s Dev Integration Mechanics](20260522-k3s-dev-integration-mechanics.md).
+
 Do not add Makefile or task-runner wrapper contracts for API 0.0.1 unless a later decision changes this.
 
 ## Open Questions
 
-- exact K3s startup/reset workflow
-- integration test setup/teardown
-- whether CI runs K3s integration tests by default
+- exact generated K3s test namespace name format
+- stricter allowed-context/server safety checks beyond opt-in and API reachability
+- future K3s CI job shape, if K3s integration is added to CI
 - Kubernetes client fixture strategy
 - coverage expectations

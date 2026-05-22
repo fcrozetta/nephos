@@ -66,6 +66,10 @@ Persistence:
 - `NEPHOS_API_DB_PATH` sets the SQLite database path
 - default SQLite database path is `.nephos/state/nephos.db` relative to the backend process working directory
 - backend bootstrap configuration uses environment variables only for API 0.0.1
+- Kubernetes target selection uses normal Kubernetes client config resolution by default
+- `NEPHOS_API_KUBECONFIG` optionally overrides the kubeconfig path
+- `NEPHOS_API_KUBE_CONTEXT` optionally overrides the kube context
+- backend runtime and K3s integration tests use the same kubeconfig/context resolution
 - The Nephos API/database is the source of truth for desired platform state
 - Use plain SQL through a small repository/data-access layer
 - Do not introduce a full ORM for API 0.0.1
@@ -166,12 +170,17 @@ Controller/reconciler:
 Kubernetes client:
 
 - Official Python Kubernetes client
+- normal Kubernetes client configuration resolution by default
+- optional `NEPHOS_API_KUBECONFIG`
+- optional `NEPHOS_API_KUBE_CONTEXT`
+- `nephos-api` does not install, start, stop, reset, or destroy K3s
 
 Local development:
 
 - `uv` is the canonical backend Python workflow
 - backend runs as a local process during development through `uv run nephos-api serve`
 - CLI points at the local backend/API during development
+- cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now
 - API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
 - Makefile and task-runner wrappers are deferred; raw `uv run ...` commands are the accepted local command surface
 
@@ -183,8 +192,15 @@ Testing:
 - real K3s for Kubernetes integration tests
 - accepted pytest markers are `unit`, `integration`, and `k3s`
 - tests marked `k3s` require real K3s and should also be marked `integration`
+- K3s integration tests require a pre-existing reachable K3s cluster
+- K3s integration tests require `NEPHOS_API_RUN_K3S_TESTS=1`
+- K3s integration test preflight verifies explicit opt-in and Kubernetes API reachability
+- default CI runs unit and non-K3s tests only
 - default backend test command is `uv run pytest -m "not k3s"`
 - explicit K3s integration test command is `uv run pytest -m k3s`
+- K3s integration tests use generated test namespaces
+- generated test namespaces and test-owned resources use `app.kubernetes.io/managed-by: nephos`
+- test cleanup may delete only generated test namespaces/resources that it created and labeled
 
 Catalog bootstrap:
 
@@ -245,7 +261,10 @@ Some runtime, testing, and distribution details remain open.
 
 Need to decide:
 
-- exact K3s startup/reset workflow
-- integration test setup/teardown and CI policy
+- exact generated K3s test namespace name format
+- stricter allowed-context/server safety checks beyond opt-in and API reachability
+- future K3s CI job shape, if K3s integration is added to CI
+- exact Kubernetes client fixture implementation
+- exact `nephos-cli` cluster setup/reset workflow
 - backend image layout and registry
 - cross-repo release process

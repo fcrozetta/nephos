@@ -113,3 +113,5 @@ Do not add CLI implementation code to this repository.
 Do not add strict CLI/backend compatibility gates without a new decision.
 
 API bootstrap environment, migration runner, catalog root, SQLite timeout, and wrapper details are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
+
+K3s test execution, kubeconfig/context selection, and the boundary that `nephos-api` does not manage K3s lifecycle are refined by [K3s Dev Integration Mechanics](20260522-k3s-dev-integration-mechanics.md).

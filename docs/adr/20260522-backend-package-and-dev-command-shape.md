@@ -130,6 +130,6 @@ Makefile and task-runner wrappers are deferred by [API Bootstrap Mechanics](2026
 
 ## Open Questions
 
-- exact K3s startup/reset workflow
+- exact `nephos-cli` cluster setup/reset workflow
 - backend container image layout and registry
 - cross-repository release process between `nephos-api` and `nephos-cli`

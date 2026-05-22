@@ -18,6 +18,8 @@ Backend/control plane:
 - initial schema file `migrations/0000_initial.sql`
 - destructive local SQLite reset allowed before the first usable version
 - official Python Kubernetes client
+- normal Kubernetes client config resolution by default
+- optional `NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT`
 - API-owned in-process reconciler
 - persisted SQLite reconciliation requests
 - one serialized background reconciler worker initially
@@ -26,6 +28,8 @@ Backend/control plane:
 - `ruff` backend linting/formatting checks
 - mocks/fakes for unit tests
 - real K3s for Kubernetes integration tests
+- K3s integration tests require `NEPHOS_API_RUN_K3S_TESTS=1`
+- default tests and default CI exclude K3s integration
 
 CLI:
 
@@ -43,6 +47,8 @@ Runtime:
 - single-node K3s target
 - Kubernetes runtime substrate
 - minimal cluster lifecycle support
+- cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now
+- `nephos-api` reconciles into Kubernetes but must not install, start, stop, reset, or destroy K3s
 - no CRD-first model
 - no GitOps source-of-truth model
 - one namespace per App instance
@@ -226,7 +232,11 @@ Reference scenario:
 - App install behavior when setup is missing
 - binding Secret rotation behavior
 - backup guarantees
-- K3s reset/local CLI configuration workflow
+- exact generated K3s test namespace name format
+- stricter K3s test allowed-context/server safety checks
+- future K3s CI job shape, if K3s integration is added to CI
+- exact `nephos-cli` cluster setup/reset workflow
+- local CLI backend configuration workflow
 - packaging/distribution
 - future remote catalog trust/signing/update behavior
 - backend image layout and registry

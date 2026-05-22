@@ -748,13 +748,18 @@ Accepted direction:
 - backend bootstrap configuration uses environment variables only
 - no backend local config file for API 0.0.1
 - no DB-stored backend bootstrap config for API 0.0.1
+- Kubernetes target selection uses normal Kubernetes client configuration resolution by default
+- optional `NEPHOS_API_KUBECONFIG`
+- optional `NEPHOS_API_KUBE_CONTEXT`
 - Makefile and task-runner wrappers are deferred
 - CLI points at local backend/API during development
+- cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now
+- `nephos-api` must not install, start, stop, reset, or destroy K3s
 
 Need to decide:
 
-- how K3s is started/reset for local development
 - how `../nephos-cli` points to a local backend
+- exact `nephos-cli` cluster setup/reset workflow
 
 ## Testing Details
 
@@ -770,15 +775,24 @@ Accepted direction:
 - real K3s for Kubernetes integration tests
 - pytest markers are `unit`, `integration`, and `k3s`
 - tests marked `k3s` require real K3s and should also be marked `integration`
+- K3s integration tests require a pre-existing reachable K3s cluster
+- K3s integration tests require `NEPHOS_API_RUN_K3S_TESTS=1`
+- K3s preflight verifies explicit opt-in and Kubernetes API reachability
+- default CI runs unit and non-K3s tests only
+- K3s integration tests are local/manual until a later CI decision
+- K3s integration tests use generated test namespaces
+- generated test namespaces and test-owned resources use `app.kubernetes.io/managed-by: nephos`
+- test cleanup may delete only generated test namespaces/resources that it created and labeled
 - default backend test command is `uv run pytest -m "not k3s"`
 - explicit K3s integration test command is `uv run pytest -m k3s`
 - CLI tests live in the separate CLI repository
 
 Need to decide:
 
-- integration test setup/teardown
-- whether CI runs K3s integration tests by default
-- fixture strategy for Kubernetes clients
+- exact generated K3s test namespace name format
+- stricter allowed-context/server safety checks beyond opt-in and API reachability
+- future K3s CI job shape, if K3s integration is added to CI
+- exact Kubernetes client fixture implementation
 - coverage expectations
 
 ## Future Resource Profile Design
