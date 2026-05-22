@@ -164,7 +164,9 @@ Accepted direction:
 - installed App and Service snapshots include `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`
 - App snapshots include top-level `catalogRef`, `config`, `bindings`, `routes`, and `status`
 - App `bindings` entries use `id`, `alias`, `capability`, `serviceInstance`, and `status`
+- nested response entry `status` fields use compact objects with `level`, `reason`, `message`, and `observedAt`
 - App `routes` entries use `name`, `visibility`, `target`, `canonicalUrl`, `aliases`, and `status`
+- App route `target` uses semantic `{ port }`
 - Service snapshots include top-level `catalogRef`, `config`, `provides`, `dependents`, and `status`
 - Service `provides` entries use `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`
 - Service `dependents` entries use `appInstance`, `bindingId`, `bindingAlias`, `capability`, `lifecycle`, and `status`
@@ -176,20 +178,19 @@ Accepted direction:
 - catalog read endpoints are `GET /catalog/apps`, `GET /catalog/apps/{name}`, `GET /catalog/services`, and `GET /catalog/services/{name}`
 - catalog responses return normalized summaries with `kind`, `name`, `displayName`, `description`, `version`, `source`, `manifestDigest`, capability summary, and route summary
 - App catalog summaries include `requires` and `routes`
+- App catalog `requires` entries use `capability`, `alias`, and optional `provider`
+- App catalog `routes` entries use `name`, `visibility`, and `target`
 - Service catalog summaries include `provides`
+- Service catalog `provides` entries use `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`
 - catalog responses do not return raw manifest blobs by default
+- validation error normalization is deferred until after API 0.0.1
 - API 0.0.1 has no rename API
 - installed App and Service slugs are immutable in API 0.0.1
 - API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
 
 Need to decide:
 
-- exact status object fields embedded in nested entries
-- exact `target` subfields for App route entries
-- exact `requires` summary fields in App catalog responses
-- exact `routes` summary fields in App catalog responses
-- exact `provides` summary fields in Service catalog responses
-- future validation error normalization
+- none for API 0.0.1 response field shape
 
 ## API Lifecycle Action Shape
 
@@ -221,6 +222,9 @@ Accepted direction:
 - Service provides and dependent nested entry fields are accepted
 - Binding snapshots are exposed directly with redacted output or Secret summary
 - Binding output or Secret summary fields are accepted and always redacted
+- nested response entry `status` fields use compact objects with `level`, `reason`, `message`, and `observedAt`
+- App route `target` uses semantic `{ port }`
+- catalog nested summary fields are accepted
 - status payloads use the accepted structured status shape
 - API 0.0.1 has no rename API and installed slugs are immutable
 - repeated lifecycle requests to the same desired state should be idempotent
@@ -228,10 +232,7 @@ Accepted direction:
 
 Need to decide:
 
-- exact status object fields embedded in nested entries
-- exact App route target subfields
-- exact catalog nested summary detail fields
-- future validation error normalization
+- none for API 0.0.1 lifecycle response shape
 
 ## API Payload And Error Shape
 
@@ -265,13 +266,14 @@ Accepted direction:
 - dependency impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability
 - FastAPI/Pydantic framework validation errors may remain in their default framework shape for API 0.0.1
 - default framework validation error shape is not stable Nephos product API
+- validation error normalization is deferred until after API 0.0.1
+- nested response entry `status` fields use compact objects with `level`, `reason`, `message`, and `observedAt`
+- App route `target` uses semantic `{ port }`
+- catalog nested summary fields are accepted
 
 Need to decide:
 
-- exact status object fields embedded in nested entries
-- exact App route target subfields
-- exact catalog nested summary detail fields
-- future validation error normalization
+- none for API 0.0.1 payload and response shape
 
 ## Database Desired-State Model
 
@@ -637,7 +639,10 @@ Accepted direction:
 - installed records store version if present and always store the manifest digest
 - catalog responses return normalized summaries with `kind`, `name`, `displayName`, `description`, `version`, `source`, `manifestDigest`, capability summary, and route summary
 - App catalog summaries include `requires` and `routes`
+- App catalog `requires` entries use `capability`, `alias`, and optional `provider`
+- App catalog `routes` entries use `name`, `visibility`, and `target`
 - Service catalog summaries include `provides`
+- Service catalog `provides` entries use `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`
 - catalog responses do not return raw manifest blobs by default
 
 Need to decide:
@@ -646,9 +651,6 @@ Need to decide:
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact `requires` summary fields in App catalog responses
-- exact `routes` summary fields in App catalog responses
-- exact `provides` summary fields in Service catalog responses
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging
 
 ## Draft Manifest Naming Details

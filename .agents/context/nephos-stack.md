@@ -71,8 +71,11 @@ Persistence:
 - Service snapshots include `provides` and `dependents`
 - Binding snapshots are exposed directly with redacted output or Secret summary
 - Nested response entries use accepted field sets for App bindings/routes, Service provides/dependents, and Binding Secret summaries
+- Nested response entry status summaries use `level`, `reason`, `message`, and `observedAt`
+- App route targets are semantic and expose `port`
 - Catalog responses use normalized summaries, not raw manifest blobs by default
 - Catalog summaries include App `requires` and `routes`, and Service `provides`
+- Catalog summary entries use normalized Nephos fields, not raw manifest blobs or Kubernetes shapes
 - Installed App and Service slugs are immutable in API 0.0.1
 - Core domain tables include `id`, `created_at`, and `updated_at`
 - Timestamps use app-generated UTC ISO strings with `Z`

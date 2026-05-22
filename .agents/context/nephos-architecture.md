@@ -95,6 +95,10 @@ App `bindings` entries expose `id`, `alias`, `capability`, `serviceInstance`, an
 
 App `routes` entries expose `name`, `visibility`, `target`, `canonicalUrl`, `aliases`, and `status`.
 
+Nested response entry `status` fields use compact status summaries with `level`, `reason`, `message`, and `observedAt`.
+
+App route `target` is semantic and exposes `port`, not raw Kubernetes ingress backend shape.
+
 Service snapshots include top-level `provides` and `dependents`.
 
 Service `provides` entries expose `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`.
@@ -132,7 +136,13 @@ Catalog responses return normalized summaries, not raw manifest blobs by default
 
 App catalog summaries include `requires` and `routes`.
 
+App catalog `requires` entries expose `capability`, `alias`, and optional `provider`.
+
+App catalog `routes` entries expose `name`, `visibility`, and `target`.
+
 Service catalog summaries include `provides`.
+
+Service catalog `provides` entries expose `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`.
 
 Status is separate from lifecycle state and should persist the latest status snapshot with reasons and evidence.
 
@@ -153,6 +163,8 @@ Mutation responses use `{ resource, reconciliation, status? }`.
 Nephos-owned domain errors use `{ error: { code, message, details? } }`.
 
 FastAPI/Pydantic framework validation errors may remain framework-shaped for API 0.0.1.
+
+Validation error normalization is explicitly deferred until after API 0.0.1.
 
 Dependency-blocked Service lifecycle actions should return `409 Conflict` with an impact list unless forced.
 

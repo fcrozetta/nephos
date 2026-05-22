@@ -1851,3 +1851,59 @@ Service catalog summaries include:
 - `provides`
 
 Do not return raw manifest blobs by default.
+
+## D196: Nested response status summaries are compact
+
+Nested response entry `status` fields use:
+
+- `level`
+- `reason`
+- `message`
+- `observedAt`
+
+Do not embed full status evidence objects into every nested relationship entry by default.
+
+## D197: App route targets are semantic
+
+App route `target` entries use:
+
+- `port`
+
+The route target matches manifest intent.
+
+Do not expose raw Kubernetes ingress backend shape as the default route target response.
+
+## D198: App catalog requirement summaries use capability alias fields
+
+App catalog `requires` entries use:
+
+- `capability`
+- `alias`
+- optional `provider`
+
+If the manifest omits the binding alias, `alias` is defaulted from the capability.
+
+## D199: App catalog route summaries use name visibility target
+
+App catalog `routes` entries use:
+
+- `name`
+- `visibility`
+- `target`
+
+## D200: Service catalog provides summaries include output targets
+
+Service catalog `provides` entries use:
+
+- `capability`
+- optional `alias`
+- optional `version`
+- `bindingOutputTargets`
+
+## D201: Validation error normalization is deferred
+
+FastAPI/Pydantic framework validation errors may remain framework-shaped for API 0.0.1.
+
+Framework validation error shapes are not stable Nephos product API.
+
+Nephos-owned domain errors still use the accepted domain error envelope.

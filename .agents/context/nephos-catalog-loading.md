@@ -65,9 +65,30 @@ App catalog summaries include:
 - `requires`
 - `routes`
 
+App catalog `requires` entries use:
+
+- `capability`
+- `alias`
+- optional `provider`
+
+If the manifest omits the binding alias, `alias` is defaulted from the capability.
+
+App catalog `routes` entries use:
+
+- `name`
+- `visibility`
+- `target`
+
 Service catalog summaries include:
 
 - `provides`
+
+Service catalog `provides` entries use:
+
+- `capability`
+- optional `alias`
+- optional `version`
+- `bindingOutputTargets`
 
 Do not return raw manifest blobs by default.
 

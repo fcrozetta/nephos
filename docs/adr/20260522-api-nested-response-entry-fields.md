@@ -22,6 +22,13 @@ App `bindings` entries use:
 - `serviceInstance`
 - `status`
 
+The nested `status` field is a compact status summary:
+
+- `level`
+- `reason`
+- `message`
+- `observedAt`
+
 App `routes` entries use:
 
 - `name`
@@ -30,6 +37,12 @@ App `routes` entries use:
 - `canonicalUrl`
 - `aliases`
 - `status`
+
+The App route `target` is semantic and matches manifest intent:
+
+- `port`
+
+Do not expose raw Kubernetes ingress backend shape as the default route target response.
 
 Service `provides` entries use:
 
@@ -66,11 +79,36 @@ App catalog summaries include:
 - `requires`
 - `routes`
 
+App catalog `requires` entries use:
+
+- `capability`
+- `alias`
+- optional `provider`
+
+If the manifest omits the binding alias, `alias` is defaulted from the capability.
+
+App catalog `routes` entries use:
+
+- `name`
+- `visibility`
+- `target`
+
 Service catalog summaries include:
 
 - `provides`
 
+Service catalog `provides` entries use:
+
+- `capability`
+- optional `alias`
+- optional `version`
+- `bindingOutputTargets`
+
 Do not return raw manifest blobs by default.
+
+Validation error normalization is explicitly deferred for API 0.0.1.
+
+FastAPI/Pydantic framework validation errors may remain framework-shaped and are not a stable Nephos product API.
 
 ## Considered Options
 
@@ -107,6 +145,39 @@ Do not return raw manifest blobs by default.
 - Good, because it keeps catalog responses aligned with Nephos semantics.
 - Bad, because response mapping must summarize manifest fields.
 
+### Compact nested status summaries
+
+- Good, because nested relationship entries stay scannable.
+- Good, because full status evidence remains available on primary status payloads.
+- Bad, because clients that need full evidence may need to follow the primary resource or status payload.
+
+### Full status object everywhere
+
+- Good, because every nested entry carries full diagnostic context.
+- Bad, because App and Service reads become noisy and duplicate status evidence.
+
+### Status level string only
+
+- Good, because it is the smallest possible shape.
+- Bad, because it loses the reason and observed timestamp needed for operational transparency.
+
+### Semantic route target
+
+- Good, because it preserves Nephos platform semantics.
+- Good, because clients do not need Kubernetes ingress backend knowledge for normal route inspection.
+- Bad, because low-level runtime debugging may need a separate diagnostic surface later.
+
+### Raw Kubernetes route target
+
+- Good, because it exposes runtime detail directly.
+- Bad, because it makes Kubernetes internals part of the primary API contract.
+
+### Deferred validation error normalization
+
+- Good, because API 0.0.1 avoids building custom error infrastructure before the domain model is implemented.
+- Good, because Nephos-owned domain errors are still stable.
+- Bad, because framework validation errors are not yet product-shaped.
+
 ## Consequences
 
 Implementation should create explicit nested response models for these entries.
@@ -117,11 +188,8 @@ Secret summaries must redact values and should list only keys and location metad
 
 Catalog response mappers should summarize `requires`, `routes`, and `provides` from validated manifests without treating raw manifests as the response contract.
 
+Framework validation error normalization can be revisited after API 0.0.1, but it is not part of the initial stable product API.
+
 ## Open Questions
 
-- exact status object fields embedded in nested entries
-- exact `target` subfields for App route entries
-- exact `requires` summary fields in App catalog responses
-- exact `routes` summary fields in App catalog responses
-- exact `provides` summary fields in Service catalog responses
-- future validation error normalization
+None for API 0.0.1 nested response entry fields.

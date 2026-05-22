@@ -89,6 +89,13 @@ App `bindings` entries use:
 - `serviceInstance`
 - `status`
 
+The nested `status` field in App binding entries is a compact object:
+
+- `level`
+- `reason`
+- `message`
+- `observedAt`
+
 App `routes` entries use:
 
 - `name`
@@ -97,6 +104,12 @@ App `routes` entries use:
 - `canonicalUrl`
 - `aliases`
 - `status`
+
+App route `target` is semantic and uses:
+
+- `port`
+
+The route target matches manifest intent and does not expose raw Kubernetes ingress backend shape by default.
 
 Installed Service snapshots additionally include top-level:
 
@@ -121,6 +134,13 @@ Service `dependents` entries use:
 - `capability`
 - `lifecycle`
 - `status`
+
+The nested `status` field in App route, Service provides, and Service dependent entries uses the same compact status object:
+
+- `level`
+- `reason`
+- `message`
+- `observedAt`
 
 Bindings and platform domains expose their internal `id` plus their public or semantic identity.
 
@@ -216,6 +236,31 @@ Accepted catalog response fields:
 - `manifestDigest`
 - capability summary
 - route summary
+
+App catalog summaries include `requires` and `routes`.
+
+App catalog `requires` entries use:
+
+- `capability`
+- `alias`
+- optional `provider`
+
+If the manifest omits the binding alias, `alias` is defaulted from the capability.
+
+App catalog `routes` entries use:
+
+- `name`
+- `visibility`
+- `target`
+
+Service catalog summaries include `provides`.
+
+Service catalog `provides` entries use:
+
+- `capability`
+- optional `alias`
+- optional `version`
+- `bindingOutputTargets`
 
 Do not return raw manifest blobs by default.
 
@@ -469,6 +514,8 @@ FastAPI/Pydantic framework validation errors may remain in their default framewo
 
 Do not treat framework validation error shape as a stable Nephos product API.
 
+Validation error normalization is explicitly deferred until after API 0.0.1.
+
 ## Scope
 
 API 0.0.1 defines only the resources needed for the Paperless plus PostgreSQL reference flow.
@@ -481,9 +528,4 @@ Installed App and Service slugs are immutable in API 0.0.1.
 
 ## Open Questions
 
-- exact status object fields embedded in nested entries
-- exact `target` subfields for App route entries
-- exact `requires` summary fields in App catalog responses
-- exact `routes` summary fields in App catalog responses
-- exact `provides` summary fields in Service catalog responses
-- future validation error normalization
+None for API 0.0.1 response field shape.

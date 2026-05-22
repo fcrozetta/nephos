@@ -155,7 +155,4 @@ Catalog summary nested fields are refined by [API Nested Response Entry Fields](
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact `requires` summary fields in App catalog responses
-- exact `routes` summary fields in App catalog responses
-- exact `provides` summary fields in Service catalog responses
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging

@@ -197,9 +197,4 @@ Nested App, Service, Binding, and catalog summary entry fields are refined by [A
 
 ## Open Questions
 
-- exact status object fields embedded in nested entries
-- exact `target` subfields for App route entries
-- exact `requires` summary fields in App catalog responses
-- exact `routes` summary fields in App catalog responses
-- exact `provides` summary fields in Service catalog responses
-- future validation error normalization
+None for API 0.0.1 resource response field shape.

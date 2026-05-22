@@ -187,7 +187,4 @@ Validation error normalization is deferred beyond API 0.0.1 unless a later decis
 
 ## Open Questions
 
-- exact status object fields embedded in nested entries
-- exact App route target subfields
-- exact catalog nested summary detail fields
-- future validation error normalization
+None for API 0.0.1 lifecycle response shape.
