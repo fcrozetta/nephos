@@ -34,6 +34,10 @@ migrations/0000_initial.sql
 
 Forward-compatible migration discipline starts after the first usable version is established.
 
+The initial migration contains all API 0.0.1 tables and accepted constraints.
+
+Do not create schema imperatively in Python.
+
 API 0.0.1 should use separate normalized tables for core resources:
 
 - `app_instances`
@@ -45,6 +49,8 @@ API 0.0.1 should use separate normalized tables for core resources:
 - `schema_migrations`
 
 Use normalized columns for core identity, relationship, lifecycle, and lookup fields.
+
+Desired-state domain rows include integer `generation` tracking and increment it on desired-state mutation.
 
 Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
 
@@ -74,7 +80,13 @@ Each request targets one App instance, Service instance, binding, or platform do
 
 API mutations that change desired state must write the desired-state change and reconciliation request in one database transaction.
 
-Destroy removes active desired-state rows.
+Destroy keeps the desired-state row present while teardown is pending.
+
+Do not add `destroying` as a lifecycle state.
+
+The in-progress destroy state is represented by reconciliation/action metadata and, where useful, a delete-request timestamp such as `delete_requested_at`.
+
+After successful teardown, destroy removes active desired-state rows.
 
 API 0.0.1 does not require an audit/history table for destroyed resources.
 
@@ -123,6 +135,8 @@ Schema design can start from the accepted table families, but exact columns, ind
 
 Schema mechanics for internal ids, public slugs, timestamps, state constraints, foreign keys, reconciliation request columns, latest status row keying, and migration tracking are refined by [Database Schema Mechanics](20260518-database-schema-mechanics.md).
 
+Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
+
 Pre-0.0.1 local development can reset state by destroying and recreating SQLite.
 
 After the first usable version, schema evolution should happen through forward migrations rather than destructive resets.
@@ -133,8 +147,9 @@ After the first usable version, schema evolution should happen through forward m
 - indexes and uniqueness constraints
 - exact migration runner command
 - exact local reset command
-- transaction retry and SQLite locking behavior
+- exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
-- additional reconciliation request columns beyond the accepted API 0.0.1 minimum
-- exact request claiming and locking behavior, if/when queue leasing becomes necessary
+- exact target snapshot JSON fields
+- exact generation column names on reconciliation/status records
+- exact request claiming behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior

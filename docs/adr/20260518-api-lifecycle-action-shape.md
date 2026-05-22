@@ -82,6 +82,10 @@ Destroy is destructive platform intent with confirmation, possible force, depend
 
 Use an explicit confirmation body for destroy.
 
+Destroy does not add `destroying` as a lifecycle state.
+
+The desired-state row remains present while teardown is pending and is deleted only after successful teardown.
+
 Example shape:
 
 ```json
@@ -184,6 +188,8 @@ Resource-specific response fields and status evidence object fields are refined 
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
 
 Validation error normalization is deferred beyond API 0.0.1 unless a later decision changes that.
+
+Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
 
 ## Open Questions
 

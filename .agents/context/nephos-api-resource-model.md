@@ -342,6 +342,12 @@ Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
 
 Destroy requires an explicit confirmation body.
 
+Destroy does not create a `destroying` lifecycle state.
+
+The desired-state row remains present while teardown is pending and is deleted only after successful teardown.
+
+Pending destroy is visible through reconciliation/action metadata and status.
+
 Lifecycle action bodies use one common shape:
 
 ```json

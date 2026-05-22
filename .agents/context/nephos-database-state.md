@@ -18,6 +18,10 @@ Initial schema file:
 migrations/0000_initial.sql
 ```
 
+The initial migration contains all API 0.0.1 tables and accepted constraints.
+
+Do not create schema imperatively in Python.
+
 Forward-compatible migration discipline starts after the first usable version is established.
 
 Exact migration runner and local reset commands are still open.
@@ -66,6 +70,12 @@ Core domain tables should include:
 - `updated_at`
 
 User-addressable domain tables should also include a unique `slug`.
+
+Desired-state domain rows should include an integer `generation`.
+
+Increment `generation` on every desired-state mutation.
+
+Status and reconciliation records may record the target or observed generation so stale status can be distinguished from current status.
 
 `schema_migrations` uses `version` and `applied_at` as migration metadata.
 
@@ -180,15 +190,20 @@ Accepted request states:
 
 For API 0.0.1, keep the request table minimal.
 
-Accepted minimum fields:
+Accepted fields:
 
 - `id`
 - `target_type`
 - `target_id`
+- `action`
+- `payload_json`
+- target snapshot fields where needed
 - `state`
 - `error`
 - `created_at`
 - `updated_at`
+
+Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
 
 Attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable.
 
@@ -207,6 +222,17 @@ in one database transaction.
 
 Do not write desired state and enqueue reconciliation as separate best-effort steps.
 
+API 0.0.1 uses one API process and one serialized reconciler.
+
+Keep SQLite transactions short and explicit.
+
+SQLite initialization must enable:
+
+```sql
+PRAGMA foreign_keys=ON;
+PRAGMA journal_mode=WAL;
+```
+
 ## Migration Tracking
 
 Track applied migrations with:
@@ -219,7 +245,13 @@ schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)
 
 ## Destroy Semantics
 
-Destroy removes active desired-state rows.
+Destroy keeps the desired-state row present while teardown is pending.
+
+Do not add `destroying` as a lifecycle state.
+
+The in-progress destroy state is represented by reconciliation/action metadata and, where useful, a delete-request timestamp such as `delete_requested_at`.
+
+After successful teardown, destroy removes active desired-state rows.
 
 API 0.0.1 does not require an audit/history table for destroyed resources.
 

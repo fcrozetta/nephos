@@ -30,6 +30,16 @@ The API should not wait for Kubernetes convergence before returning.
 
 Reconciliation requests are persisted in SQLite.
 
+Reconciliation requests include durable action context.
+
+Accepted request fields include:
+
+- `action`
+- `payload_json`
+- target snapshot fields where needed
+
+Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
+
 Each reconciliation request targets one resource target:
 
 - App instance
@@ -49,6 +59,8 @@ Reconciliation handlers must be idempotent and safe to retry.
 
 The first implementation uses one serialized background worker.
 
+API 0.0.1 uses one API process and one serialized reconciler with short explicit SQLite transactions.
+
 This is acceptable for Nephos' single-user local-first model, including beyond API 0.0.1 until real usage proves queue concurrency is needed.
 
 Simple capped retry is the intended model.
@@ -57,11 +69,21 @@ Automatic retry may be deferred from API 0.0.1 if it adds too much implementatio
 
 The reconciler writes latest status snapshots with reasons and evidence.
 
+Reconciliation and status records may record target or observed desired-state generation.
+
 Failures do not roll back desired state.
 
 When reconciliation fails, desired state remains intact and Nephos updates reconciliation request state plus status evidence.
 
 Blocked requests require desired-state changes, user input, or explicit manual reconciliation after the blocker is resolved.
+
+Destroy keeps the desired-state row present while teardown is pending.
+
+Do not add `destroying` as a lifecycle state.
+
+Pending destroy is visible through reconciliation/action metadata and status.
+
+After successful teardown, the desired-state row is deleted.
 
 Phase 1 detects and reports drift for Nephos-owned resources.
 
@@ -115,6 +137,8 @@ Manual reconcile endpoint shape and reconciliation request id format are refined
 
 Status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
+Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
+
 Mutating API handlers must not write desired state without a matching reconciliation request in the same transaction.
 
 The reconciler must own status snapshot writes for reconciliation outcomes.
@@ -127,8 +151,9 @@ This deliberately trades throughput for clarity because Nephos is single-user/lo
 
 ## Open Questions
 
-- exact additional `reconciliation_requests` columns beyond the accepted API 0.0.1 minimum, if any
-- exact request claiming and locking behavior in SQLite, if/when queue leasing becomes necessary
+- exact target snapshot JSON fields
+- exact generation column names on reconciliation/status records
+- exact request claiming behavior in SQLite, if/when queue leasing becomes necessary
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after

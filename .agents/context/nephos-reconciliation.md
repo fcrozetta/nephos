@@ -74,6 +74,18 @@ Reconciliation request ids use:
 reconcile_<uuid4hex>
 ```
 
+Reconciliation requests include durable action context.
+
+Accepted request fields include:
+
+- `action`
+- `payload_json`
+- target snapshot fields where needed
+
+Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
+
+Reconciliation requests may record the desired-state generation they target.
+
 ## Worker Model
 
 API 0.0.1 starts with one serialized background worker.
@@ -115,6 +127,20 @@ Blocked requests require desired-state changes, user input, or explicit manual r
 
 Exact retry count, backoff, polling interval, and request claiming mechanics are implementation details still to define.
 
+## Destroy Reconciliation
+
+Destroy does not add a `destroying` lifecycle state.
+
+The desired-state row remains present while teardown is pending.
+
+Pending destroy is visible through reconciliation/action metadata and status.
+
+After successful teardown of runtime objects and persistent data, the desired-state row is deleted.
+
+Failed destroy keeps enough desired-state identity to report status and retry cleanup.
+
+Do not infer destructive cleanup only from Kubernetes labels after deleting Nephos desired state.
+
 ## Manual Reconcile
 
 Manual reconcile uses action subresources:
@@ -137,6 +163,10 @@ The reconciler writes latest status snapshots with reasons and evidence.
 Status is separate from lifecycle.
 
 Status should make reconciliation state visible to the API and CLI.
+
+Status snapshots may record the observed desired-state generation.
+
+Clients can compare observed generation against current desired-state generation to distinguish fresh status from stale status.
 
 ## Drift Handling
 

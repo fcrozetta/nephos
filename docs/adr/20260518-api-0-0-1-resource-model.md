@@ -99,6 +99,10 @@ Keep `destroy` as `POST .../actions/destroy`, not `DELETE`.
 
 Destroy requires an explicit confirmation body.
 
+Destroy does not add `destroying` as a lifecycle state.
+
+The desired-state row remains present while teardown is pending and is deleted only after successful teardown.
+
 Stopping, removing, or destroying a Service instance with dependents returns `409 Conflict` with an impact list unless the request explicitly carries `force: true`.
 
 Repeated lifecycle requests to the same desired state should be idempotent.
@@ -194,6 +198,8 @@ Later APIs must extend this model deliberately rather than adding raw Kubernetes
 Resource-specific response fields, status evidence object fields, catalog response fields, and installed slug rename behavior are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
 Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
+Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
 
 ## Open Questions
 

@@ -26,6 +26,10 @@ Core domain tables should include:
 
 User-addressable domain tables should additionally include a unique `slug`.
 
+Desired-state domain rows should include integer `generation`.
+
+Increment `generation` on desired-state mutation.
+
 `schema_migrations` tracks applied migrations with:
 
 ```sql
@@ -42,6 +46,13 @@ At minimum, enforce:
 
 Enable SQLite foreign keys.
 
+SQLite initialization must enable:
+
+```sql
+PRAGMA foreign_keys=ON;
+PRAGMA journal_mode=WAL;
+```
+
 Use restrictive relationships by default.
 
 Do not rely on broad `ON DELETE CASCADE` to implement Nephos lifecycle semantics.
@@ -52,17 +63,22 @@ Use SQLite JSON text columns only for validated snapshots and flexible payloads.
 
 Do not hide authoritative domain relationships, lifecycle state, or dependency tracking inside generic JSON blobs.
 
-For API 0.0.1, keep `reconciliation_requests` minimal.
+For API 0.0.1, keep `reconciliation_requests` bounded.
 
-The accepted minimum is:
+The accepted fields include:
 
 - `id`
 - `target_type`
 - `target_id`
+- `action`
+- `payload_json`
+- target snapshot fields where needed
 - `state`
 - `error`
 - `created_at`
 - `updated_at`
+
+Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
 
 Attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable.
 
@@ -76,6 +92,8 @@ Use a unique key over:
 Do not store latest status JSON directly on each resource row as the primary model.
 
 Status event history remains deferred.
+
+Status and reconciliation records may record target or observed generation so stale status can be distinguished from current status.
 
 ## Considered Options
 
@@ -117,6 +135,10 @@ Status event history remains deferred.
 
 The initial SQL migration should reflect these mechanics.
 
+The initial migration should contain all API 0.0.1 tables and accepted constraints.
+
+Do not create schema imperatively in Python.
+
 Implementation should treat slugs as public identity and internal ids as relationship identity.
 
 Database writes should enable and rely on SQLite foreign key enforcement.
@@ -129,6 +151,8 @@ Internal id and timestamp formats are refined by [API Read, Status, and Catalog 
 
 Status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
+Destroy timing, durable reconciliation request action context, generation tracking, SQLite WAL behavior, and initial migration shape are refined by [Destroy, Reconciliation, and SQLite Mechanics](20260522-destroy-reconciliation-and-sqlite-mechanics.md).
+
 ## Open Questions
 
 - exact indexes beyond required uniqueness
@@ -136,5 +160,7 @@ Status evidence object fields are refined by [API Response Field Details](202605
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - exact migration runner command
 - exact local reset command
-- transaction retry and SQLite locking behavior
+- exact busy timeout and transaction retry behavior
+- exact target snapshot JSON fields
+- exact generation column names on reconciliation/status records
 - retry count, backoff, and polling/wakeup behavior

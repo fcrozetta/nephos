@@ -1253,9 +1253,9 @@ API mutations that change desired state must write desired-state changes and the
 
 Do not write desired state and enqueue reconciliation as separate best-effort steps.
 
-## D137: Destroy removes active desired-state rows
+## D137: Destroy removes active desired-state rows after teardown
 
-Destroy removes active desired-state rows.
+Destroy removes active desired-state rows after successful teardown.
 
 API 0.0.1 does not require an audit/history table for destroyed resources.
 
@@ -1582,13 +1582,16 @@ Use SQLite JSON text columns only for validated snapshots and flexible payloads.
 
 Do not hide authoritative relationships, lifecycle state, dependency tracking, or public identity in generic JSON blobs.
 
-## D175: Reconciliation request columns stay minimal for API 0.0.1
+## D175: Reconciliation request columns stay bounded for API 0.0.1
 
-For API 0.0.1, `reconciliation_requests` uses the accepted minimum fields:
+For API 0.0.1, `reconciliation_requests` uses bounded accepted fields:
 
 - `id`
 - `target_type`
 - `target_id`
+- `action`
+- `payload_json`
+- target snapshot fields where needed
 - `state`
 - `error`
 - `created_at`
@@ -1907,3 +1910,53 @@ FastAPI/Pydantic framework validation errors may remain framework-shaped for API
 Framework validation error shapes are not stable Nephos product API.
 
 Nephos-owned domain errors still use the accepted domain error envelope.
+
+## D202: Destroy keeps desired state until teardown succeeds
+
+Destroy keeps the desired-state row present while teardown is pending.
+
+Do not add `destroying` as a lifecycle state.
+
+The in-progress destroy state is represented by reconciliation/action metadata and, where useful, a delete-request timestamp such as `delete_requested_at`.
+
+After successful teardown, the desired-state row is deleted.
+
+## D203: Reconciliation requests include durable action context
+
+Reconciliation requests include:
+
+- `action`
+- `payload_json`
+- target snapshot fields where needed
+
+Use target snapshots when cleanup or retry cannot safely depend only on the current desired-state row.
+
+## D204: Desired-state rows track generation
+
+Desired-state domain rows include an integer `generation`.
+
+Increment `generation` on desired-state mutation.
+
+Reconciliation and status records may record target or observed generation so stale status can be distinguished from current status.
+
+## D205: API 0.0.1 SQLite writes are single-process and WAL-backed
+
+API 0.0.1 uses:
+
+- one API process
+- one serialized reconciler
+- short explicit transactions
+- `PRAGMA foreign_keys=ON`
+- `PRAGMA journal_mode=WAL`
+
+## D206: Initial migration contains the API 0.0.1 schema
+
+The initial schema lives in:
+
+```text
+migrations/0000_initial.sql
+```
+
+The initial migration should contain all API 0.0.1 tables and accepted constraints.
+
+Do not create schema imperatively in Python.

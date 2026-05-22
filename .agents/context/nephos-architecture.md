@@ -124,6 +124,10 @@ Accepted lifecycle actions are:
 
 Destroy remains a `POST` action with explicit confirmation, not a plain `DELETE`.
 
+Destroy does not add a `destroying` lifecycle state.
+
+The desired-state row remains present while teardown is pending and is deleted only after successful teardown.
+
 Lifecycle action bodies use optional `force` and `confirm`.
 
 Bindings are first-class API/database resources connecting App instance requirement aliases to Service instance capabilities.
@@ -199,6 +203,8 @@ Public API paths use unique installed instance slugs.
 
 Core domain tables should include `id`, `created_at`, and `updated_at`.
 
+Desired-state domain rows should include integer `generation` tracking and increment it on desired-state mutation.
+
 Timestamps use app-generated UTC ISO strings with `Z`.
 
 Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
@@ -207,11 +213,15 @@ JSON text columns must not hide authoritative relationships, lifecycle state, de
 
 Use SQLite `CHECK` constraints for accepted enum-like state fields and enable SQLite foreign keys.
 
+SQLite initialization must enable foreign keys and WAL mode.
+
 Use restrictive relationships by default and implement destructive lifecycle deletes through explicit domain transactions, not broad cascades.
 
 Status snapshots are stored as latest rows keyed by `resource_type` and `resource_id`.
 
-API 0.0.1 reconciliation requests use the accepted minimal column set: `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`.
+API 0.0.1 reconciliation requests include `id`, `target_type`, `target_id`, `action`, `payload_json`, target snapshot fields where needed, `state`, `error`, `created_at`, and `updated_at`.
+
+Reconciliation and status records may record target or observed generation so stale status can be distinguished from current status.
 
 API mutations that change desired state must write desired-state changes and the reconciliation request in one database transaction.
 
@@ -229,6 +239,8 @@ API 0.0.1 uses a background reconciler worker over persisted SQLite reconciliati
 
 Each reconciliation request targets one App instance, Service instance, binding, or platform domain configuration target.
 
+Each reconciliation request includes durable action context and enough payload or target snapshot data to retry destructive cleanup safely.
+
 Accepted reconciliation request states are:
 
 - `pending`
@@ -238,6 +250,8 @@ Accepted reconciliation request states are:
 - `blocked`
 
 The first implementation uses one serialized worker.
+
+API 0.0.1 uses one API process and one serialized reconciler with short explicit SQLite transactions.
 
 Reconciliation handlers must be idempotent and safe to retry.
 

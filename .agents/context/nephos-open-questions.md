@@ -289,6 +289,8 @@ Accepted direction:
 - use explicit SQL migration files
 - before the first usable version, local development may destroy and recreate the database
 - initial schema should live in `migrations/0000_initial.sql`
+- initial migration contains all API 0.0.1 tables and accepted constraints
+- do not create schema imperatively in Python
 - forward-compatible migration discipline starts after the first usable version is established
 - API 0.0.1 table families are `app_instances`, `service_instances`, `bindings`, `platform_domains`, `status_snapshots`, `reconciliation_requests`, and `schema_migrations`
 - use normalized columns for core identity, relationship, lifecycle, and lookup fields
@@ -307,21 +309,27 @@ Accepted direction:
 - user-addressable installed resources use unique public slugs
 - public API paths continue to use installed instance slugs
 - core domain tables include `id`, `created_at`, and `updated_at`
+- desired-state domain rows include integer `generation`
+- increment `generation` on desired-state mutation
 - timestamps use app-generated UTC ISO strings with `Z`
 - user-addressable domain tables additionally include unique `slug`
 - enum-like state fields should use SQLite `CHECK` constraints
 - SQLite foreign keys are enabled
+- SQLite uses WAL mode for API 0.0.1
 - relationships are restrictive by default
 - broad `ON DELETE CASCADE` is not used to implement Nephos lifecycle semantics
 - destructive lifecycle deletes happen through explicit domain transactions
 - JSON text columns are only for validated snapshots and flexible payloads
 - authoritative relationships, lifecycle state, dependency tracking, and public identity are not hidden in generic JSON blobs
-- `reconciliation_requests` keeps a minimal API 0.0.1 column set: `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
+- `reconciliation_requests` include `id`, `target_type`, `target_id`, `action`, `payload_json`, target snapshot fields where needed, `state`, `error`, `created_at`, and `updated_at`
+- target snapshots are used when cleanup or retry cannot safely depend only on the current desired-state row
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - `status_snapshots` stores one latest row per `resource_type` and `resource_id`
 - `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
 - API mutations that change desired state write desired-state changes and reconciliation request in one database transaction
-- destroy removes active desired-state rows
+- destroy keeps the desired-state row present while teardown is pending
+- do not add `destroying` as a lifecycle state
+- after successful teardown, destroy removes active desired-state rows
 - API 0.0.1 does not require an audit/history table for destroyed resources
 
 Need to decide:
@@ -330,11 +338,12 @@ Need to decide:
 - exact indexes beyond required uniqueness
 - exact migration runner command
 - exact local reset command
-- transaction retry and SQLite locking behavior
+- exact busy timeout and transaction retry behavior
 - exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
-- additional reconciliation request columns beyond the accepted API 0.0.1 minimum
-- exact request claiming and locking behavior, if/when queue leasing becomes necessary
+- exact target snapshot JSON fields
+- exact generation column names on reconciliation/status records
+- exact request claiming behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior
 
 ## Reconciliation Execution Model
@@ -353,15 +362,18 @@ Accepted direction:
 - each request targets one App instance, Service instance, binding, or platform domain configuration target
 - request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
 - reconciliation request ids use `reconcile_<uuid4hex>`
-- API 0.0.1 keeps `reconciliation_requests` minimal with `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
+- API 0.0.1 reconciliation requests include durable action context with `action`, `payload_json`, and target snapshot fields where needed
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - handlers must be idempotent and safe to retry
 - one serialized background worker is the initial model
+- API 0.0.1 uses one API process and one serialized reconciler with short explicit SQLite transactions
 - serialized queueing is acceptable for the single-user local-first model beyond API 0.0.1 until real usage proves concurrency is needed
 - simple capped retry is intended
 - automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight
 - the reconciler writes latest status snapshots with reasons and evidence
+- reconciliation and status records may record target or observed desired-state generation
 - failures do not roll back desired state
+- destroy keeps the desired-state row present while teardown is pending and deletes it only after successful teardown
 - drift is detected and reported for Nephos-owned resources
 - Nephos reconciles drift only when desired state is explicit or manual reconciliation is requested
 - manual reconcile uses action subresources for App, Service, binding, and platform domain configuration targets
@@ -369,8 +381,9 @@ Accepted direction:
 
 Need to decide:
 
-- exact additional `reconciliation_requests` columns beyond the accepted API 0.0.1 minimum, if any
-- exact request claiming and locking behavior in SQLite, if/when queue leasing becomes necessary
+- exact target snapshot JSON fields
+- exact generation column names on reconciliation/status records
+- exact request claiming behavior in SQLite, if/when queue leasing becomes necessary
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
