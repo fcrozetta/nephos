@@ -70,7 +70,9 @@ Persistence:
 - App snapshots include `bindings` and `routes`
 - Service snapshots include `provides` and `dependents`
 - Binding snapshots are exposed directly with redacted output or Secret summary
+- Nested response entries use accepted field sets for App bindings/routes, Service provides/dependents, and Binding Secret summaries
 - Catalog responses use normalized summaries, not raw manifest blobs by default
+- Catalog summaries include App `requires` and `routes`, and Service `provides`
 - Installed App and Service slugs are immutable in API 0.0.1
 - Core domain tables include `id`, `created_at`, and `updated_at`
 - Timestamps use app-generated UTC ISO strings with `Z`

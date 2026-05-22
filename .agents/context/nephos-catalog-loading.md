@@ -60,6 +60,15 @@ Accepted catalog response fields:
 - capability summary
 - route summary
 
+App catalog summaries include:
+
+- `requires`
+- `routes`
+
+Service catalog summaries include:
+
+- `provides`
+
 Do not return raw manifest blobs by default.
 
 Raw or full validated manifest output, if needed later, requires an explicit response field or endpoint decision.

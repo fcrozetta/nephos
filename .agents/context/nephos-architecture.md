@@ -91,9 +91,19 @@ Installed App and Service snapshots include common fields such as `id`, `slug`, 
 
 App snapshots include top-level `bindings` and `routes`.
 
+App `bindings` entries expose `id`, `alias`, `capability`, `serviceInstance`, and `status`.
+
+App `routes` entries expose `name`, `visibility`, `target`, `canonicalUrl`, `aliases`, and `status`.
+
 Service snapshots include top-level `provides` and `dependents`.
 
+Service `provides` entries expose `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`.
+
+Service `dependents` entries expose `appInstance`, `bindingId`, `bindingAlias`, `capability`, `lifecycle`, and `status`.
+
 Binding snapshots expose alias, capability, App instance, Service instance, redacted output or Secret summary, status, and timestamps.
+
+Binding redacted output or Secret summaries expose `target`, `secretName`, `namespace`, `keys`, and `redacted: true`.
 
 Install mutation happens through `POST /apps` and `POST /services` with catalog references in the request body.
 
@@ -119,6 +129,10 @@ Ingress root domains are platform configuration resources at `/platform/config/d
 Read-only catalog endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}` with optional `source` selection for duplicate catalog entries.
 
 Catalog responses return normalized summaries, not raw manifest blobs by default.
+
+App catalog summaries include `requires` and `routes`.
+
+Service catalog summaries include `provides`.
 
 Status is separate from lifecycle state and should persist the latest status snapshot with reasons and evidence.
 

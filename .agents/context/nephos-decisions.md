@@ -1783,3 +1783,71 @@ API 0.0.1 has no rename API.
 Installed App and Service slugs are immutable in API 0.0.1.
 
 Future rename, alias, or display metadata update behavior requires a separate decision.
+
+## D190: App binding entries expose binding identity and status
+
+App `bindings` entries use:
+
+- `id`
+- `alias`
+- `capability`
+- `serviceInstance`
+- `status`
+
+## D191: App route entries expose route identity and generated URLs
+
+App `routes` entries use:
+
+- `name`
+- `visibility`
+- `target`
+- `canonicalUrl`
+- `aliases`
+- `status`
+
+## D192: Service provides entries expose capability metadata and output targets
+
+Service `provides` entries use:
+
+- `capability`
+- optional `alias`
+- optional `version`
+- `bindingOutputTargets`
+
+## D193: Service dependent entries expose App and binding impact
+
+Service `dependents` entries use:
+
+- `appInstance`
+- `bindingId`
+- `bindingAlias`
+- `capability`
+- `lifecycle`
+- `status`
+
+## D194: Binding output summaries are redacted Secret summaries
+
+Binding redacted output or Secret summaries use:
+
+- `target`
+- `secretName`
+- `namespace`
+- `keys`
+- `redacted`
+
+`redacted` must be `true` when Secret-related output exists in the summary.
+
+Do not expose Secret values.
+
+## D195: Catalog summaries expose requires routes and provides
+
+App catalog summaries include:
+
+- `requires`
+- `routes`
+
+Service catalog summaries include:
+
+- `provides`
+
+Do not return raw manifest blobs by default.

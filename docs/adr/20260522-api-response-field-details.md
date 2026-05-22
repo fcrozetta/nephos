@@ -169,13 +169,13 @@ Catalog response mapping must summarize capabilities and routes without returnin
 
 No rename endpoints should be implemented in API 0.0.1.
 
+Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
 ## Open Questions
 
-- exact field names inside App `bindings` entries
-- exact field names inside App `routes` entries
-- exact field names inside Service `provides` entries
-- exact field names inside Service `dependents` entries
-- exact redacted Binding output/Secret summary fields
-- exact catalog capability summary fields
-- exact catalog route summary fields
+- exact status object fields embedded in nested entries
+- exact `target` subfields for App route entries
+- exact `requires` summary fields in App catalog responses
+- exact `routes` summary fields in App catalog responses
+- exact `provides` summary fields in Service catalog responses
 - future validation error normalization

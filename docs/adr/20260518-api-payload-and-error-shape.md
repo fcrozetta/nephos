@@ -191,7 +191,11 @@ Read payloads, status payloads, and reconciliation request id format are refined
 
 Resource-specific response fields, status evidence object fields, and installed slug rename behavior are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
+Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
 ## Open Questions
 
-- exact field names inside App, Service, Binding, and catalog summary nested entries
+- exact status object fields embedded in nested entries
+- exact App route target subfields
+- exact catalog nested summary detail fields
 - future validation error normalization

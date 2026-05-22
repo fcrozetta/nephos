@@ -181,9 +181,13 @@ Read payloads, status payloads, reconciliation request id format, and manual rec
 
 Resource-specific response fields and status evidence object fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
+Nested App, Service, Binding, and catalog summary entry fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
 Validation error normalization is deferred beyond API 0.0.1 unless a later decision changes that.
 
 ## Open Questions
 
-- exact field names inside App, Service, Binding, and catalog summary nested entries
+- exact status object fields embedded in nested entries
+- exact App route target subfields
+- exact catalog nested summary detail fields
 - future validation error normalization

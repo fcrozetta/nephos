@@ -163,13 +163,20 @@ Accepted direction:
 - read payloads are domain snapshots, not raw database rows
 - installed App and Service snapshots include `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`
 - App snapshots include top-level `catalogRef`, `config`, `bindings`, `routes`, and `status`
+- App `bindings` entries use `id`, `alias`, `capability`, `serviceInstance`, and `status`
+- App `routes` entries use `name`, `visibility`, `target`, `canonicalUrl`, `aliases`, and `status`
 - Service snapshots include top-level `catalogRef`, `config`, `provides`, `dependents`, and `status`
+- Service `provides` entries use `capability`, optional `alias`, optional `version`, and `bindingOutputTargets`
+- Service `dependents` entries use `appInstance`, `bindingId`, `bindingAlias`, `capability`, `lifecycle`, and `status`
 - Binding snapshots include `id`, `alias`, `capability`, `appInstance`, `serviceInstance`, redacted output or Secret summary, `status`, `createdAt`, and `updatedAt`
+- Binding redacted output or Secret summaries use `target`, `secretName`, `namespace`, `keys`, and `redacted: true`
 - status payloads include `level`, `lifecycle`, `reconciliation`, `reason`, `message`, `evidence`, and `observedAt`
 - status evidence is structured and must not be an unbounded raw Kubernetes dump
 - status evidence entries include `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`
 - catalog read endpoints are `GET /catalog/apps`, `GET /catalog/apps/{name}`, `GET /catalog/services`, and `GET /catalog/services/{name}`
 - catalog responses return normalized summaries with `kind`, `name`, `displayName`, `description`, `version`, `source`, `manifestDigest`, capability summary, and route summary
+- App catalog summaries include `requires` and `routes`
+- Service catalog summaries include `provides`
 - catalog responses do not return raw manifest blobs by default
 - API 0.0.1 has no rename API
 - installed App and Service slugs are immutable in API 0.0.1
@@ -177,13 +184,11 @@ Accepted direction:
 
 Need to decide:
 
-- exact field names inside App `bindings` entries
-- exact field names inside App `routes` entries
-- exact field names inside Service `provides` entries
-- exact field names inside Service `dependents` entries
-- exact redacted Binding output/Secret summary fields
-- exact catalog capability summary fields
-- exact catalog route summary fields
+- exact status object fields embedded in nested entries
+- exact `target` subfields for App route entries
+- exact `requires` summary fields in App catalog responses
+- exact `routes` summary fields in App catalog responses
+- exact `provides` summary fields in Service catalog responses
 - future validation error normalization
 
 ## API Lifecycle Action Shape
@@ -211,8 +216,11 @@ Accepted direction:
 - read payloads are domain snapshots, not raw database rows
 - installed App and Service snapshots include ids and slugs
 - App snapshots include top-level `bindings` and `routes`
+- App binding and route nested entry fields are accepted
 - Service snapshots include top-level `provides` and `dependents`
+- Service provides and dependent nested entry fields are accepted
 - Binding snapshots are exposed directly with redacted output or Secret summary
+- Binding output or Secret summary fields are accepted and always redacted
 - status payloads use the accepted structured status shape
 - API 0.0.1 has no rename API and installed slugs are immutable
 - repeated lifecycle requests to the same desired state should be idempotent
@@ -220,10 +228,9 @@ Accepted direction:
 
 Need to decide:
 
-- exact field names inside App `bindings` and `routes`
-- exact field names inside Service `provides` and `dependents`
-- exact redacted Binding output/Secret summary fields
-- exact catalog summary detail fields
+- exact status object fields embedded in nested entries
+- exact App route target subfields
+- exact catalog nested summary detail fields
 - future validation error normalization
 
 ## API Payload And Error Shape
@@ -249,6 +256,7 @@ Accepted direction:
 - `reconciliation` includes request id and state
 - read resource payloads are domain snapshots with ids and slugs where applicable
 - App, Service, and Binding response field groups are accepted
+- nested App, Service, Binding, and catalog summary fields are accepted
 - status payloads use the accepted structured status shape
 - status evidence entries use `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`
 - reconciliation request ids use `reconcile_<uuid4hex>`
@@ -260,7 +268,9 @@ Accepted direction:
 
 Need to decide:
 
-- exact field names inside App, Service, Binding, and catalog summary nested entries
+- exact status object fields embedded in nested entries
+- exact App route target subfields
+- exact catalog nested summary detail fields
 - future validation error normalization
 
 ## Database Desired-State Model
@@ -626,6 +636,8 @@ Accepted direction:
 - `metadata.version` remains optional for catalog entries
 - installed records store version if present and always store the manifest digest
 - catalog responses return normalized summaries with `kind`, `name`, `displayName`, `description`, `version`, `source`, `manifestDigest`, capability summary, and route summary
+- App catalog summaries include `requires` and `routes`
+- Service catalog summaries include `provides`
 - catalog responses do not return raw manifest blobs by default
 
 Need to decide:
@@ -634,8 +646,9 @@ Need to decide:
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact catalog capability summary fields
-- exact catalog route summary fields
+- exact `requires` summary fields in App catalog responses
+- exact `routes` summary fields in App catalog responses
+- exact `provides` summary fields in Service catalog responses
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging
 
 ## Draft Manifest Naming Details

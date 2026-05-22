@@ -81,12 +81,45 @@ Installed App snapshots additionally include top-level:
 - `routes`
 - `status`
 
+App `bindings` entries use:
+
+- `id`
+- `alias`
+- `capability`
+- `serviceInstance`
+- `status`
+
+App `routes` entries use:
+
+- `name`
+- `visibility`
+- `target`
+- `canonicalUrl`
+- `aliases`
+- `status`
+
 Installed Service snapshots additionally include top-level:
 
 - `catalogRef`
 - `config`
 - `provides`
 - `dependents`
+- `status`
+
+Service `provides` entries use:
+
+- `capability`
+- optional `alias`
+- optional `version`
+- `bindingOutputTargets`
+
+Service `dependents` entries use:
+
+- `appInstance`
+- `bindingId`
+- `bindingAlias`
+- `capability`
+- `lifecycle`
 - `status`
 
 Bindings and platform domains expose their internal `id` plus their public or semantic identity.
@@ -207,6 +240,16 @@ Binding read payloads include:
 - `status`
 - `createdAt`
 - `updatedAt`
+
+Redacted output or Secret summaries use:
+
+- `target`
+- `secretName`
+- `namespace`
+- `keys`
+- `redacted`
+
+`redacted` must be `true` when Secret-related output exists in the summary.
 
 Binding output and Secret summaries must not expose secret values.
 
@@ -438,11 +481,9 @@ Installed App and Service slugs are immutable in API 0.0.1.
 
 ## Open Questions
 
-- exact field names inside App `bindings` entries
-- exact field names inside App `routes` entries
-- exact field names inside Service `provides` entries
-- exact field names inside Service `dependents` entries
-- exact redacted Binding output/Secret summary fields
-- exact catalog capability summary fields
-- exact catalog route summary fields
+- exact status object fields embedded in nested entries
+- exact `target` subfields for App route entries
+- exact `requires` summary fields in App catalog responses
+- exact `routes` summary fields in App catalog responses
+- exact `provides` summary fields in Service catalog responses
 - future validation error normalization

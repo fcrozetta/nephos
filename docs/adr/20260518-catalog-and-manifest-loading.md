@@ -147,12 +147,15 @@ Read-only catalog endpoint shape is refined by [API Read, Status, and Catalog Sh
 
 Catalog response fields are refined by [API Response Field Details](20260522-api-response-field-details.md).
 
+Catalog summary nested fields are refined by [API Nested Response Entry Fields](20260522-api-nested-response-entry-fields.md).
+
 ## Open Questions
 
 - exact backend config/env variable shape for custom local catalog roots
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact catalog capability summary fields
-- exact catalog route summary fields
+- exact `requires` summary fields in App catalog responses
+- exact `routes` summary fields in App catalog responses
+- exact `provides` summary fields in Service catalog responses
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging
