@@ -125,13 +125,13 @@ Domain code must perform destructive lifecycle operations explicitly instead of 
 
 Future reconciliation concurrency, retry backoff, queue leasing, and status history can be added through later migrations.
 
+Internal id and timestamp formats are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
+
 ## Open Questions
 
-- exact internal id format
-- exact timestamp format
 - exact indexes beyond required uniqueness
-- exact status snapshot payload schema
-- exact resource snapshot payload schema
+- exact status evidence object fields
+- exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - exact migration runner command
 - exact local reset command

@@ -1615,3 +1615,88 @@ schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)
 ```
 
 `schema_migrations` should exist in the initial schema.
+
+## D178: Internal ids use typed UUID4 hex prefixes
+
+Use typed internal text ids with resource prefixes and UUID4 hex suffixes.
+
+Initial prefixes:
+
+- App instance: `appinst_<uuid4hex>`
+- Service instance: `svcinst_<uuid4hex>`
+- binding: `binding_<uuid4hex>`
+- platform domain: `domain_<uuid4hex>`
+- reconciliation request: `reconcile_<uuid4hex>`
+- status snapshot: `status_<uuid4hex>`
+
+## D179: Timestamps are app-generated UTC ISO strings
+
+Use app-generated UTC ISO timestamp strings with `Z`.
+
+Initial representation:
+
+```text
+YYYY-MM-DDTHH:MM:SSZ
+```
+
+Database columns use snake case such as `created_at`.
+
+API payloads use camel case such as `createdAt`.
+
+## D180: Read payloads are domain snapshots with ids and slugs
+
+Read resource payloads are domain snapshots, not raw database rows.
+
+Installed App and Service snapshots include `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`.
+
+Internal ids may appear in read payloads.
+
+Installed App and Service public paths still use slugs.
+
+## D181: Status payloads are structured
+
+Accepted status payload fields are:
+
+- `level`
+- `lifecycle`
+- `reconciliation`
+- `reason`
+- `message`
+- `evidence`
+- `observedAt`
+
+`evidence` is an array of structured facts, not an unbounded raw Kubernetes dump.
+
+Secret values must remain redacted.
+
+## D182: Manual reconcile uses action subresources
+
+Accepted Phase 1 manual reconcile endpoints are:
+
+```text
+POST /apps/{appInstance}/actions/reconcile
+POST /services/{serviceInstance}/actions/reconcile
+POST /bindings/{bindingId}/actions/reconcile
+POST /platform/config/domains/actions/reconcile
+```
+
+Manual reconcile creates a reconciliation request and returns the normal mutation envelope.
+
+It must not directly mutate Kubernetes inline.
+
+## D183: Catalog read endpoints are read-only resources
+
+Accepted Phase 1 catalog read endpoints are:
+
+```text
+GET /catalog/apps
+GET /catalog/apps/{name}
+GET /catalog/services
+GET /catalog/services/{name}
+```
+
+Catalog detail endpoints accept optional `source` selection where duplicate catalog entries require disambiguation.
+
+Catalog endpoints are read-only in API 0.0.1.
+
+Install mutation remains owned by `POST /apps` and `POST /services`.

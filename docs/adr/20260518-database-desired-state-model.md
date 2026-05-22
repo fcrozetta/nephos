@@ -134,7 +134,8 @@ After the first usable version, schema evolution should happen through forward m
 - exact migration runner command
 - exact local reset command
 - transaction retry and SQLite locking behavior
-- status snapshot JSON shape
+- exact status evidence object fields
+- exact DB JSON payload fields beyond accepted API snapshot/status shape
 - additional reconciliation request columns beyond the accepted API 0.0.1 minimum
 - exact request claiming and locking behavior, if/when queue leasing becomes necessary
 - exact retry count, backoff, and polling/wakeup behavior

@@ -107,9 +107,11 @@ Nephos must not mutate resources it does not own.
 
 ## Consequences
 
-Implementation needs a reconciliation request table with request target identity, state, timestamps, attempts, and error/status evidence fields.
+Implementation needs a reconciliation request table with request target identity, state, timestamps, and error/status evidence fields.
 
-Exact columns are implementation details, but the state machine is now accepted.
+The API 0.0.1 minimum column set is refined by [Database Schema Mechanics](20260518-database-schema-mechanics.md).
+
+Manual reconcile endpoint shape and reconciliation request id format are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
 
 Mutating API handlers must not write desired state without a matching reconciliation request in the same transaction.
 
@@ -123,10 +125,9 @@ This deliberately trades throughput for clarity because Nephos is single-user/lo
 
 ## Open Questions
 
-- exact `reconciliation_requests` column definitions
-- exact request claiming and locking behavior in SQLite
+- exact additional `reconciliation_requests` columns beyond the accepted API 0.0.1 minimum, if any
+- exact request claiming and locking behavior in SQLite, if/when queue leasing becomes necessary
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
-- exact manual reconcile endpoint shape
-- exact status snapshot JSON shape for reconciliation evidence
+- exact status evidence object fields for reconciliation evidence

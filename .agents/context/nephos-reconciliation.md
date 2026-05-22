@@ -68,6 +68,12 @@ Examples of blocked requests:
 - required platform root domain configuration is missing
 - required runtime mapping source is missing
 
+Reconciliation request ids use:
+
+```text
+reconcile_<uuid4hex>
+```
+
 ## Worker Model
 
 API 0.0.1 starts with one serialized background worker.
@@ -108,6 +114,21 @@ When reconciliation fails, Nephos updates request state and status evidence whil
 Blocked requests require desired-state changes, user input, or explicit manual reconciliation after the blocker is resolved.
 
 Exact retry count, backoff, polling interval, and request claiming mechanics are implementation details still to define.
+
+## Manual Reconcile
+
+Manual reconcile uses action subresources:
+
+```text
+POST /apps/{appInstance}/actions/reconcile
+POST /services/{serviceInstance}/actions/reconcile
+POST /bindings/{bindingId}/actions/reconcile
+POST /platform/config/domains/actions/reconcile
+```
+
+Manual reconcile creates a reconciliation request and returns the normal mutation envelope.
+
+It does not directly mutate Kubernetes inline.
 
 ## Status Updates
 

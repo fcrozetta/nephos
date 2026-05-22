@@ -149,24 +149,29 @@ Accepted direction:
 - reconciliation response object must include reconciliation request id and state
 - API does not wait for Kubernetes convergence before returning
 - manual reconcile endpoint is allowed for debugging
+- manual reconcile uses action subresources: `POST /apps/{appInstance}/actions/reconcile`, `POST /services/{serviceInstance}/actions/reconcile`, `POST /bindings/{bindingId}/actions/reconcile`, and `POST /platform/config/domains/actions/reconcile`
 - reconciliation requests target one App instance, Service instance, binding, or platform domain configuration
 - request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
 - the reconciler writes latest status snapshots with reasons and evidence
+- reconciliation request ids use `reconcile_<uuid4hex>`
 - failures do not roll back desired state
 - one serialized background worker is accepted initially
 - simple capped retry is intended, but automatic retry may be deferred from API 0.0.1 if it adds too much implementation weight
 - Nephos-owned domain errors use `{ error: { code, message, details? } }`
 - dependency-blocked lifecycle errors use `409 Conflict` with impact details including required force flag, dependent App instance, binding id, binding alias, and capability
 - FastAPI/Pydantic framework validation errors may remain in default framework shape for API 0.0.1
+- read payloads are domain snapshots, not raw database rows
+- installed App and Service snapshots include `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`
+- status payloads include `level`, `lifecycle`, `reconciliation`, `reason`, `message`, `evidence`, and `observedAt`
+- status evidence is structured and must not be an unbounded raw Kubernetes dump
+- catalog read endpoints are `GET /catalog/apps`, `GET /catalog/apps/{name}`, `GET /catalog/services`, and `GET /catalog/services/{name}`
 - API 0.0.1 defines only resources needed for the Paperless plus PostgreSQL reference flow
 
 Need to decide:
 
-- exact status response schema
-- exact manual reconcile endpoint shape
-- exact catalog read/list endpoint shape
-- exact resource snapshot schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
+- exact catalog list/read response field set
 - future validation error normalization
 - future rename behavior for installed instance slugs
 
@@ -191,15 +196,17 @@ Accepted direction:
 - mutating API calls should prefer `202 Accepted`
 - mutation responses use `{ resource, reconciliation, status? }`
 - `reconciliation` includes request id and state
+- manual reconcile uses action subresources for App, Service, binding, and platform domain configuration targets
+- read payloads are domain snapshots, not raw database rows
+- installed App and Service snapshots include ids and slugs
+- status payloads use the accepted structured status shape
 - repeated lifecycle requests to the same desired state should be idempotent
 - Nephos should avoid duplicate reconciliation work when possible, but may enqueue reconciliation when needed to verify or converge runtime state
 
 Need to decide:
 
-- exact manual reconcile endpoint shape
-- exact resource snapshot schema
-- exact status snapshot schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
 - future validation error normalization
 - future rename behavior for installed instance slugs
 
@@ -224,6 +231,9 @@ Accepted direction:
 - `confirm` is required only for `destroy`
 - mutation responses use `{ resource, reconciliation, status? }`
 - `reconciliation` includes request id and state
+- read resource payloads are domain snapshots with ids and slugs where applicable
+- status payloads use the accepted structured status shape
+- reconciliation request ids use `reconcile_<uuid4hex>`
 - Nephos-owned domain errors use `{ error: { code, message, details? } }`
 - dependency-blocked lifecycle errors use `409 Conflict`
 - dependency impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability
@@ -232,9 +242,8 @@ Accepted direction:
 
 Need to decide:
 
-- exact resource snapshot schema
-- exact status snapshot schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
 - future validation error normalization
 - future rename behavior for installed instance slugs
 
@@ -266,9 +275,11 @@ Accepted direction:
 - status event/history storage is deferred
 - reconciliation requests are persisted in SQLite
 - domain/resource relationships use internal stable text ids
+- internal ids use typed prefixes with UUID4 hex suffixes
 - user-addressable installed resources use unique public slugs
 - public API paths continue to use installed instance slugs
 - core domain tables include `id`, `created_at`, and `updated_at`
+- timestamps use app-generated UTC ISO strings with `Z`
 - user-addressable domain tables additionally include unique `slug`
 - enum-like state fields should use SQLite `CHECK` constraints
 - SQLite foreign keys are enabled
@@ -288,14 +299,12 @@ Accepted direction:
 Need to decide:
 
 - exact full column definitions
-- exact internal id format
-- exact timestamp format
 - exact indexes beyond required uniqueness
 - exact migration runner command
 - exact local reset command
 - transaction retry and SQLite locking behavior
-- status snapshot JSON shape
-- resource snapshot JSON shape
+- exact status evidence object fields
+- exact DB JSON payload fields beyond accepted API snapshot/status shape
 - exact treatment of polymorphic target references in `status_snapshots` and `reconciliation_requests`
 - additional reconciliation request columns beyond the accepted API 0.0.1 minimum
 - exact request claiming and locking behavior, if/when queue leasing becomes necessary
@@ -316,6 +325,7 @@ Accepted direction:
 - reconciliation requests are persisted in SQLite
 - each request targets one App instance, Service instance, binding, or platform domain configuration target
 - request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`
+- reconciliation request ids use `reconcile_<uuid4hex>`
 - API 0.0.1 keeps `reconciliation_requests` minimal with `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - handlers must be idempotent and safe to retry
@@ -327,6 +337,7 @@ Accepted direction:
 - failures do not roll back desired state
 - drift is detected and reported for Nephos-owned resources
 - Nephos reconciles drift only when desired state is explicit or manual reconciliation is requested
+- manual reconcile uses action subresources for App, Service, binding, and platform domain configuration targets
 - Nephos does not mutate resources it does not own
 
 Need to decide:
@@ -336,8 +347,7 @@ Need to decide:
 - exact polling/wakeup mechanism
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
-- exact manual reconcile endpoint shape
-- exact status snapshot JSON shape for reconciliation evidence
+- exact status evidence object fields for reconciliation evidence
 
 ## Secrets Details
 

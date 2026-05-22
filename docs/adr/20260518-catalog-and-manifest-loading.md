@@ -143,11 +143,13 @@ The API can support user-created local entries without allowing arbitrary path i
 
 Future remote catalogs, catalog indexes, signed catalogs, and platform-managed catalog source configuration remain deferred.
 
+Read-only catalog endpoint shape is refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
+
 ## Open Questions
 
 - exact backend config/env variable shape for custom local catalog roots
 - exact source identifier format when more than one root is configured
 - exact duplicate-entry error shape
 - exact Pydantic/domain validation model names
-- exact catalog list/read API response shape
+- exact catalog list/read API response field set
 - whether full manifest snapshots become necessary for stable replay, import/export, or debugging

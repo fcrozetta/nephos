@@ -187,10 +187,11 @@ Nephos-owned domain errors should use the accepted error envelope.
 
 FastAPI/Pydantic validation errors are explicitly not stable product API in API 0.0.1.
 
+Read payloads, status payloads, and reconciliation request id format are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
+
 ## Open Questions
 
-- exact resource snapshot schema
-- exact status snapshot schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
 - future validation error normalization
 - future rename behavior for installed instance slugs

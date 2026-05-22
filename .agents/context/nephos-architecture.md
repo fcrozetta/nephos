@@ -81,6 +81,14 @@ Installed Services are represented internally as `ServiceInstance` records and m
 
 Public API paths use installed instance slugs, such as `/apps/paperless` and `/services/postgres`.
 
+Internal ids use typed prefixes with UUID4 hex suffixes.
+
+Read payloads may include internal ids, but installed App and Service public paths still use slugs.
+
+Read resource payloads are domain snapshots, not raw database rows.
+
+Installed App and Service snapshots include common fields such as `id`, `slug`, `kind`, `lifecycle`, catalog identity, config summary, relationship summaries, `createdAt`, `updatedAt`, and optional latest `status`.
+
 Install mutation happens through `POST /apps` and `POST /services` with catalog references in the request body.
 
 Install bodies use `catalogRef`, optional `instanceName`, optional `config`, and App install `bindings` when needed.
@@ -102,7 +110,11 @@ Bindings are first-class API/database resources connecting App instance requirem
 
 Ingress root domains are platform configuration resources at `/platform/config/domains`.
 
+Read-only catalog endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}` with optional `source` selection for duplicate catalog entries.
+
 Status is separate from lifecycle state and should persist the latest status snapshot with reasons and evidence.
+
+Status payloads include `level`, `lifecycle`, `reconciliation`, `reason`, `message`, `evidence`, and `observedAt`.
 
 Mutating API calls update desired state and create a persisted reconciliation request.
 
@@ -119,6 +131,8 @@ Nephos-owned domain errors use `{ error: { code, message, details? } }`.
 FastAPI/Pydantic framework validation errors may remain framework-shaped for API 0.0.1.
 
 Dependency-blocked Service lifecycle actions should return `409 Conflict` with an impact list unless forced.
+
+Manual reconcile uses target-specific action subresources such as `POST /apps/{appInstance}/actions/reconcile`.
 
 The backend may start with an empty database.
 
@@ -139,9 +153,13 @@ API 0.0.1 desired-state storage uses separate normalized table families for App 
 
 Database relationships use internal stable text ids.
 
+Initial internal id format is a typed prefix plus UUID4 hex suffix.
+
 Public API paths use unique installed instance slugs.
 
 Core domain tables should include `id`, `created_at`, and `updated_at`.
+
+Timestamps use app-generated UTC ISO strings with `Z`.
 
 Use SQLite JSON text columns for snapshots and flexible payloads where useful, validated at the API/domain boundary.
 

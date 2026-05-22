@@ -63,13 +63,19 @@ Persistence:
 - Ingress root domains are exposed at `/platform/config/domains`
 - Mutating API calls update desired state and create a persisted reconciliation request
 - Database relationships use internal stable text ids
+- Internal ids use typed prefixes with UUID4 hex suffixes
 - Public API paths use unique installed instance slugs
+- Read payloads may include internal ids, but App and Service paths remain slug-based
+- Read payloads are domain snapshots, not raw database rows
 - Core domain tables include `id`, `created_at`, and `updated_at`
+- Timestamps use app-generated UTC ISO strings with `Z`
 - Enum-like state fields use SQLite `CHECK` constraints
 - SQLite foreign keys are enabled with restrictive relationships by default
 - JSON text columns are limited to validated snapshots and flexible payloads
 - Latest status snapshots are keyed by `resource_type` and `resource_id`
 - API 0.0.1 reconciliation requests use minimal fields: `id`, `target_type`, `target_id`, `state`, `error`, `created_at`, and `updated_at`
+- Manual reconcile uses target-specific action subresources
+- Catalog read endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}`
 
 Migrations:
 

@@ -41,6 +41,42 @@ Examples:
 
 Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
 
+Internal ids use typed prefixes with UUID4 hex suffixes.
+
+Examples:
+
+- `appinst_<uuid4hex>`
+- `svcinst_<uuid4hex>`
+- `binding_<uuid4hex>`
+- `domain_<uuid4hex>`
+- `reconcile_<uuid4hex>`
+- `status_<uuid4hex>`
+
+Internal ids may appear in read payloads, dependency impact payloads, binding payloads, status payloads, and reconciliation payloads.
+
+Do not use internal ids as the primary public path identity for installed Apps and Services.
+
+## Read Resource Snapshots
+
+Read payloads are domain snapshots, not raw database rows.
+
+Installed App and Service snapshots include:
+
+- `id`
+- `slug`
+- `kind`
+- `lifecycle`
+- catalog identity
+- config summary
+- relationship summaries
+- `createdAt`
+- `updatedAt`
+- optional latest `status`
+
+Bindings and platform domains expose their internal `id` plus their public or semantic identity.
+
+Use camel case in API payloads.
+
 ## Install Endpoints
 
 Install Apps and Services through installed resource collections:
@@ -104,6 +140,19 @@ Do not install directly from arbitrary YAML paths as the default API model.
 Install by catalog kind and name, plus optional explicit source when needed.
 
 Custom catalog roots are backend local configuration for API 0.0.1, not platform desired state.
+
+Read-only catalog endpoints are:
+
+```text
+GET /catalog/apps
+GET /catalog/apps/{name}
+GET /catalog/services
+GET /catalog/services/{name}
+```
+
+Catalog detail endpoints accept optional `source` selection where duplicate catalog entries require disambiguation.
+
+Catalog endpoints are read-only in API 0.0.1.
 
 ## Bindings
 
@@ -188,6 +237,20 @@ Status includes reasons and evidence.
 
 Do not mix health/status into lifecycle fields.
 
+Accepted status payload fields:
+
+- `level`
+- `lifecycle`
+- `reconciliation`
+- `reason`
+- `message`
+- `evidence`
+- `observedAt`
+
+`evidence` is an array of structured facts, not an unbounded raw Kubernetes dump.
+
+Secret values must remain redacted in status payloads.
+
 ## Reconciliation
 
 Mutating API calls update desired state and create a persisted reconciliation request.
@@ -216,6 +279,19 @@ Mutation responses use:
 The `reconciliation` object must include reconciliation request id and state.
 
 A manual reconcile endpoint is allowed for debugging.
+
+Accepted Phase 1 manual reconcile endpoints:
+
+```text
+POST /apps/{appInstance}/actions/reconcile
+POST /services/{serviceInstance}/actions/reconcile
+POST /bindings/{bindingId}/actions/reconcile
+POST /platform/config/domains/actions/reconcile
+```
+
+Manual reconcile creates a reconciliation request and returns the normal mutation envelope.
+
+It must not directly mutate Kubernetes inline.
 
 The primary effect of a mutating API call must not be direct Kubernetes mutation that bypasses desired state and reconciliation.
 
@@ -301,10 +377,8 @@ Future backups, upgrades, auth/RBAC, resource profiles, remote catalogs, and gen
 
 ## Open Questions
 
-- exact status response schema
-- exact manual reconcile endpoint shape
-- exact catalog read/list endpoint shape
-- exact resource snapshot schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
+- exact catalog list/read response field set
 - future validation error normalization
 - future rename behavior for installed instance slugs

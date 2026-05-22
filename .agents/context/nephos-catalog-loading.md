@@ -29,6 +29,23 @@ Do not import all catalog entries into SQLite before use in API 0.0.1.
 
 Do not require a startup catalog index in API 0.0.1.
 
+## Read-Only Catalog API
+
+API 0.0.1 exposes read-only catalog endpoints:
+
+```text
+GET /catalog/apps
+GET /catalog/apps/{name}
+GET /catalog/services
+GET /catalog/services/{name}
+```
+
+Catalog detail endpoints accept optional `source` selection where duplicate catalog entries require disambiguation.
+
+Catalog endpoints are for discovery and inspection.
+
+They do not own install mutation.
+
 ## Entry Layout And Identity
 
 Accepted layout:

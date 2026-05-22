@@ -35,6 +35,22 @@ Every status must include reasons and/or evidence.
 
 Do not show opaque green/red status without explaining why.
 
+Accepted API status payload fields:
+
+- `level`
+- `lifecycle`
+- `reconciliation`
+- `reason`
+- `message`
+- `evidence`
+- `observedAt`
+
+`evidence` is an array of structured facts.
+
+It must not be an unbounded raw Kubernetes object dump.
+
+Secret values must remain redacted in status payloads.
+
 ## Lifecycle State
 
 Lifecycle state answers what Nephos intends or has done with the entity.

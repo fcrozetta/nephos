@@ -46,7 +46,16 @@ Public API paths use installed instance slugs.
 
 Internal foreign-key relationships should use internal ids, not public slugs.
 
-Exact id format remains open.
+Internal ids use typed prefixes with UUID4 hex suffixes.
+
+Initial prefixes:
+
+- App instance: `appinst_<uuid4hex>`
+- Service instance: `svcinst_<uuid4hex>`
+- binding: `binding_<uuid4hex>`
+- platform domain: `domain_<uuid4hex>`
+- reconciliation request: `reconcile_<uuid4hex>`
+- status snapshot: `status_<uuid4hex>`
 
 ## Timestamps
 
@@ -60,7 +69,17 @@ User-addressable domain tables should also include a unique `slug`.
 
 `schema_migrations` uses `version` and `applied_at` as migration metadata.
 
-Exact timestamp format remains open.
+Use app-generated UTC ISO timestamp strings with `Z`.
+
+Initial format:
+
+```text
+YYYY-MM-DDTHH:MM:SSZ
+```
+
+Database columns use snake case, such as `created_at` and `updated_at`.
+
+API payloads use camel case, such as `createdAt`, `updatedAt`, and `observedAt`.
 
 ## Constraints And Foreign Keys
 

@@ -177,12 +177,12 @@ The CLI should map user-friendly commands to these resource endpoints instead of
 
 The exact resource and status snapshot schemas remain implementation details, but the response envelope is accepted.
 
+Read payloads, status payloads, reconciliation request id format, and manual reconcile endpoint shape are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
+
 Validation error normalization is deferred beyond API 0.0.1 unless a later decision changes that.
 
 ## Open Questions
 
-- exact manual reconcile endpoint shape
-- exact resource snapshot schema
-- exact status snapshot schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
 - future validation error normalization

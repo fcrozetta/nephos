@@ -135,6 +135,8 @@ API 0.0.1 should define only the resources needed for the Paperless plus Postgre
 
 Do not add placeholder APIs for future backups, upgrades, auth, RBAC, resource profiles, remote catalogs, or generalized Service operations.
 
+Read payloads, status payloads, internal id format, manual reconcile endpoint shape, and catalog read endpoint shape are refined by [API Read, Status, and Catalog Shape](20260522-api-read-status-and-catalog-shape.md).
+
 ## Considered Options
 
 ### REST-ish resource API
@@ -191,10 +193,8 @@ Later APIs must extend this model deliberately rather than adding raw Kubernetes
 
 ## Open Questions
 
-- exact manual reconcile endpoint shape
-- exact catalog read/list endpoint shape
-- exact resource snapshot schema
-- exact status response schema
-- exact reconciliation request id format
+- exact resource-specific response fields beyond the accepted common snapshot shape
+- exact status evidence object fields
+- exact catalog list/read response field set
 - future validation error normalization
 - future rename behavior for installed instance slugs
