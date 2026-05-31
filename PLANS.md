@@ -18,7 +18,534 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan: Architecture Context Completion
+## Current Plan: API 0.0.1 Draft Runtime Handler Spike
+
+Status:
+
+- Implemented and validated for the API 0.0.1 backend/runtime slice.
+
+Goal:
+
+- Add the first opt-in real runtime path behind the reconciler using draft-documented assumptions: Helm subprocess deployment for App/Service runtime apply, Kubernetes Secret materialization for bindings, and a typed PostgreSQL provisioning-output assumption that remains honest about unimplemented SQL provisioning.
+
+Non-goals:
+
+- Do not mark the draft Helm/PostgreSQL assumptions as accepted architecture.
+- Do not implement K3s lifecycle management in `nephos-api`.
+- Do not expose arbitrary Helm, kubectl, shell, or Service operation commands as public Nephos semantics.
+- Do not implement stop/remove/destroy runtime teardown until teardown semantics are accepted and tested.
+- Do not promote draft manifests into canonical catalog examples.
+
+Current understanding:
+
+- Fer chose to proceed with a minimal Helm subprocess plus typed PostgreSQL provisioning assumption and document it as draft.
+- The draft ADR is `docs/adr/20260523-minimal-runtime-handler-assumptions.md`.
+- Runtime should stay behind the persisted reconciler boundary and should be opt-in/configurable so unit tests and desired-state-only workflows do not require Helm/Kubernetes.
+- The first runtime mode can support apply/start/reconcile for installed Services and Apps, and binding Secret materialization for PostgreSQL app-secret outputs.
+- Runtime status evidence must explicitly identify draft assumptions and any missing SQL-level provisioning.
+
+Files likely to change:
+
+- `PLANS.md`
+- `docs/adr/20260523-minimal-runtime-handler-assumptions.md`
+- `pyproject.toml`
+- `uv.lock`
+- `src/nephos_api/config.py`
+- `src/nephos_api/runtime.py`
+- `src/nephos_api/reconciler.py`
+- `tests/test_runtime.py`
+- `tests/test_reconciler.py`
+
+Proposed steps:
+
+1. Add draft ADR for Helm subprocess and PostgreSQL provisioning assumptions.
+2. Add runtime config for an opt-in `helm` runtime mode while preserving shell behavior by default.
+3. Add a Helm subprocess wrapper that generates temporary values files and runs `helm upgrade --install`.
+4. Add a Kubernetes Secret client boundary for app namespace Secret materialization.
+5. Add a runtime handler that resolves installed App/Service catalog entries, applies semantic config/binding mappings into Helm values, and delegates to Helm.
+6. Add typed PostgreSQL binding output generation and app-secret materialization that reuses existing Secret data when available.
+7. Wire the reconciler to call runtime handlers only in `helm` runtime mode; shell mode keeps the existing blocked behavior.
+8. Keep stop/remove/destroy runtime actions blocked with clear status evidence.
+9. Add fake-backed unit tests for Helm command generation, binding Secret materialization, and reconciler helm-mode success without requiring a live cluster.
+10. Run `uv run pytest -m "not k3s"`, `uv run ruff check .`, `uv run nephos-api db migrate`, and command help checks.
+
+Risks:
+
+- Accidentally presenting draft runtime assumptions as accepted product behavior.
+- Generating credentials without stable reuse would break idempotent retries.
+- Helm chart conventions may differ; status evidence must not overclaim database/user creation until SQL provisioning is real.
+- Introducing a Kubernetes dependency must not make normal unit tests require a cluster.
+
+Validation commands:
+
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+- `uv run nephos-api db migrate`
+- `uv run nephos-api serve --help`
+- `uv run nephos-api reconcile drain --help`
+
+Rollback notes:
+
+- Runtime mode can be disabled by using shell/default mode.
+- Revert `src/nephos_api/runtime.py`, reconciler runtime wiring, and the draft ADR if Fer rejects the temporary runtime assumptions.
+
+Open questions:
+
+- Whether Helm subprocess remains acceptable after the spike.
+- Exact PostgreSQL admin credential discovery and SQL provisioning execution.
+- Stop/remove/destroy Helm/PVC/Secret/app-scoped-resource teardown semantics.
+
+---
+
+## Previous Plan: API 0.0.1 Lifecycle And Manual Reconcile Desired-State Implementation
+
+Goal:
+
+- Implement accepted API `0.0.1` desired-state lifecycle actions and manual reconciliation entrypoints for installed Apps, installed Services, bindings, and platform domain configuration, keeping runtime teardown/apply work behind reconciliation requests.
+
+Non-goals:
+
+- Do not implement real Kubernetes, Helm, Service provisioning, binding Secret materialization, or route/Ingress mutation in this batch.
+- Do not delete desired-state rows during destroy before successful runtime teardown.
+- Do not add retry/backoff/lease table columns.
+- Do not decide CLI setup command spelling or move implementation into `nephos-cli`.
+- Do not change canonical catalog schemas or examples.
+
+Current understanding:
+
+- Install/read, auto-binding, and the reconciler shell are implemented.
+- Accepted API shape includes lifecycle action subresources for Apps and Services: `start`, `stop`, `remove`, and `destroy`.
+- Accepted manual reconcile endpoints exist for Apps, Services, bindings, and platform domain configuration.
+- Lifecycle mutations update desired state and enqueue reconciliation; they must not mutate Kubernetes inline.
+- `destroy` requires confirmation, keeps the desired-state row present while teardown is pending, and should be represented by `delete_requested_at` plus reconciliation/status metadata rather than a `destroying` lifecycle value.
+- Service lifecycle actions that affect dependents must return `409 Conflict` with an impact list unless forced.
+
+Files likely to change:
+
+- `PLANS.md`
+- `src/nephos_api/repositories.py`
+- `src/nephos_api/schemas.py`
+- `src/nephos_api/routers/apps.py`
+- `src/nephos_api/routers/services.py`
+- `src/nephos_api/routers/bindings.py`
+- `src/nephos_api/routers/platform_domains.py`
+- `src/nephos_api/main.py`
+- `tests/test_lifecycle_api.py`
+- `tests/test_bindings_api.py`
+
+Proposed steps:
+
+1. Add a shared lifecycle action request model with optional `force` and `confirm`.
+2. Add App lifecycle methods for start, stop, remove, destroy, and manual reconcile.
+3. Add Service lifecycle methods for start, stop, remove, destroy, and manual reconcile.
+4. Implement dependency impact detection from binding rows for Service stop/remove/destroy, requiring `force: true` when dependents exist.
+5. Require exact destroy confirmation text before enqueueing destroy requests.
+6. Preserve desired-state rows during destroy by setting `delete_requested_at` and enqueuing a destroy reconciliation request.
+7. Add Binding read snapshots and binding manual reconcile by id.
+8. Add platform-domain manual reconcile for the default configured domain while keeping broader setup semantics deferred.
+9. Register routers and return accepted mutation envelopes with pending status snapshots.
+10. Add tests for idempotent lifecycle state changes, destroy confirmation, Service dependent blocking/force, binding read/reconcile, and manual reconcile request creation.
+11. Run `uv run pytest -m "not k3s"`, `uv run ruff check .`, `uv run nephos-api db migrate`, and command help checks.
+
+Risks:
+
+- Accidentally deleting desired-state rows before runtime teardown would violate accepted destroy semantics.
+- Treating lifecycle actions as direct Kubernetes commands would weaken the desired-state/reconciler boundary.
+- Returning dependency impact without binding ids/aliases/capabilities would break the accepted error shape.
+- Platform-domain manual reconcile target selection is not fully expressive for multi-domain config; this batch should keep it narrow and transparent.
+
+Validation commands:
+
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+- `uv run nephos-api db migrate`
+- `uv run nephos-api serve --help`
+- `uv run nephos-api reconcile drain --help`
+
+Rollback notes:
+
+- Revert lifecycle/router/repository changes if lifecycle semantics need to change before real runtime handlers.
+- No migration rollback is expected because this batch uses accepted existing columns, including `delete_requested_at`.
+
+Open questions:
+
+- Exact platform-domain manual reconcile behavior for multiple root domains remains deferred; this batch can target the default configured domain to avoid adding an unapproved aggregate target shape.
+- Real remove/destroy runtime cleanup behavior remains deferred to the runtime handler batch.
+- Helm execution mechanics and PostgreSQL provisioning handler boundaries remain blockers for honest real runtime reconciliation.
+
+---
+
+## Previous Plan: API 0.0.1 Reconciler Shell Implementation
+
+Goal:
+
+- Implement the API-owned reconciler shell for API `0.0.1`: drain persisted `pending` reconciliation requests from SQLite, transition requests through `running` into terminal `succeeded`, `blocked`, or `failed` states, and write latest status snapshots with structured evidence, without performing real Kubernetes/Helm mutation yet.
+
+Non-goals:
+
+- Do not implement real Kubernetes, Helm, Service provisioning, binding Secret materialization, or route/Ingress mutation in this batch.
+- Do not add distributed workers, leases, attempt counters, backoff columns, or automatic retry.
+- Do not change the accepted reconciliation request table shape.
+- Do not add canonical catalog examples or schemas.
+- Do not implement lifecycle actions beyond the existing install/read/domain operations.
+
+Current understanding:
+
+- Fer wants progress toward API `0.0.1` and approved continuing from App install into the reconciler shell.
+- Accepted architecture requires an API-owned, in-process reconciler over persisted SQLite requests, with one serialized worker initially.
+- API mutations already persist reconciliation requests and initial pending status snapshots in the same transaction.
+- This batch should prove queue claiming/draining, request state transitions, idempotent shell handlers, and latest status writes before real runtime handlers.
+- Because this shell does not mutate Kubernetes, runtime-facing App/Service/Binding work should remain visibly `pending` or `blocked` through status evidence rather than falsely claiming real runtime health.
+- Platform domain requests can succeed as desired-state-only reconciliation because there is no runtime object to apply yet in this backend slice.
+
+Files likely to change:
+
+- `PLANS.md`
+- `src/nephos_api/reconciler.py`
+- `src/nephos_api/repositories.py`
+- `src/nephos_api/main.py`
+- `src/nephos_api/cli.py`
+- `tests/test_reconciler.py`
+- existing API tests if TestClient startup needs explicit reconciler disablement
+
+Proposed steps:
+
+1. Add repository/helper methods to claim the oldest pending request, mark requests terminal, and write latest status snapshots in short explicit transactions.
+2. Add a `Reconciler` service with `run_once()` and `drain()` entrypoints.
+3. Implement idempotent shell handlers for `platform_domain`, `service_instance`, `app_instance`, and `binding` targets.
+4. Mark platform-domain desired-state requests as succeeded with status evidence that no runtime mutation is needed in this shell.
+5. For installed Service/App/Binding targets, update request/status honestly for the shell: block or leave pending where required runtime handlers are not implemented, with evidence explaining the blocker.
+6. Detect App route blockers when no root domain is configured.
+7. Add an optional in-process background loop hook for the FastAPI app without making existing unit tests race-prone.
+8. Add a backend-local `nephos-api reconcile run-once` or equivalent command to drain persisted requests deterministically in tests/dev.
+9. Add tests for pending -> running -> terminal transitions, status snapshots, structured evidence, deleted platform-domain snapshot handling, no-op empty drain, and CLI command behavior where practical.
+10. Run `uv run pytest -m "not k3s"`, `uv run ruff check .`, `uv run nephos-api db migrate`, and `uv run nephos-api serve --help`.
+
+Risks:
+
+- Marking runtime reconciliation as `succeeded` before any Kubernetes/Helm mutation exists would misrepresent platform health.
+- Starting the background worker automatically in tests could race existing pending-state assertions.
+- Overbuilding retry/lease mechanics before API `0.0.1` needs them would conflict with the accepted bounded table shape.
+- Blocking App reconciliation on missing root domains must remain status/reconciliation behavior, not App install-time policy, until setup semantics are implemented.
+
+Validation commands:
+
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+- `uv run nephos-api db migrate`
+- `uv run nephos-api serve --help`
+
+Rollback notes:
+
+- Revert `src/nephos_api/reconciler.py`, CLI/app hook changes, and reconciler tests if request drain semantics need a different shape before runtime handlers.
+- No database migration rollback is expected because this batch uses the accepted existing reconciliation/status table shape.
+
+Open questions:
+
+- Exact retry count, backoff, lease/claiming mechanics, and polling interval remain implementation details deferred beyond this shell unless API `0.0.1` proves they are needed.
+- Exact runtime handler boundaries for Helm, PostgreSQL provisioning, binding Secret materialization, and route/Ingress remain deferred to the runtime batch.
+- Whether App install itself should require platform setup remains deferred; this shell may report route reconciliation blocked until root domains exist.
+
+---
+
+## Previous Plan: API 0.0.1 App Install Auto-Binding Implementation
+
+Goal:
+
+- Implement `POST /apps`, `GET /apps`, and `GET /apps/{appInstance}` for API `0.0.1` using validated catalog App entries, installed Service capability providers, persisted App desired state, first-class binding rows, and a persisted reconciliation request in the same transaction.
+
+Non-goals:
+
+- Do not freeze the manual App install binding-selection request shape in this batch.
+- Do not implement lifecycle actions beyond install/read.
+- Do not implement real Kubernetes, Helm, route/Ingress reconciliation, or Service provisioning runtime behavior.
+- Do not add canonical repo catalog entries, schemas, or examples.
+- Do not add a general `/bindings` API surface yet.
+
+Current understanding:
+
+- Fer approved a narrow App install slice that auto-binds only when each required capability has exactly one eligible installed Service provider.
+- App install mutation is accepted as `POST /apps` with `catalogRef`, optional `instanceName`, optional `config`, and optional `bindings` reserved for future explicit provider selection.
+- This batch may accept an omitted or empty `bindings` object, but must reject non-empty explicit binding selections instead of interpreting an unapproved shape.
+- Installed Apps are internal `AppInstance` records exposed under `/apps` by public slug.
+- Default instance name equals the catalog manifest `metadata.name`.
+- Binding rows connect App requirement aliases to Service instances and are the source of dependent tracking.
+- Missing providers and multiple eligible providers should fail clearly before creating desired state in this batch.
+- Mutating API calls must write desired state and a reconciliation request in one transaction, returning the accepted mutation envelope.
+- Runtime reconciliation and binding Secret materialization may remain pending until the reconciler/runtime batch.
+
+Files likely to change:
+
+- `PLANS.md`
+- `src/nephos_api/repositories.py`
+- `src/nephos_api/schemas.py`
+- `src/nephos_api/routers/apps.py`
+- `src/nephos_api/main.py`
+- `tests/test_apps_api.py`
+
+Proposed steps:
+
+1. Add App install request model with `catalogRef`, `instanceName`, `config`, and reserved `bindings`.
+2. Add App repository methods for list/get/install snapshots.
+3. Resolve and validate an App catalog entry during install.
+4. Reject non-empty explicit binding selections until Fer approves the manual binding request shape.
+5. Resolve each App requirement alias to exactly one installed Service provider by capability.
+6. Reject zero-provider and multi-provider cases with Nephos domain errors that include requirement aliases and candidates.
+7. Insert the App instance and auto-created binding rows in one transaction.
+8. Create one persisted App reconciliation request in the same transaction as App and binding desired state.
+9. Return App snapshots with catalogRef, config, bindings, routes, timestamps, and status.
+10. Include Service dependents from binding rows in Service snapshots.
+11. Register the App router and add tests using temporary catalog roots.
+12. Run `uv run pytest -m "not k3s"` and `uv run ruff check .`.
+
+Risks:
+
+- Accidentally freezing the explicit binding-selection request contract before approval.
+- Creating App desired state without binding rows, weakening dependent tracking.
+- Creating multiple reconciliation requests prematurely before the reconciler target strategy is implemented.
+- Treating route host generation as settled before platform setup and route reconciliation are implemented.
+- Recomputing too much installed Service semantics from mutable catalog files instead of persisted desired-state identity.
+
+Validation commands:
+
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+
+Rollback notes:
+
+- Revert App router/repository/schema additions if App install or binding selection semantics change before the reconciler batch.
+- Existing database table shape already contains `app_instances` and `bindings`; no migration shape change is expected.
+
+Open questions:
+
+- Exact explicit App install binding-selection request shape remains deferred.
+- Whether App install should create additional binding-level reconciliation requests remains deferred until the reconciler shell.
+- Route canonical URL behavior when platform root domains are missing remains deferred to reconciler/platform setup semantics.
+- Real binding Secret materialization and Service app-scoped provisioning handler boundaries remain deferred.
+
+---
+
+## Previous Plan: API 0.0.1 Service Install Implementation
+
+Goal:
+
+- Implement the first installed-resource mutation for API `0.0.1`: `POST /services` installs a Service instance from a validated catalog entry, persists desired state, creates a reconciliation request in the same transaction, and exposes read snapshots under `/services`.
+
+Non-goals:
+
+- Do not implement App install or binding creation in this batch.
+- Do not implement lifecycle actions beyond install/read.
+- Do not implement real Kubernetes, Helm, or provisioning runtime behavior.
+- Do not add canonical repo catalog entries.
+- Do not make catalog endpoints own install mutation.
+
+Current understanding:
+
+- Service install mutation is accepted as `POST /services` with `catalogRef`, optional `instanceName`, and optional `config`.
+- Installed Services are internal `ServiceInstance` records exposed under `/services` by public slug.
+- Default instance name equals the catalog manifest `metadata.name`.
+- Installed records store catalog kind/name/version/source id/source path and manifest digest.
+- Mutating API calls must write desired state and a reconciliation request in one transaction, returning the accepted mutation envelope.
+- Runtime reconciliation may remain pending until the reconciler/runtime batch.
+
+Files likely to change:
+
+- `PLANS.md`
+- `src/nephos_api/catalog.py`
+- `src/nephos_api/repositories.py`
+- `src/nephos_api/schemas.py`
+- `src/nephos_api/routers/services.py`
+- `src/nephos_api/main.py`
+- `tests/`
+
+Proposed steps:
+
+1. Expose a catalog resolver that returns validated entry metadata needed by install mutations.
+2. Add Service install request models with `catalogRef`, `instanceName`, and `config`.
+3. Add repository methods to create and read Service instance snapshots.
+4. Validate instance slugs with accepted machine identifier rules and reject collisions.
+5. Persist catalog identity, source id, source path snapshot, manifest digest, lifecycle, generation, and config JSON.
+6. Create a persisted reconciliation request in the same transaction as the Service instance row.
+7. Add read endpoints for `/services` and `/services/{serviceInstance}`.
+8. Register the service router and add tests using temporary catalog roots.
+9. Run `uv run pytest -m "not k3s"` and `uv run ruff check .`.
+
+Risks:
+
+- Returning raw database rows instead of domain snapshots.
+- Accidentally waiting for or faking Kubernetes convergence in the install response.
+- Overbuilding App/binding behavior before Service install is proven.
+- Losing catalog source-path/digest snapshot needed for future debugging and install provenance.
+
+Validation commands:
+
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+
+Rollback notes:
+
+- Revert Service router/repository/schema additions if install payload or snapshot shape changes before App install.
+- Existing migration table shape is already accepted and should not need rollback for this batch.
+
+Open questions:
+
+- App install binding selection shape remains for the next batch.
+- Real Service runtime handler and Helm execution mechanics remain deferred.
+- PostgreSQL app-scoped provisioning handler boundary remains deferred.
+
+---
+
+## Previous Plan: API 0.0.1 Catalog Loader Implementation
+
+Goal:
+
+- Implement read-only catalog loading for API `0.0.1` using local filesystem manifests, typed Pydantic validation models, source ids, manifest digests, normalized catalog summaries, and duplicate-source error handling.
+
+Non-goals:
+
+- Do not promote draft manifests into canonical repo `catalog/` entries in this batch.
+- Do not add JSON Schema files under `schemas/`.
+- Do not implement App or Service install mutations yet.
+- Do not implement Kubernetes, Helm, or provisioning runtime behavior.
+- Do not make catalog endpoints own install mutation.
+
+Current understanding:
+
+- Catalog loading follows the accepted API/database boundary: catalog entries are available package definitions, while installed Apps and Services live in desired state.
+- API `0.0.1` reads and validates local filesystem catalog manifests on demand.
+- Source ids are `default` for the repo-shipped `catalog/` root and `local-1`, `local-2`, `local-3` for configured local roots.
+- Duplicate catalog entries with the same kind/name across roots are ambiguous unless the caller selects a source.
+- Catalog responses should return normalized summaries, not raw manifest blobs by default.
+- Tests should use fixtures or temporary catalog roots, not canonical examples.
+
+Files likely to change:
+
+- `PLANS.md`
+- `src/nephos_api/config.py`
+- `src/nephos_api/catalog.py`
+- `src/nephos_api/routers/catalog.py`
+- `src/nephos_api/main.py`
+- `tests/`
+
+Proposed steps:
+
+1. Add typed Pydantic catalog manifest models for accepted App and Service manifest fields needed by API `0.0.1` summaries.
+2. Add catalog source root discovery from repo default plus `NEPHOS_API_CATALOG_ROOTS` configured local paths.
+3. Implement on-demand manifest loading from accepted layout `catalog/apps/<slug>/app.yaml` and `catalog/services/<slug>/service.yaml`.
+4. Validate directory slug equals `metadata.name` and reject unknown manifest fields through Pydantic models.
+5. Compute SHA-256 manifest digests from file bytes.
+6. Normalize App catalog summaries with `requires` and `routes`.
+7. Normalize Service catalog summaries with `provides` and binding output targets.
+8. Implement duplicate-source ambiguity and missing source errors with Nephos error shape.
+9. Add read-only endpoints for `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}`.
+10. Add tests using temporary local catalog roots for list, detail, source selection, duplicate ambiguity, unknown source, invalid manifests, and missing entries.
+11. Run `uv run pytest -m "not k3s"` and `uv run ruff check .`.
+
+Risks:
+
+- Accidentally freezing draft manifest sketches as canonical examples.
+- Over-validating fields whose exact runtime shape is still deferred.
+- Returning raw manifest content and accidentally exposing schema details as product API.
+- Silently overriding duplicate catalog entries instead of reporting ambiguity.
+
+Validation commands:
+
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+
+Rollback notes:
+
+- Revert catalog loader files and endpoint registration if manifest validation direction changes before App/Service install.
+- Test fixture roots can be deleted without touching project state.
+
+Open questions:
+
+- Future promotion path from draft manifests to canonical repo-shipped `catalog/` entries.
+- Raw Kubernetes manifest fallback field shape remains deferred.
+- Helm execution mechanics remain deferred until runtime reconciliation.
+
+---
+
+## Previous Plan: API 0.0.1 Backend Bootstrap Implementation
+
+Goal:
+
+- Implement the first Nephos API `0.0.1` backend slice from accepted ADRs: package scaffold, SQLite migration/database layer, backend-local commands, API skeleton, and the smallest desired-state mutation path.
+
+Non-goals:
+
+- Do not implement `nephos-cli` behavior in this repository.
+- Do not install, start, stop, reset, or destroy K3s from `nephos-api`.
+- Do not implement real Helm/Kubernetes runtime reconciliation in this batch.
+- Do not promote draft manifests into canonical `catalog/`, `examples/`, or `schemas/` without Fer approval.
+- Do not add new architecture decisions unless implementation reveals a documented blocker.
+
+Current understanding:
+
+- The accepted implementation order is migration/database layer, API skeleton, catalog loader, then reconciler.
+- This repo currently has architecture/docs but no Python backend scaffold.
+- `src/nephos_api/` is the accepted package layout.
+- `nephos_api.main:app` is the accepted FastAPI entrypoint.
+- `nephos-api` is the accepted backend-local command name.
+- SQLite is the canonical desired-state database for Phase 1.
+- `.nephos/state/nephos.db` is the default database path when `NEPHOS_API_DB_PATH` is unset.
+- Mutating API calls must write desired state and create a persisted reconciliation request in one transaction.
+- A platform-domain mutation slice is small enough to prove the API/database/reconciliation-request contract before catalog and runtime complexity.
+
+Files likely to change:
+
+- `PLANS.md`
+- `pyproject.toml`
+- `src/nephos_api/`
+- `migrations/0000_initial.sql`
+- `tests/`
+
+Proposed steps:
+
+1. Scaffold the Python backend package, FastAPI app entrypoint, and `nephos-api` Typer command.
+2. Add pytest and ruff configuration with accepted markers.
+3. Implement environment bootstrap configuration for `NEPHOS_API_DB_PATH`, `NEPHOS_API_CATALOG_ROOTS`, `NEPHOS_API_KUBECONFIG`, and `NEPHOS_API_KUBE_CONTEXT`.
+4. Implement SQLite connection setup with accepted pragmas.
+5. Add `migrations/0000_initial.sql` with accepted API `0.0.1` table families and constraints.
+6. Implement `uv run nephos-api db migrate` and `uv run nephos-api db reset --force`.
+7. Add domain helpers for timestamps, typed ids, machine identifiers, root-domain validation, and Nephos domain errors.
+8. Add a small repository layer for platform domains, status snapshots, and reconciliation requests.
+9. Add FastAPI routes for version and platform-domain list/add/set-default/remove/reconcile behavior where accepted endpoint shape is clear enough.
+10. Ensure platform-domain mutations return the accepted `{ resource, reconciliation, status? }` envelope.
+11. Add unit/API tests for migrations, reset behavior, validation, mutation envelopes, and transactional reconciliation request creation.
+12. Run `uv run pytest -m "not k3s"` and `uv run ruff check .`.
+
+Risks:
+
+- Accidentally turning implementation details into public CLI behavior.
+- Accidentally bypassing persisted reconciliation requests in API handlers.
+- Over-deciding exact runtime/Helm/provisioning mechanics before the runtime batch.
+- Accidentally treating draft manifests as canonical validation inputs.
+- Choosing unresolved platform-domain endpoint details that should remain deferred.
+
+Validation commands:
+
+- `uv run nephos-api db migrate`
+- `uv run nephos-api db reset --force`
+- `uv run pytest -m "not k3s"`
+- `uv run ruff check .`
+- `uv run nephos-api serve --help`
+
+Rollback notes:
+
+- Revert this implementation batch if the package/database command boundary changes.
+- Remove `.nephos/` local state if reset leaves local development artifacts.
+
+Open questions:
+
+- Helm execution mechanics before real runtime reconciliation.
+- PostgreSQL app-scoped provisioning handler boundary before real reference-flow runtime implementation.
+- Exact K3s integration-test namespace naming and stricter cluster safety checks.
+- Future catalog promotion from draft manifests to canonical repo-shipped entries.
+
+---
+
+## Previous Plan: Architecture Context Completion
 
 Goal:
 
