@@ -20,6 +20,7 @@ semantics above raw Kubernetes objects.
 - [QuickStart](#quickstart)
 - [Why Nephos](#why-nephos)
 - [How It Works](#how-it-works)
+- [Advanced: Why Reconciliation Exists](#advanced-why-reconciliation-exists)
 - [What 0.0.1 Gives You](#what-001-gives-you)
 - [Runtime Proof](#runtime-proof)
 - [Maintainer Docs](#maintainer-docs)
@@ -96,6 +97,40 @@ flowchart TD
 
 Nephos targets the Kubernetes context you select. The goal is not to expose raw
 Kubernetes as the user experience; Kubernetes remains the runtime substrate.
+
+## Advanced: Why Reconciliation Exists
+
+When you ask Nephos to install or change something, the first job is to record
+what you want. The reconciler is the part that turns that saved intent into
+running infrastructure.
+
+```mermaid
+flowchart TD
+  request["You request a change"]
+  intent["Nephos records desired state"]
+  reconcile["Reconciler works toward that state"]
+  runtime["Kubernetes runtime changes"]
+  status["Nephos reports current status"]
+
+  request --> intent
+  intent --> reconcile
+  reconcile --> runtime
+  runtime --> status
+  status --> reconcile
+```
+
+That separation matters because real infrastructure is not instant:
+
+- a cluster can be slow, busy, or temporarily unavailable
+- an App may need a Service, a binding Secret, and an Ingress before it is
+  usable
+- stopping an App should preserve data instead of deleting everything
+- destroying something should be explicit and traceable
+- Nephos should remember what you wanted even if the runtime is not ready yet
+
+For the user, reconciliation is what makes Nephos a control plane instead of a
+command wrapper. You describe the platform state you want; Nephos keeps working
+toward it, records progress, and exposes status back through the API.
 
 ## What 0.0.1 Gives You
 
