@@ -344,7 +344,7 @@ def _resolve_binding_providers(
         eligible = [
             service_row
             for service_row in capable
-            if service_row["delete_requested_at"] is None
+            if _binding_provider_is_available(service_row)
         ]
         selection = selections.get(alias)
         if selection is not None:
@@ -393,6 +393,19 @@ def _resolve_binding_providers(
                         "serviceInstance": selection.serviceInstance,
                     },
                 )
+            if selected["lifecycle"] != "running":
+                raise NephosError(
+                    status_code=409,
+                    code="binding_provider_unavailable",
+                    message="Selected binding provider is not available.",
+                    details={
+                        "alias": alias,
+                        "capability": requirement["capability"],
+                        "reason": "service_not_running",
+                        "lifecycle": selected["lifecycle"],
+                        "serviceInstance": selection.serviceInstance,
+                    },
+                )
             providers[alias] = selected
             continue
         if not eligible:
@@ -419,6 +432,13 @@ def _resolve_binding_providers(
             )
         providers[alias] = eligible[0]
     return providers
+
+
+def _binding_provider_is_available(service_row: dict[str, object]) -> bool:
+    return (
+        service_row["delete_requested_at"] is None
+        and service_row["lifecycle"] == "running"
+    )
 
 
 def _capability_provider_rows(

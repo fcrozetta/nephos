@@ -185,6 +185,75 @@ def test_install_app_returns_unavailable_when_no_eligible_binding_provider(
     }
 
 
+def test_install_app_does_not_auto_bind_removed_service_provider(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    ).status_code == 202
+    removed = client.post("/services/postgres/actions/remove", json={})
+
+    response = client.post(
+        "/apps",
+        json={"catalogRef": {"kind": "App", "name": "paperless"}},
+    )
+
+    assert removed.status_code == 202
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "binding_provider_unavailable",
+            "message": "No eligible Service provider exposes the required capability.",
+            "details": {
+                "alias": "database",
+                "capability": "postgres",
+                "eligibleProviders": [],
+            },
+        }
+    }
+
+
+def test_install_app_rejects_removed_binding_provider_selection(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    ).status_code == 202
+    removed = client.post("/services/postgres/actions/remove", json={})
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {
+                    "serviceInstance": "postgres",
+                }
+            },
+        },
+    )
+
+    assert removed.status_code == 202
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "binding_provider_unavailable",
+            "message": "Selected binding provider is not available.",
+            "details": {
+                "alias": "database",
+                "capability": "postgres",
+                "reason": "service_not_running",
+                "lifecycle": "removed",
+                "serviceInstance": "postgres",
+            },
+        }
+    }
+
+
 def test_install_app_rejects_pending_destroy_binding_provider_selection(
     tmp_path: Path,
 ) -> None:

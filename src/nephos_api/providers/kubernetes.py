@@ -197,6 +197,8 @@ def _postgres_service(
     name = f"{spec.runtime_name}-postgresql"
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
+    storage_size = str(spec.values.get("storageSize", "1Gi"))
+    storage_class_name = spec.values.get("storageClassName")
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -282,9 +284,25 @@ def _postgres_service(
                             ],
                         }
                     ],
-                    "volumes": [{"name": "data", "emptyDir": {}}],
                 },
             },
+            "volumeClaimTemplates": [
+                {
+                    "metadata": {
+                        "name": "data",
+                        "labels": labels,
+                    },
+                    "spec": {
+                        "accessModes": ["ReadWriteOnce"],
+                        "resources": {"requests": {"storage": storage_size}},
+                        **(
+                            {"storageClassName": str(storage_class_name)}
+                            if storage_class_name is not None
+                            else {}
+                        ),
+                    },
+                }
+            ],
         },
         opts=opts,
     )
