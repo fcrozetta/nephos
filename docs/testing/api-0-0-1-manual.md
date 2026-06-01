@@ -33,6 +33,25 @@ uv run nephos-api init
 uv run nephos-api serve --port 8765
 ```
 
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User
+  participant Init as nephos-api init
+  participant DB as SQLite
+  participant Serve as nephos-api serve
+  participant API as FastAPI
+  participant Worker as Reconciler worker
+
+  User->>Init: uv run nephos-api init
+  Init->>DB: migrate schema
+  Init->>DB: ensure internal domain
+  User->>Serve: uv run nephos-api serve --port 8765
+  Serve->>DB: apply pending migrations
+  Serve->>API: start HTTP API
+  Serve->>Worker: start reconciliation loop
+```
+
 `init` loads `.env`, applies database migrations, creates local Nephos API
 state, and ensures one default internal root domain. If no domain is passed,
 the fallback internal domain is `nephos.local`.
@@ -51,6 +70,24 @@ controller is still required.
 Nephos sets `ingressClassName` automatically when the selected cluster exposes
 exactly one `IngressClass` or one default `IngressClass`. If the cluster has
 multiple classes and no default, set `NEPHOS_API_INGRESS_CLASS` in `.env`.
+
+```mermaid
+flowchart LR
+  browser["Browser"]
+  dns["Local resolver\n*.localhost -> loopback"]
+  ingress["Ingress controller\nselected cluster"]
+  rule["Nephos-generated Ingress\nhost rule + ingressClassName"]
+  service["App Service\napp-<slug>"]
+
+  browser -->|"http://hello-world.nephos.localhost"| dns
+  dns --> ingress
+  ingress --> rule
+  rule --> service
+```
+
+> [!IMPORTANT]
+> `nephos.localhost` solves only local hostname resolution. The selected
+> Kubernetes cluster still needs a reachable ingress controller.
 
 To choose a different internal domain:
 
@@ -91,6 +128,29 @@ What it does:
 - verifies stop/start lifecycle
 - destroys the reference App and Service
 - deletes only Nephos-owned namespaces
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant CLI as nephos-api dev smoke
+  participant API as Nephos API
+  participant DB as SQLite
+  participant Worker as Reconciler
+  participant Providers as Python providers
+  participant Kube as Kubernetes
+
+  CLI->>API: add/reuse platform domain
+  CLI->>API: POST /services PostgreSQL
+  API->>DB: desired Service + reconciliation request
+  Worker->>Providers: deploy PostgreSQL provider runtime
+  Providers->>Kube: create Service namespace/runtime
+  CLI->>API: POST /apps reference web
+  API->>DB: desired App + binding + request
+  Worker->>Providers: deploy App runtime
+  Worker->>Kube: materialize binding Secret and Ingress
+  CLI->>API: stop/start/destroy lifecycle checks
+  Worker->>Kube: converge and clean up owned namespaces
+```
 
 It does not require a local chart server, a manually prepared catalog root, or
 manual Helm commands.
