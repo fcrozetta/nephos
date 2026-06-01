@@ -58,14 +58,14 @@ class CapabilityRequirement(BaseModel):
 class RouteTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    port: str
+    port: str | int
 
 
 class AppRoute(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    visibility: str
+    visibility: Literal["local"]
     target: RouteTarget
 
 

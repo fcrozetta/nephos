@@ -66,6 +66,42 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
     ]
 
 
+def test_catalog_loader_preserves_numeric_route_target_port(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  routes:
+    - name: web
+      visibility: local
+      target:
+        port: 8080
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    assert loader.list_apps()[0]["routes"] == [
+        {
+            "name": "web",
+            "visibility": "local",
+            "target": {"port": 8080},
+        }
+    ]
+
+
 def test_catalog_loader_uses_local_source_ids(tmp_path: Path) -> None:
     default_root = tmp_path / "default"
     local_root = tmp_path / "local"
@@ -160,6 +196,37 @@ spec:
     loader = CatalogLoader((tmp_path / "default",))
 
     with pytest.raises(CatalogValidationError, match="invalid route name"):
+        loader.list_apps()
+
+
+def test_catalog_loader_rejects_unsupported_route_visibility(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  routes:
+    - name: web
+      visibility: public
+      target:
+        port: http
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="visibility"):
         loader.list_apps()
 
 
