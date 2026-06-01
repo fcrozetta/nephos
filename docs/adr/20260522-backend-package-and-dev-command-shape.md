@@ -33,6 +33,7 @@ nephos_api.main:app
 Use these accepted backend-local development commands:
 
 ```bash
+uv run nephos-api init
 uv run nephos-api db migrate
 uv run nephos-api db reset --force
 uv run nephos-api serve
@@ -81,7 +82,7 @@ Pros:
 
 - Clear that the command belongs to the backend/API repository.
 - Avoids collision with the user-facing `nephos` command.
-- Gives migration, reset, and serve flows one stable local command surface.
+- Gives init, migration, reset, and serve flows one stable local command surface.
 
 Cons:
 
@@ -117,6 +118,19 @@ Implementation scaffolding in this repository should create `src/nephos_api/`.
 Backend packaging should expose the `nephos-api` console command.
 
 The FastAPI app should be importable as `nephos_api.main:app`.
+
+Local backend bootstrap should be implemented behind `uv run nephos-api init`.
+
+`init` should apply pending migrations and create the local desired-state
+database, then ensure one default internal root domain. If no domain is passed,
+the default is `nephos.local`.
+
+```bash
+uv run nephos-api init --internal-domain <dns-suffix>
+```
+
+It should not install Apps, install Services, mutate Kubernetes, or create
+runtime reconciliation requests.
 
 Local migration and reset behavior should be implemented behind `uv run nephos-api db migrate` and `uv run nephos-api db reset --force`.
 

@@ -4,7 +4,7 @@ Nephos is a platform control plane for composable self-hosted infrastructure.
 
 It provides a unified platform experience for installing, managing, wiring, stopping, starting, and observing self-hosted Apps and Services.
 
-Nephos is local-first and intended to run on user-owned infrastructure, starting with a K3s-based runtime.
+Nephos is local-first and intended to run on user-owned Kubernetes infrastructure selected through kubeconfig/context.
 
 ## Core Thesis
 

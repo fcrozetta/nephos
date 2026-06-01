@@ -44,6 +44,20 @@ Accepted App install shape:
 }
 ```
 
+When explicit provider selection is needed, `bindings` is keyed by the App
+requirement alias after defaulting. Each entry selects an installed Service
+instance slug:
+
+```json
+{
+  "bindings": {
+    "database": {
+      "serviceInstance": "postgres-main"
+    }
+  }
+}
+```
+
 Accepted Service install shape:
 
 ```json
@@ -63,6 +77,26 @@ Accepted Service install shape:
 `catalogRef.source` uses catalog source ids such as `default` or `local-1`.
 
 `instanceName`, `config`, and `bindings` are optional where the operation can use accepted defaults.
+
+If a required App capability has exactly one eligible installed Service provider,
+Nephos may auto-bind it. If multiple eligible providers exist, the caller must
+select the provider through `bindings.<alias>.serviceInstance`.
+
+If no eligible installed Service provider exists for a required App capability,
+use HTTP `409 Conflict` with `binding_provider_unavailable`.
+
+Unknown binding aliases use HTTP `400 Bad Request` with
+`binding_requirement_unknown`.
+
+A selected Service instance slug that does not exist uses HTTP `404 Not Found`
+with `binding_provider_not_found`.
+
+A selected Service instance that does not expose the required capability uses
+HTTP `409 Conflict` with `binding_provider_ineligible`.
+
+A selected Service instance that exposes the required capability but already has
+pending destroy intent uses HTTP `409 Conflict` with
+`binding_provider_unavailable`.
 
 Lifecycle action bodies use one common shape:
 

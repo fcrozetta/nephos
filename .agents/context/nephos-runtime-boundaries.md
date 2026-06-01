@@ -69,15 +69,89 @@ Nephos does not use Kubernetes `ownerReferences` to represent App-Service bindin
 
 Nephos desired state in the API/database is the source of truth.
 
+Pulumi provider state, Helm release state, Kubernetes runtime state, and
+external provider state are observed execution state.
+
+They must not replace Nephos desired state, lifecycle state, relationship
+metadata, dependency impact, or binding truth.
+
+The accepted runtime-provider direction is:
+
+```text
+Nephos API/database desired state
+-> persisted reconciliation request
+-> reconciler
+-> internal Python provider package
+-> Pulumi provider labor
+-> Kubernetes/external runtime state
+```
+
+API handlers and CLI clients do not call Pulumi directly.
+
+API 0.0.1 App and Service provider packages are Python-only.
+
+Additional provider implementation languages are deferred.
+
+API 0.0.1 runtime deployment providers live under
+`src/nephos_api/providers/`.
+
+The default runtime provider uses Pulumi Automation API with a local file
+backend at `.nephos/pulumi/state` and workspaces under
+`.nephos/pulumi/workspaces`.
+
+Pulumi stack names use accepted runtime names: `app-<slug>` and `svc-<slug>`.
+
+The Pulumi CLI is an execution prerequisite for runtime provider convergence.
+Missing CLI is reported as `pulumi_cli_missing`.
+
+The Pulumi local file backend requires one of:
+
+```text
+PULUMI_CONFIG_PASSPHRASE
+PULUMI_CONFIG_PASSPHRASE_FILE
+```
+
+Missing passphrase configuration is reported as `pulumi_passphrase_missing`.
+
+Direct Helm is secondary for Services.
+
+Service runtime behavior must flow through Python provider actions because
+Services need lifecycle, app-scoped provisioning, deprovisioning, status, and
+future maintenance behavior beyond generated config files.
+
+Helm may still be used under a Service provider as packaging/runtime plumbing.
+
 ## Ingress Model
 
-Traefik is the Phase 1 default ingress controller because K3s includes it by default.
+Traefik may be the Phase 1 default ingress controller, but Nephos does not
+assume the selected Kubernetes cluster is K3s.
+
+Traefik does not provide local DNS resolution. It routes HTTP after a hostname
+already resolves to the selected cluster ingress endpoint.
 
 Nephos owns route and visibility intent.
 
 Kubernetes owns concrete Ingress resources.
 
 Do not expose raw Kubernetes Ingress configuration as the primary Nephos UX.
+
+Generated Kubernetes Ingress resources set `ingressClassName` from
+`NEPHOS_API_INGRESS_CLASS`, or auto-detect a single/default cluster
+`IngressClass`.
+
+For API 0.0.1, generated App Ingress resources route to the App runtime release
+Service name:
+
+```text
+app-<app-instance>
+```
+
+The App route `target.port` supplies the backend Service port name or number.
+
+This is an internal runtime convention, not an App manifest field.
+
+API 0.0.1 reference charts must expose a Service with that release name or be
+configured by Nephos-generated Helm values to do so.
 
 Phase 1 implements `local` visibility.
 
@@ -119,8 +193,8 @@ Semantic shape:
 
 ```yaml
 rootDomains:
-  - name: local
-    domain: nephos.local
+  - name: internal
+    domain: nephos.localhost
     default: true
   - name: cloudflare
     domain: nephos.fcrozetta.app
@@ -130,7 +204,8 @@ rootDomains:
 
 `domain` is a DNS suffix.
 
-Store only suffixes such as `nephos.local`, not URLs, paths, wildcards, schemes, or ports.
+Store only suffixes such as `nephos.local` or `nephos.localhost`, not URLs,
+paths, wildcards, schemes, or ports.
 
 Default route host pattern:
 
@@ -147,8 +222,10 @@ Non-default route host pattern:
 Example:
 
 - `paperless.nephos.local`
+- `paperless.nephos.localhost`
 - `paperless.nephos.fcrozetta.app`
 - `api.paperless.nephos.local`
+- `api.paperless.nephos.localhost`
 - `api.paperless.nephos.fcrozetta.app`
 
 Status should identify the canonical URL and may list aliases.
@@ -192,7 +269,17 @@ Nephos setup must create the initial platform configuration before Apps are inst
 
 That setup includes at least one ingress root domain and exactly one default/canonical root domain.
 
-The setup UX and command implementation belong in the separate `nephos-cli` repository after Nephos API `0.0.1` is implemented.
+For API 0.0.1 backend-local development, `uv run nephos-api init` creates the
+initial internal root domain. If no domain is passed, the default is
+`nephos.local` with platform-domain name `internal`.
+
+`NEPHOS_API_INTERNAL_DOMAIN` may supply the initial internal root domain from
+`.env` or the process environment.
+
+For local browser testing without `/etc/hosts`, use a root domain that resolves
+without local resolver edits, such as `nephos.localhost`.
+
+The later user-facing setup UX belongs in the separate `nephos-cli` repository.
 
 The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state.
 

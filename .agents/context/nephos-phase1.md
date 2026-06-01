@@ -4,7 +4,7 @@
 
 Phase 1 is local-first and single-owner.
 
-Phase 1 targets single-node K3s.
+Phase 1 targets a selected single-node Kubernetes cluster.
 
 Backend/control plane:
 
@@ -27,9 +27,9 @@ Backend/control plane:
 - `pytest` backend tests
 - `ruff` backend linting/formatting checks
 - mocks/fakes for unit tests
-- real K3s for Kubernetes integration tests
-- K3s integration tests require `NEPHOS_API_RUN_K3S_TESTS=1`
-- default tests and default CI exclude K3s integration
+- real selected Kubernetes cluster for Kubernetes integration tests
+- Kubernetes integration tests require `NEPHOS_API_RUN_KUBERNETES_TESTS=1`
+- default tests and default CI exclude Kubernetes runtime integration
 
 CLI:
 
@@ -43,12 +43,12 @@ CLI:
 
 Runtime:
 
-- K3s default real backend
-- single-node K3s target
+- selected Kubernetes context as the real backend
+- single-node Kubernetes target
 - Kubernetes runtime substrate
 - minimal cluster lifecycle support
-- cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now
-- `nephos-api` reconciles into Kubernetes but must not install, start, stop, reset, or destroy K3s
+- cluster setup and lifecycle are user-managed or `nephos-cli`-managed for now
+- `nephos-api` reconciles into Kubernetes but must not install, start, stop, reset, or destroy the selected cluster
 - no CRD-first model
 - no GitOps source-of-truth model
 - one namespace per App instance
@@ -74,7 +74,9 @@ Catalog and packaging:
 - name collisions fail and require explicit input
 - generated Kubernetes names must fit resource limits after prefixes are added
 - directory-per-entry local catalog layout with `app.yaml` and `service.yaml`
-- Helm-primary runtime deployment underneath manifests
+- Helm chart runtime packaging underneath manifests
+- internal Python Pulumi providers as the forward execution boundary
+- direct Helm is secondary for Services
 - raw Kubernetes manifest fallback
 - raw Kubernetes manifest fallback shape deferred until first needed
 - local filesystem catalog from day one
@@ -129,10 +131,12 @@ Lifecycle:
 
 Ingress and secrets:
 
-- Traefik default ingress controller
+- Traefik may be the default ingress controller
+- Traefik does not provide local DNS resolution
 - local visibility mode
 - Nephos-owned route intent
 - Kubernetes-owned Ingress resources
+- generated Ingress resources set `ingressClassName` from env override or single/default cluster `IngressClass`
 - multiple configured ingress root domains
 - one default/canonical ingress root domain
 - at least one root domain for generated route hosts
@@ -145,8 +149,10 @@ Ingress and secrets:
 - non-default route host pattern `<route>.<app-instance>.<root-domain>`
 - App status shows canonical URL plus aliases
 - setup creates initial platform configuration before Apps are installed
-- setup UX and command implementation deferred to `nephos-cli` after Nephos API `0.0.1`
-- backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state
+- backend-local `uv run nephos-api init` creates the initial internal root domain
+- default internal root domain fallback is `nephos.local`
+- `NEPHOS_API_INTERNAL_DOMAIN` can provide a no-hosts local suffix such as `nephos.localhost`
+- later user-facing setup UX is deferred to `nephos-cli`
 - path-based App routing out of scope
 - HTTP-only Nephos-managed ingress
 - no Service admin routes through Nephos ingress
@@ -232,9 +238,9 @@ Reference scenario:
 - App install behavior when setup is missing
 - binding Secret rotation behavior
 - backup guarantees
-- exact generated K3s test namespace name format
-- stricter K3s test allowed-context/server safety checks
-- future K3s CI job shape, if K3s integration is added to CI
+- exact generated Kubernetes test namespace name format
+- stricter Kubernetes test allowed-context/server safety checks
+- future Kubernetes runtime CI job shape, if Kubernetes integration is added to CI
 - exact `nephos-cli` cluster setup/reset workflow
 - local CLI backend configuration workflow
 - packaging/distribution

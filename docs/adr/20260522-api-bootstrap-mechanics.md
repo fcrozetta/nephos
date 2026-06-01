@@ -24,7 +24,15 @@ These mechanics must stay backend-local to `nephos-api` and must not become `nep
 
 Use environment variables as the API 0.0.1 backend bootstrap configuration source.
 
-Do not add a backend local config file for API 0.0.1.
+Do not add a structured backend local config file for API 0.0.1.
+
+For local development and manual testing, `nephos-api` may read a `.env` file
+from the backend process working directory and use it only to populate missing
+process environment variables. Real environment variables take precedence over
+`.env` values.
+
+The `.env` file is an environment injection convenience, not a Nephos desired
+state source, not platform configuration, and not a product config file.
 
 Do not store backend bootstrap configuration in the Nephos desired-state database.
 
@@ -34,6 +42,11 @@ Accepted bootstrap environment variables:
 - `NEPHOS_API_CATALOG_ROOTS`
 - `NEPHOS_API_KUBECONFIG`
 - `NEPHOS_API_KUBE_CONTEXT`
+- `NEPHOS_API_INTERNAL_DOMAIN`
+- `NEPHOS_API_INGRESS_CLASS`
+- `NEPHOS_API_RUN_KUBERNETES_TESTS`
+- `PULUMI_CONFIG_PASSPHRASE`
+- `PULUMI_CONFIG_PASSPHRASE_FILE`
 
 Use `NEPHOS_API_DB_PATH` for the SQLite database path.
 
@@ -52,6 +65,28 @@ migrations/
 ```
 
 `uv run nephos-api db migrate` applies pending `*.sql` files in lexical filename order.
+
+`uv run nephos-api init` is the expected user-facing backend bootstrap command
+for API 0.0.1 development. It loads backend bootstrap environment, applies
+pending migrations, creates the local desired-state database if needed, and
+ensures one default internal ingress root domain. If no internal domain is
+provided by `NEPHOS_API_INTERNAL_DOMAIN` or `--internal-domain`, the fallback is:
+
+```text
+nephos.local
+```
+
+The backend-local option is:
+
+```bash
+uv run nephos-api init --internal-domain <dns-suffix>
+```
+
+The initialized domain uses the internal platform-domain name `internal` and is
+stored as Nephos desired state. It must not be stored only in `.env`.
+
+`init` must not install Apps, install Services, mutate the selected Kubernetes
+cluster, or create runtime reconciliation requests.
 
 Use the migration filename stem as the `schema_migrations.version` value. Example:
 
@@ -93,7 +128,7 @@ Parse `NEPHOS_API_CATALOG_ROOTS` with the host platform path-list separator, suc
 
 Configured catalog roots are backend-local configuration for API 0.0.1, not platform desired state.
 
-Kubernetes target selection is refined by [K3s Dev Integration Mechanics](20260522-k3s-dev-integration-mechanics.md).
+Kubernetes target selection is refined by [Kubernetes Runtime Target and Local Ingress DNS](20260601-kubernetes-runtime-target-and-local-ingress-dns.md).
 
 API 0.0.1 supports optional Kubernetes target overrides:
 
@@ -102,28 +137,28 @@ NEPHOS_API_KUBECONFIG
 NEPHOS_API_KUBE_CONTEXT
 ```
 
-If unset, backend runtime and K3s integration tests use normal Kubernetes client configuration resolution.
+If unset, backend runtime and Kubernetes integration tests use normal Kubernetes client configuration resolution.
 
 Use these pytest markers:
 
 - `unit`
 - `integration`
-- `k3s`
+- `kubernetes`
 
-Tests marked `k3s` require a real K3s cluster.
+Tests marked `kubernetes` require a real selected Kubernetes cluster.
 
-K3s tests should also be marked `integration`.
+Kubernetes tests should also be marked `integration`.
 
-The default backend test command should exclude K3s tests:
+The default backend test command should exclude Kubernetes runtime tests:
 
 ```bash
-uv run pytest -m "not k3s"
+uv run pytest -m "not kubernetes"
 ```
 
-Run K3s integration tests explicitly:
+Run Kubernetes integration tests explicitly:
 
 ```bash
-uv run pytest -m k3s
+uv run pytest -m kubernetes
 ```
 
 Defer Makefile or task-runner wrappers.
@@ -182,7 +217,7 @@ Raw `uv run nephos-api ...`, `uv run pytest ...`, and `uv run ruff ...` commands
 - Good, because multiple roots can be tested early.
 - Bad, because source identifier behavior needed a separate decision.
 
-### Pytest `unit`, `integration`, and `k3s` markers
+### Pytest `unit`, `integration`, and `kubernetes` markers
 
 - Good, because Kubernetes-dependent tests are explicit.
 - Good, because fast tests stay runnable without a cluster.
@@ -207,16 +242,16 @@ Catalog loading must always include the repo `catalog/` root and may include add
 
 Catalog source identifier behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
-Backend tests must use the accepted markers and keep K3s tests out of the default fast test command.
+Backend tests must use the accepted markers and keep Kubernetes runtime tests out of the default fast test command.
 
-K3s test execution and Kubernetes target selection are refined by [K3s Dev Integration Mechanics](20260522-k3s-dev-integration-mechanics.md).
+Kubernetes runtime test execution and Kubernetes target selection are refined by [Kubernetes Runtime Target and Local Ingress DNS](20260601-kubernetes-runtime-target-and-local-ingress-dns.md).
 
 Do not add Makefile or task-runner wrapper contracts for API 0.0.1 unless a later decision changes this.
 
 ## Open Questions
 
-- exact generated K3s test namespace name format
+- exact generated Kubernetes test namespace name format
 - stricter allowed-context/server safety checks beyond opt-in and API reachability
-- future K3s CI job shape, if K3s integration is added to CI
+- future Kubernetes runtime CI job shape, if Kubernetes integration is added to CI
 - Kubernetes client fixture strategy
 - coverage expectations

@@ -60,6 +60,13 @@ Do not hide internal ids from read payloads.
 
 Do not use internal ids as the primary public path identity for installed Apps and Services.
 
+Accepted Binding read endpoints:
+
+```text
+GET /bindings
+GET /bindings/{bindingId}
+```
+
 Use structured status payloads.
 
 Accepted status payload fields:

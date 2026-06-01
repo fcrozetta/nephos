@@ -4,6 +4,14 @@
 - Date: 2026-05-17
 - Tags: manifests, schema, catalog, apps, services
 
+Amended by:
+
+- `20260529-pulumi-provider-boundary.md`
+
+The Helm runtime field convention remains useful as package identity underneath
+Nephos manifests. The forward execution boundary is internal Python Pulumi
+providers behind the reconciler. Direct Helm is secondary for Services.
+
 ## Context and Problem Statement
 
 Nephos has accepted a Kubernetes-like manifest envelope with Nephos semantics.
@@ -342,7 +350,8 @@ Accepted Phase 1 modes:
 
 The provisioning contract is typed and backend/API-owned.
 
-The concrete provisioning execution mechanism remains open.
+For API 0.0.1, provisioning execution uses internal backend-owned Python
+handlers or provider actions behind the reconciler.
 
 Use `spec.operations: []` to reserve Service operations.
 
@@ -369,7 +378,7 @@ The broader required/default behavior for Services that expose capabilities with
 
 Use `spec.runtime`.
 
-Helm-primary shape:
+Helm runtime shape:
 
 ```yaml
 spec:
@@ -423,7 +432,7 @@ Need to decide:
 - future optional binding output payload declaration syntax, if needed
 - non-PostgreSQL Secret key serialization
 - required/default behavior for Services that expose capabilities without binding outputs
-- provisioning execution mechanism
+- exact provider module layout for provisioning execution
 - Service operation contract
 - raw manifest runtime reference shape when first needed
 - validation rules beyond unknown-field rejection

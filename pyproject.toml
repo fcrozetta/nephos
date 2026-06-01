@@ -1,0 +1,49 @@
+[project]
+name = "nephos-api"
+version = "0.0.1"
+description = "Nephos backend control plane API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "kubernetes>=31,<35",
+    "pydantic>=2,<3",
+    "pulumi>=3,<4",
+    "pulumi-kubernetes>=4,<5",
+    "pyyaml>=6,<7",
+    "typer>=0.12,<1",
+    "uvicorn>=0.34,<1",
+]
+
+[project.scripts]
+nephos-api = "nephos_api.cli:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27,<1",
+    "pytest>=8,<9",
+    "ruff>=0.8,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nephos_api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast unit tests",
+    "integration: integration tests",
+    "kubernetes: tests that require an explicit real selected Kubernetes cluster",
+]
+addopts = "-m 'not kubernetes'"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
