@@ -11,9 +11,9 @@ With Nephos, Apps ask for capabilities. Services provide them. Nephos keeps the
 desired platform state, reconciles runtime resources, and preserves lifecycle
 semantics above raw Kubernetes objects.
 
-> [!NOTE]
-> Nephos is early. This repository currently contains the API 0.0.1
-> backend/control-plane slice.
+> [!WARNING]
+> Nephos is early and not production-ready. This repository currently contains
+> the API 0.0.1 backend/control-plane slice.
 
 ## Contents
 
@@ -72,7 +72,7 @@ Nephos is built around a simple model:
 ## How It Works
 
 ```mermaid
-flowchart LR
+flowchart TD
   catalog["App and Service catalogs"]
   api["Nephos API"]
   db[("SQLite desired state")]
