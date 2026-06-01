@@ -31,9 +31,17 @@ They are not product CLI commands and must not use the `nephos <command>` spelli
 Accepted backend-local commands:
 
 ```bash
+uv run nephos-api init
 uv run nephos-api db migrate
 uv run nephos-api db reset --force
 ```
+
+`uv run nephos-api init` applies pending migrations, creates the local
+desired-state database, and ensures one default internal platform domain. If no
+internal domain is passed, it uses `NEPHOS_API_INTERNAL_DOMAIN` or
+`nephos.local`.
+
+It does not install runtime workloads or create reconciliation requests.
 
 ## Bootstrap Configuration
 

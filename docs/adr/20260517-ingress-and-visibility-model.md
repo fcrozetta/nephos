@@ -10,17 +10,45 @@ Nephos needs to expose Apps and possibly some Services through routes.
 
 Ingress behavior must support local-first infrastructure while allowing public/private/tailnet modes later.
 
-K3s commonly includes Traefik, making it a practical default.
+Traefik is a practical default ingress controller, but the selected Kubernetes
+cluster is not assumed to be K3s.
 
 ## Decision
 
-Use Traefik as the Phase 1 default ingress controller because K3s includes Traefik by default.
+Use Traefik as the Phase 1 default ingress controller unless implementation
+evidence shows a lower-friction Kubernetes-compatible option.
+
+Traefik routes HTTP after a hostname reaches the cluster ingress endpoint. It
+does not provide local DNS resolution or remove `/etc/hosts` requirements for
+`*.nephos.local`.
 
 Nephos owns ingress intent.
 
 Kubernetes owns ingress resources.
 
 Nephos should generate and reconcile Kubernetes Ingress resources from Nephos route intent, but raw Ingress YAML must not become the primary Nephos UX.
+
+API 0.0.1 generated Kubernetes Ingress resources set `ingressClassName` from
+`NEPHOS_API_INGRESS_CLASS`, or auto-detect a single/default cluster
+`IngressClass`.
+
+For API 0.0.1, generated App Ingress resources use the App runtime release name
+as the Kubernetes Service backend name.
+
+The backend Service name is:
+
+```text
+app-<app-instance>
+```
+
+The App route `target.port` remains the semantic backend port name or number.
+
+This is an internal Phase 1 runtime convention. It does not add Kubernetes
+Service names to the Nephos App manifest contract.
+
+Charts used by API 0.0.1 reference flows must expose an App Service matching
+the runtime release name or be configured by Nephos-generated Helm values to do
+so.
 
 ## Visibility Modes
 
@@ -72,7 +100,7 @@ Semantic configuration shape:
 ```yaml
 rootDomains:
   - name: local
-    domain: nephos.local
+    domain: nephos.localhost
     default: true
   - name: cloudflare
     domain: nephos.fcrozetta.app
@@ -82,11 +110,13 @@ rootDomains:
 
 `domain` is a DNS suffix.
 
-Store only suffixes such as `nephos.local`, not URLs, paths, wildcards, schemes, or ports.
+Store only suffixes such as `nephos.local` or `nephos.localhost`, not URLs,
+paths, wildcards, schemes, or ports.
 
 Example root domains:
 
 - `nephos.local`
+- `nephos.localhost`
 - `nephos.fcrozetta.app`
 
 Default route host pattern:
@@ -104,8 +134,10 @@ Non-default route host pattern:
 Example:
 
 - `paperless.nephos.local`
+- `paperless.nephos.localhost`
 - `paperless.nephos.fcrozetta.app`
 - `api.paperless.nephos.local`
+- `api.paperless.nephos.localhost`
 - `api.paperless.nephos.fcrozetta.app`
 
 Status should identify the canonical URL and may list aliases.
@@ -207,7 +239,7 @@ Need to define:
 
 ## Consequences
 
-Traefik is a pragmatic default for K3s and avoids making ingress controller selection a Phase 1 product surface.
+Traefik is a pragmatic default ingress controller and avoids making ingress controller selection a Phase 1 product surface.
 
 The visibility model gives Nephos room to add public, private, and tailnet exposure later without turning Phase 1 into tunnel/DNS automation.
 

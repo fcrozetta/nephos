@@ -80,6 +80,18 @@ Accepted API path:
 /platform/config/domains
 ```
 
+Accepted API operations:
+
+```text
+GET /platform/config/domains
+POST /platform/config/domains
+POST /platform/config/domains/{name}/actions/set-default
+POST /platform/config/domains/{name}/actions/remove
+```
+
+The action endpoints follow the API 0.0.1 mutation envelope pattern and create
+reconciliation requests rather than mutating runtime ingress inline.
+
 Removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it.
 
 Removing a non-default root domain does not remove route intent or Apps.
@@ -96,7 +108,24 @@ That initial setup includes at least one ingress root domain and exactly one def
 
 The root domain may be provided by the user during setup.
 
-The setup UX and command implementation belong in the separate `nephos-cli` repository.
+For API 0.0.1 backend-local development, `uv run nephos-api init` creates the
+initial internal root domain. If no domain is provided, it defaults to
+`nephos.local` with platform-domain name `internal`.
+
+`NEPHOS_API_INTERNAL_DOMAIN` may supply that initial domain from `.env` or the
+process environment.
+
+For local browser testing without editing `/etc/hosts`, use a DNS suffix that
+already resolves to the ingress endpoint, such as `nephos.localhost`. Traefik
+or another ingress controller routes HTTP after the hostname resolves; it does
+not provide local DNS resolution for `*.nephos.local`.
+
+The selected runtime Ingress class is not a platform root-domain field.
+API 0.0.1 may set generated Kubernetes `ingressClassName` from
+`NEPHOS_API_INGRESS_CLASS` or by auto-detecting a single/default cluster
+`IngressClass`.
+
+The later user-facing setup UX belongs in the separate `nephos-cli` repository.
 
 Nephos setup command design is deferred until after Nephos API `0.0.1` is implemented.
 

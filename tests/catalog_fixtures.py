@@ -1,0 +1,77 @@
+from pathlib import Path
+
+
+def write_app(root: Path, name: str = "paperless") -> Path:
+    path = root / "apps" / name / "app.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: {name}
+  displayName: Paperless
+  description: Document management
+  version: "1.0.0"
+spec:
+  requires:
+    - capability: postgres
+      as: database
+  routes:
+    - name: web
+      visibility: local
+      target:
+        port: http
+  config:
+    options: []
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+    values:
+      mappings: []
+""".strip()
+    )
+    return path
+
+
+def write_service(
+    root: Path,
+    name: str = "postgres",
+    capability: str = "postgres",
+    version: str = "16",
+) -> Path:
+    path = root / "services" / name / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: {name}
+  displayName: PostgreSQL
+spec:
+  provides:
+    - capability: {capability}
+      as: {capability}
+      version: "{version}"
+  bindings:
+    outputs:
+      - name: connection
+        target: app-secret
+  provisioning:
+    mode: app-scoped-resource
+  operations: []
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: postgresql
+      version: "16.0.0"
+    values:
+      mappings: []
+""".strip()
+    )
+    return path

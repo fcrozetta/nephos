@@ -6,11 +6,14 @@ Nephos is a platform control plane for composable self-hosted infrastructure.
 
 It should not be modeled as a generic container manager.
 
-## D002: K3s is the default runtime backend
+## D002: Kubernetes context is the runtime target
 
-K3s is the primary runtime backend.
+API 0.0.1 targets the selected Kubernetes kubeconfig/context.
 
-Other Kubernetes backends may be supported later through cluster adapters.
+Docker Desktop, kind, kubeadm, K3s, and other compatible Kubernetes clusters
+are possible selected targets.
+
+K3s is a compatible local cluster option, not the assumed runtime type.
 
 ## D003: Kubernetes is the runtime API boundary
 
@@ -91,9 +94,16 @@ App authors should not need to understand Service internals.
 
 Service authors need to model capability exposure, provisioning behavior, and Service operations.
 
-## D013: Helm-primary runtime packaging
+## D013: Helm runtime packaging
 
-Helm charts are the primary Phase 1 runtime deployment mechanism underneath Nephos manifests.
+Helm charts are a Phase 1 runtime packaging mechanism underneath Nephos manifests.
+
+Direct Helm is secondary for Services because Services need typed provider
+actions beyond generated config files.
+
+For Services, the internal Python Pulumi provider owns lifecycle, binding,
+status, and future maintenance actions. Helm charts may be used underneath that
+provider where they give leverage.
 
 Raw Kubernetes manifests are an allowed fallback when no credible chart exists, a chart is too leaky or unstable, the workload is simple, Nephos deploys its own support components, or a curated Nephos-native deployment is clearer.
 
@@ -257,9 +267,10 @@ Do not expose opaque green/red status without explaining why.
 
 Phase 1 status includes desired lifecycle state, reconciliation state, Kubernetes object existence/readiness, binding resolution, dependency availability, route known/unknown, backup status as `unsupported`, and Service dependent impact.
 
-## D033: Phase 1 targets single-node K3s
+## D033: Phase 1 targets a selected single-node Kubernetes cluster
 
-Phase 1 targets single-node K3s as the default real runtime backend.
+Phase 1 targets a selected single-node Kubernetes cluster as the real runtime
+backend.
 
 Cluster lifecycle support is minimal in Phase 1.
 
@@ -303,7 +314,11 @@ Network policy is reserved for later design.
 
 ## D040: Traefik local ingress in Phase 1
 
-Traefik is the Phase 1 default ingress controller because K3s includes it.
+Traefik may be the Phase 1 default ingress controller, but not because Nephos
+assumes K3s.
+
+Traefik does not provide local DNS resolution. It routes HTTP after the App
+hostname already resolves to the selected cluster ingress endpoint.
 
 Nephos owns route and visibility intent.
 
@@ -344,6 +359,13 @@ The domain value is a DNS suffix.
 Reject URLs, paths, wildcards, schemes, and ports.
 
 Nephos setup creates initial platform configuration before Apps are installed, including at least one ingress root domain and exactly one default/canonical root domain.
+
+For local browser testing without `/etc/hosts`, the initial root domain should
+be a resolvable suffix such as `nephos.localhost`.
+
+Generated Kubernetes Ingress resources set `ingressClassName` from
+`NEPHOS_API_INGRESS_CLASS`, or auto-detect a single/default cluster
+`IngressClass`.
 
 Setup UX and command implementation belong in the separate `nephos-cli` repository after Nephos API `0.0.1` is implemented.
 
@@ -431,7 +453,7 @@ Use `ruff` for backend linting/formatting checks.
 
 Use mocks or fakes for unit tests.
 
-Use real K3s for Kubernetes integration tests.
+Use a real selected Kubernetes cluster for Kubernetes integration tests.
 
 ## D052: Phase 1 backend distribution is local process plus container image
 
@@ -537,13 +559,84 @@ Apps and Services remain separate because they have different roles and authors.
 
 ## D068: Runtime references remain below Nephos manifests
 
-Phase 1 remains Helm-primary underneath Nephos manifests.
+Phase 1 keeps Helm chart identity available underneath Nephos manifests.
+
+Direct Helm is secondary for Services.
 
 Helm runtime references should carry pinned chart identity such as repository, chart name, and chart version.
 
 Raw Kubernetes manifest references remain an allowed fallback.
 
 Raw Helm values and Kubernetes object specs must not become the primary Nephos manifest schema.
+
+## D068A: Pulumi is the accepted forward provider execution backend
+
+Nephos owns meaning.
+
+Pulumi performs labor.
+
+Nephos API/SQLite desired state remains canonical.
+
+Pulumi state is provider-observed execution state and must not replace Nephos
+desired state, lifecycle state, relationships, dependency impact, or binding
+truth.
+
+API handlers and CLI clients must not call Pulumi directly.
+
+Pulumi runs behind the reconciler through internal Python provider packages.
+
+API 0.0.1 App and Service provider packages are Python-only.
+
+The expected internal package direction is `nephos_api.providers`.
+
+Additional provider implementation languages are deferred.
+
+For Services, Pulumi-backed Python providers must expose typed internal actions
+beyond chart config files. Helm may be an implementation tool underneath the
+Service provider, but it is not the Service provider contract.
+
+## D068B: API 0.0.1 provider implementation defaults
+
+The API 0.0.1 provider package lives under:
+
+```text
+src/nephos_api/providers/
+```
+
+The default runtime deployment provider is `PulumiHelmProvider` behind
+`ProviderRuntimeDeployer`.
+
+Pulumi Automation API uses a local file backend by default.
+
+Default state location:
+
+```text
+.nephos/pulumi/state
+```
+
+Default workspace root:
+
+```text
+.nephos/pulumi/workspaces
+```
+
+Stack names match accepted runtime names:
+
+```text
+app-<slug>
+svc-<slug>
+```
+
+The Pulumi CLI must be available on `PATH` for runtime convergence.
+
+If it is missing, Nephos records a blocked reconciliation with reason
+`pulumi_cli_missing`.
+
+The Pulumi local file backend requires `PULUMI_CONFIG_PASSPHRASE` or
+`PULUMI_CONFIG_PASSPHRASE_FILE`.
+
+If neither is configured, Nephos records a blocked reconciliation with reason
+`pulumi_passphrase_missing`.
 
 ## D069: Binding schema remains minimal at manifest level
 
@@ -599,7 +692,7 @@ For Phase 1, `app-secret` is the only accepted binding output target.
 
 ## D075: Runtime field convention is spec.runtime
 
-Use `spec.runtime.type`, `spec.runtime.chart.repository`, `spec.runtime.chart.name`, `spec.runtime.chart.version`, and reserved `spec.runtime.values.mappings[]` for Helm-primary runtime references.
+Use `spec.runtime.type`, `spec.runtime.chart.repository`, `spec.runtime.chart.name`, `spec.runtime.chart.version`, and reserved `spec.runtime.values.mappings[]` for Helm runtime references.
 
 `values.mappings` is reserved for Nephos-owned mapping from Nephos semantics into Helm values.
 
@@ -1068,7 +1161,12 @@ Nephos setup must create initial platform configuration before Apps are installe
 
 That setup includes at least one ingress root domain and exactly one default/canonical root domain.
 
-Setup UX and command implementation belong in the separate `nephos-cli` repository after Nephos API `0.0.1` is implemented.
+For API 0.0.1 backend-local development, `uv run nephos-api init` creates the
+initial internal root domain. If no domain is passed, the default is
+`nephos.local` with platform-domain name `internal`.
+
+User-facing setup UX belongs in the separate `nephos-cli` repository after
+Nephos API `0.0.1` is implemented.
 
 Do not rely on App installation to discover or create ingress root domain configuration.
 
@@ -1485,6 +1583,12 @@ Opaque UUIDs are not the primary public path identifiers in API 0.0.1.
 Install bodies use a `catalogRef` object with `kind`, `name`, and optional `source`.
 
 App installs use `catalogRef`, optional `instanceName`, optional `config`, and optional `bindings`.
+
+Explicit App binding provider selection uses `bindings.<alias>.serviceInstance`.
+
+`alias` is the App requirement alias after defaulting.
+
+`serviceInstance` is the installed Service instance slug.
 
 Service installs use `catalogRef`, optional `instanceName`, and optional `config`.
 
@@ -2119,18 +2223,26 @@ Validate JSON payloads in Python/domain models, not through SQLite JSON function
 
 ## D218: Migration and reset commands are backend-local nephos-api commands
 
-Migration and reset commands are backend-local `nephos-api` development/ops commands.
+Initialization, migration, and reset commands are backend-local `nephos-api` development/ops commands.
 
 They are not product CLI commands.
 
 Accepted backend-local command spelling:
 
 ```bash
+uv run nephos-api init
 uv run nephos-api db migrate
 uv run nephos-api db reset --force
 ```
 
-Do not document or implement backend-local migration/reset commands as `nephos <command>`.
+`uv run nephos-api init` loads backend bootstrap environment and applies
+database migrations. It also ensures one default internal platform domain. If
+no internal domain is passed, it uses `nephos.local`.
+
+It must not install Apps, install Services, mutate the selected Kubernetes
+cluster, or create runtime reconciliation requests.
+
+Do not document or implement backend-local init/migration/reset commands as `nephos <command>`.
 
 ## D219: Backend package layout is src/nephos_api
 
@@ -2152,7 +2264,7 @@ nephos-api
 
 The user-facing `nephos` product command remains owned by the separate `nephos-cli` repository.
 
-## D221: Backend serve command is nephos-api serve
+## D221: Backend startup command is nephos-api serve
 
 The accepted local backend startup command is:
 
@@ -2179,11 +2291,16 @@ API 0.0.1 implementation order is:
 3. catalog loader
 4. reconciler
 
-## D224: API bootstrap config is env-only for 0.0.1
+## D224: API bootstrap config uses env vars, with `.env` loading for local dev
 
-API 0.0.1 backend bootstrap configuration uses environment variables only.
+API 0.0.1 backend bootstrap configuration uses environment variables.
 
-Do not add a backend local config file for API 0.0.1.
+`nephos-api` may read `.env` from the backend process working directory and
+use it only to populate missing process environment variables.
+
+Real environment variables take precedence over `.env` values.
+
+Do not add a structured backend local config file for API 0.0.1.
 
 Do not store backend bootstrap configuration in the Nephos desired-state database.
 
@@ -2191,6 +2308,13 @@ Accepted bootstrap environment variables:
 
 - `NEPHOS_API_DB_PATH`
 - `NEPHOS_API_CATALOG_ROOTS`
+- `NEPHOS_API_KUBECONFIG`
+- `NEPHOS_API_KUBE_CONTEXT`
+- `NEPHOS_API_INTERNAL_DOMAIN`
+- `NEPHOS_API_INGRESS_CLASS`
+- `NEPHOS_API_RUN_KUBERNETES_TESTS`
+- `PULUMI_CONFIG_PASSPHRASE`
+- `PULUMI_CONFIG_PASSPHRASE_FILE`
 
 ## D225: SQLite DB path uses NEPHOS_API_DB_PATH
 
@@ -2256,26 +2380,27 @@ NEPHOS_API_CATALOG_ROOTS
 
 Configured catalog roots are backend-local configuration for API 0.0.1, not platform desired state.
 
-## D229: Backend pytest markers are unit integration k3s
+## D229: Backend pytest markers are unit integration kubernetes
 
 Use these pytest markers:
 
 - `unit`
 - `integration`
-- `k3s`
+- `kubernetes`
 
-Tests marked `k3s` require a real K3s cluster and should also be marked `integration`.
+Tests marked `kubernetes` require a real selected Kubernetes cluster and should
+also be marked `integration`.
 
 Default backend test command:
 
 ```bash
-uv run pytest -m "not k3s"
+uv run pytest -m "not kubernetes"
 ```
 
-Explicit K3s integration test command:
+Explicit Kubernetes runtime integration test command:
 
 ```bash
-uv run pytest -m k3s
+uv run pytest -m kubernetes
 ```
 
 ## D230: Makefile and task-runner wrappers are deferred
@@ -2355,15 +2480,17 @@ The API 0.0.1 database columns are:
 - `catalog_source_id`
 - `catalog_source_path`
 
-## D236: Nephos API tests do not manage K3s lifecycle
+## D236: Nephos API tests do not manage cluster lifecycle
 
-`nephos-api` tests do not install, start, stop, reset, or destroy K3s.
+`nephos-api` tests do not install, start, stop, reset, or destroy the selected
+Kubernetes cluster.
 
-K3s integration tests require a pre-existing reachable K3s cluster.
+Kubernetes integration tests require a pre-existing reachable Kubernetes
+cluster selected through kubeconfig/context.
 
 ## D237: Kubernetes target selection uses standard config with env overrides
 
-Backend runtime and K3s integration tests use normal Kubernetes client configuration resolution by default.
+Backend runtime and Kubernetes integration tests use normal Kubernetes client configuration resolution by default.
 
 API 0.0.1 supports optional overrides:
 
@@ -2372,26 +2499,27 @@ API 0.0.1 supports optional overrides:
 
 If those variables are unset, the backend and tests use the standard active kubeconfig/context resolution.
 
-## D238: K3s tests require explicit opt-in and preflight
+## D238: Kubernetes runtime tests require explicit opt-in and preflight
 
-K3s integration tests require:
+Kubernetes runtime integration tests require:
 
-- `NEPHOS_API_RUN_K3S_TESTS=1`
+- `NEPHOS_API_RUN_KUBERNETES_TESTS=1`
 - Kubernetes API reachability
 
 The initial safety guard is explicit opt-in plus API reachability.
 
 Stricter allowed-context/server checks may be added later.
 
-## D239: Default CI excludes K3s integration tests
+## D239: Default CI excludes Kubernetes runtime integration tests
 
-Default CI runs unit and non-K3s tests only.
+Default CI runs unit and non-Kubernetes-runtime tests only.
 
-K3s integration tests are local/manual until a later CI decision defines a K3s job.
+Kubernetes runtime integration tests are local/manual until a later CI decision
+defines a runtime job.
 
-## D240: K3s integration tests use generated labeled namespaces
+## D240: Kubernetes runtime integration tests use generated labeled namespaces
 
-K3s integration tests use generated test namespaces.
+Kubernetes runtime integration tests use generated test namespaces.
 
 Generated test namespaces and test-owned resources must use:
 
@@ -2403,12 +2531,13 @@ Test cleanup may delete only generated test namespaces/resources that it created
 
 ## D241: Backend runtime uses the same Kubernetes target resolution as tests
 
-The runtime backend uses the same kubeconfig/context resolution as K3s integration tests.
+The runtime backend uses the same kubeconfig/context resolution as Kubernetes integration tests.
 
 `NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT` apply to both.
 
 ## D242: Cluster lifecycle remains outside nephos-api
 
-Cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now.
+Cluster setup and lifecycle are user-managed or `nephos-cli`-managed for now.
 
-`nephos-api` reconciles into Kubernetes, but it must not start K3s itself.
+`nephos-api` reconciles into Kubernetes, but it must not start the selected
+cluster itself.

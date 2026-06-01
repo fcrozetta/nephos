@@ -39,7 +39,9 @@ What exact local hostname, wildcard domain, DNS, and TLS strategy should Nephos 
 
 Accepted direction:
 
-- Traefik default for Phase 1 because K3s includes it
+- Traefik may be the Phase 1 default ingress controller
+- Traefik does not provide local DNS resolution
+- local browser testing without `/etc/hosts` needs a resolvable suffix such as `nephos.localhost`
 - Nephos owns route/visibility intent
 - Kubernetes owns Ingress resources
 - Phase 1 implements local visibility
@@ -332,9 +334,11 @@ Accepted direction:
 - attempt counters, claimed timestamps, requested-by metadata, explicit backoff columns, and richer worker lease fields are deferred unless implementation proves they are needed before API 0.0.1 is usable
 - `status_snapshots` stores one latest row per `resource_type` and `resource_id`
 - `schema_migrations` uses `version TEXT PRIMARY KEY` and `applied_at TEXT`
+- backend-local init command is `uv run nephos-api init`
+- init ensures one default internal platform domain, defaulting to `nephos.local`
 - backend-local migration command is `uv run nephos-api db migrate`
 - backend-local reset command is `uv run nephos-api db reset --force`
-- backend bootstrap config uses environment variables only for API 0.0.1
+- backend bootstrap config uses environment variables for API 0.0.1, with `.env` loading allowed for local development and manual testing
 - `NEPHOS_API_DB_PATH` sets the SQLite database path
 - default SQLite path is `.nephos/state/nephos.db`
 - migration runner applies pending `*.sql` files in lexical filename order
@@ -451,7 +455,7 @@ Accepted direction:
   - `catalog/apps/<app-slug>/app.yaml`
   - `catalog/services/<service-slug>/service.yaml`
 - separate App and Service Nephos manifest formats
-- Helm-primary runtime deployment references
+- Helm chart runtime packaging references underneath Nephos manifests
 - raw Kubernetes manifest fallback
 - App manifests use `metadata.name`, optional `metadata.displayName`, optional `metadata.description`, optional `metadata.version`, `spec.requires[]`, `spec.routes[]`, `spec.config.options[]`, and `spec.runtime`
 - `spec.requires[]` supports `capability`, optional `as`, and optional `provider`
@@ -741,20 +745,24 @@ What are the exact local development commands and conventions for Nephos?
 Accepted direction:
 
 - `uv` is the canonical backend Python workflow
+- backend-local init command is `uv run nephos-api init`
+- init ensures one default internal platform domain, defaulting to `nephos.local`
 - backend-local migration command is `uv run nephos-api db migrate`
 - backend-local reset command is `uv run nephos-api db reset --force`
 - backend-local serve command is `uv run nephos-api serve`
 - API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
-- backend bootstrap configuration uses environment variables only
-- no backend local config file for API 0.0.1
+- backend bootstrap configuration uses environment variables
+- `.env` may populate missing local process environment variables for development and manual testing
+- real environment variables override `.env`
+- no structured backend local config file for API 0.0.1
 - no DB-stored backend bootstrap config for API 0.0.1
 - Kubernetes target selection uses normal Kubernetes client configuration resolution by default
 - optional `NEPHOS_API_KUBECONFIG`
 - optional `NEPHOS_API_KUBE_CONTEXT`
 - Makefile and task-runner wrappers are deferred
 - CLI points at local backend/API during development
-- cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now
-- `nephos-api` must not install, start, stop, reset, or destroy K3s
+- cluster setup and lifecycle are user-managed or `nephos-cli`-managed for now
+- `nephos-api` must not install, start, stop, reset, or destroy the selected Kubernetes cluster
 
 Need to decide:
 
@@ -772,26 +780,26 @@ Accepted direction:
 - `pytest` for backend tests
 - `ruff` for backend linting/formatting checks
 - mocks/fakes for unit tests
-- real K3s for Kubernetes integration tests
-- pytest markers are `unit`, `integration`, and `k3s`
-- tests marked `k3s` require real K3s and should also be marked `integration`
-- K3s integration tests require a pre-existing reachable K3s cluster
-- K3s integration tests require `NEPHOS_API_RUN_K3S_TESTS=1`
-- K3s preflight verifies explicit opt-in and Kubernetes API reachability
-- default CI runs unit and non-K3s tests only
-- K3s integration tests are local/manual until a later CI decision
-- K3s integration tests use generated test namespaces
+- real Kubernetes cluster for Kubernetes integration tests
+- pytest markers are `unit`, `integration`, and `kubernetes`
+- tests marked `kubernetes` require a real selected Kubernetes cluster and should also be marked `integration`
+- Kubernetes integration tests require a pre-existing reachable Kubernetes cluster
+- Kubernetes integration tests require `NEPHOS_API_RUN_KUBERNETES_TESTS=1`
+- Kubernetes preflight verifies explicit opt-in and Kubernetes API reachability
+- default CI runs unit and non-Kubernetes-runtime tests only
+- Kubernetes integration tests are local/manual until a later CI decision
+- Kubernetes integration tests use generated test namespaces
 - generated test namespaces and test-owned resources use `app.kubernetes.io/managed-by: nephos`
 - test cleanup may delete only generated test namespaces/resources that it created and labeled
-- default backend test command is `uv run pytest -m "not k3s"`
-- explicit K3s integration test command is `uv run pytest -m k3s`
+- default backend test command is `uv run pytest -m "not kubernetes"`
+- explicit Kubernetes integration test command is `uv run pytest -m kubernetes`
 - CLI tests live in the separate CLI repository
 
 Need to decide:
 
-- exact generated K3s test namespace name format
+- exact generated Kubernetes test namespace name format
 - stricter allowed-context/server safety checks beyond opt-in and API reachability
-- future K3s CI job shape, if K3s integration is added to CI
+- future Kubernetes runtime CI job shape, if Kubernetes integration is added to CI
 - exact Kubernetes client fixture implementation
 - coverage expectations
 

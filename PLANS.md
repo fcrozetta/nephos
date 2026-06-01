@@ -18,301 +18,244 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan: Architecture Context Completion
+## Current Plan: API 0.0.1 Runtime Convergence
 
 Goal:
 
-- Complete missing Nephos architecture context and ADRs through explicit Fer-approved decisions.
+- Deliver Nephos API 0.0.1 end to end: API desired state, persisted reconciliation, and real Kubernetes runtime convergence for the accepted Phase 1 backend flow.
 
 Non-goals:
 
-- Do not invent schema shapes without approval.
-- Do not implement runtime code.
-- Do not change Nephos into a raw Kubernetes UX, generic container UI, or CLI-driven kubectl wrapper.
+- Do not implement `nephos-cli` in this repository.
+- Do not let Kubernetes, Helm, YAML files, or the CLI become the source of truth.
+- Do not let Pulumi state become the Nephos source of truth.
+- Do not add canonical schemas under `schemas/`.
+- Do not promote draft manifests into canonical `catalog/` entries until manifest validation models exist and Fer approves promotion.
+- Do not add Makefile or task-runner wrappers for API 0.0.1.
+- Do not start, stop, install, reset, or destroy the selected Kubernetes cluster from this repository.
+- Do not expose a general Service operation API or CLI UX.
+- Do not implement arbitrary catalog-defined shell commands, Helm hooks, or user scripts as provisioning semantics.
 
 Current understanding:
 
-- Nephos is the backend/control-plane repository.
-- `../nephos-cli` is the separate CLI repository and still needs configuration.
-- K3s is the default real runtime backend.
-- Kubernetes is the runtime substrate.
-- Nephos owns platform intent, desired state, lifecycle semantics, capability binding, and reconciliation.
-- Batch 1 decisions are accepted: Python/FastAPI backend, Python/Typer CLI, SQLite canonical desired-state DB, simple SQL migrations, YAML import/export, CRDs/GitOps deferred, API-owned in-process reconciler for Phase 1, official Python Kubernetes client, Web UI deferred, state backup deferred.
-- Batch 2 packaging decisions are accepted: separate App and Service Nephos manifest formats, Helm-primary runtime deployment underneath, raw Kubernetes manifests as fallback, local filesystem catalog first, optional Phase 1 Service provisioning contracts, and `Service operation` as the canonical term for typed Service management actions.
-- Batch 3 Service ownership decisions are accepted: installed concrete Services are Service instances, Services are shared by default, shared providers provision app-scoped resources in one instance by default where supported, App-requested isolation creates dedicated Service instances, dedicated instances remain first-class Services and may be explicitly shared with other Apps, bindings are the source of dependent tracking, provider defaults are supported, and destructive Service lifecycle operations with dependents require force plus impact list.
-- Batch 4 resource/auth decisions are accepted: Phase 1 has no Nephos resource policy system, replicas are 1 when running and 0 when stopped/disabled, resource profiles are reserved but not defined, CPU/memory requests and limits are not exposed as primary UX, no HA/autoscaling/affinity/quotas in Phase 1, single-owner/local-first auth model, trusted local CLI, Web UI deferred, and multi-user/friend/cloud scenarios are Phase 1 non-goals.
-- Batch 5 upgrade/backup decisions are accepted: versions are pinned, upgrades are explicit/manual, no automatic latest, Service upgrades with persistent data are risky by default, rollback is best-effort in Phase 1, Nephos owns backup intent/policy/status while Services own data-aware implementation, no backup implementation in Phase 1, stop/remove preserve data, and destroy deletes data and requires destructive confirmation when persistent data exists.
-- Batch 6 health/status decisions are accepted: Nephos status is Nephos-aware and aggregates desired state, reconciliation, Kubernetes readiness/existence, bindings, dependencies, routes, storage, and backup status; Phase 1 implements a minimal subset; removed/destroyed are lifecycle states, not health statuses; for API 0.0.1, `destroyed` is terminal history or absent after deletion rather than a normal active desired-state value; backup participates as unsupported in Phase 1; status must include reasons/evidence; Service status includes dependent impact.
-- Batch 7 Phase 1 scope decisions are accepted: single-node K3s, minimal cluster lifecycle, App/Service install/start/stop/remove/destroy, `disable` deferred, basic ingress intent, local filesystem catalog from day one with tiny repo-shipped reference entries, no service mesh, multi-component Apps communicate through normal Kubernetes Services/networking, and Paperless + PostgreSQL is the canonical reference scenario.
-- Batch 8 runtime boundary decisions are accepted: one namespace per App instance and Service instance, `nephos-system` for control-plane/runtime support components, no default-deny NetworkPolicy in Phase 1, Traefik local ingress first, manual Cloudflare Tunnel compatibility without tunnel automation, stopped Apps keep route intent, Kubernetes Secrets for Phase 1, binding credentials materialized into App namespaces, and secret values redacted by default.
-- Batch 9 catalog decisions are accepted: Phase 1 supports repo-shipped reference catalog entries and user-configured local filesystem catalog paths, user-created local entries are allowed without schema stability promise until concrete validation schema acceptance, local catalog files are trusted local-owner input, remote trust/signing/sandboxing are deferred, and minimal catalog metadata lives in App/Service manifests rather than a separate index.
-- Batch 10 development/testing/distribution decisions are accepted: backend local dev uses `uv`, backend tests use `pytest`, lint/format checks use `ruff`, unit tests use mocks/fakes, Kubernetes integration tests use real K3s, Phase 1 backend distribution is local process plus container image, full installer packaging is deferred, CLI workflow belongs to `../nephos-cli`, and Phase 1 has backend/CLI version awareness without strict compatibility blocking.
-- Batch 11 contribution/agent workflow decisions are accepted: ADRs are required for architecture-significant changes, ADR statuses have explicit meanings, agents must ask or record open questions before implementing through architectural ambiguity, canonical schemas/examples require Fer approval, temporary draft manifests are allowed only as non-canonical drafts under `.agents/drafts/manifests/`, architecture-changing work updates ADR/context/open questions in the same change, and architecture decision batches should be committed separately when feasible.
-- Batch 12 reference scenario decisions are accepted: `.agents/drafts/manifests/` is the non-canonical draft manifest workspace, Paperless plus PostgreSQL is the canonical Phase 1 reference scenario, Paperless requires only PostgreSQL in the reference scenario, the flow includes install/bind/local route/stop/start/remove/destroy, Service dependency impact is included by attempting to stop PostgreSQL while Paperless depends on it, and route examples use generated hosts such as `paperless.nephos.local` and `paperless.nephos.fcrozetta.app`.
-- Batch 13 manifest schema shape decisions are accepted: Nephos manifests are YAML, use a Kubernetes-like `apiVersion`/`kind`/`metadata`/`spec` envelope with Nephos semantics, accepted manifest kinds are `App` and `Service`, this does not imply CRDs, runtime references stay below Nephos manifests with Helm-primary pinned chart identity and raw manifest fallback, binding remains minimal at manifest level, and non-canonical draft sketches were added under `.agents/drafts/manifests/`.
-- Batch 14 manifest field convention decisions are accepted: manifest `apiVersion` is `nephos.pro/v1alpha1`, local catalogs use directory-per-entry layout with `catalog/apps/<app-slug>/app.yaml` and `catalog/services/<service-slug>/service.yaml`, catalogs contain available Apps/Services while installed instances live in Nephos desired state, App manifests use `spec.requires[]`, `spec.routes[]`, `spec.config.options[]`, and `spec.runtime`, Service manifests use `spec.provides[]`, `spec.bindings.outputs[]`, `spec.provisioning.mode`, `spec.runtime`, and `spec.operations[]`, routes do not carry full hostnames, and Nephos derives hostnames from App instance name, route name, visibility, and domain policy.
-- Batch 15 binding/provisioning decisions are accepted: Phase 1 binding output target is `app-secret`, PostgreSQL logical binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`, Service manifests declare logical outputs rather than final Secret names, Nephos chooses deterministic binding Secret names, App manifests consume bindings through symbolic aliases such as `as: database`, Phase 1 provisioning modes are `app-scoped-resource` and `none`, provisioning is a typed backend/API-owned contract, remove preserves provisioned Service-side resources, and destroy deletes them after destructive confirmation.
-- Batch 16 manifest field requirement decisions are accepted: Phase 1 installable catalog entries require `apiVersion`, `kind`, `metadata.name`, and `spec.runtime`; App `spec.requires[]`, `spec.routes[]`, and `spec.config.options[]` default to empty lists; Service `spec.provides[]` is required non-empty; Service `spec.provisioning.mode` is required as `none` or `app-scoped-resource`; PostgreSQL output fields are capability-defined without manifest `fields:` syntax in Phase 1; canonical examples remain blocked until manifest validation plus command/status shape are stable enough.
-- Batch 17 manifest validation/config decisions are accepted: PostgreSQL `app-secret` outputs use exact lowercase Secret keys `host`, `port`, `database`, `username`, `password`, and `uri`; Phase 1 App config option types are `string`, `integer`, `boolean`, and `enum`; `secret` App config option type is deferred; unknown manifest fields are rejected once canonical schemas exist; raw Kubernetes manifest fallback shape is deferred until first needed.
-- Batch 18 config option object decisions are accepted: config options use required `name` and `type`, optional `label`, `description`, `default`, and `required`; `name` is the stable machine key; `required` defaults to `false`; enum options use object values with `value` and `label`; validation bounds such as min/max/regex/length are deferred; config options do not carry Helm value paths, env vars, or Kubernetes field paths; runtime mapping happens through `spec.runtime.values.mappings[]`, whose exact shape remains open.
-- Batch 19 runtime value mapping decisions are accepted: Phase 1 mapping source kinds are `config` and `binding`; mappings use explicit `from` and `to` objects; config mappings use `from.kind: config`, `from.name`, and `to.helmValue`; binding mappings use `from.kind: binding`, `from.name`, `from.field`, and `to.helmValue`; `helmValue` is a dot path; transforms are deferred; missing sources block reconciliation with a reason; mappings live only under `spec.runtime.values.mappings[]`.
-- Batch 20 binding identity decisions are accepted: if `as` is omitted, binding alias defaults to `capability`; aliases are unique within one App manifest and installed App instance; Phase 1 `app-secret` names use `nephos-bind-<alias>` in the consuming App namespace; rebinding an alias updates the same Secret name after explicit reconciliation or confirmation; binding Secrets include relationship metadata; slug normalization was finalized in Batch 21.
-- Batch 21 naming/metadata decisions are accepted: manifest `metadata.name`, binding aliases, route names, installed instance slugs, and catalog entry slugs use strict DNS-label style machine identifiers; invalid names are rejected; default installed instance names equal catalog manifest `metadata.name`; explicit install-time instance names are allowed; name collisions fail and require explicit input; generated Kubernetes names must fit resource limits after prefixes; runtime metadata uses `app.kubernetes.io/managed-by: nephos` plus `nephos.pro/app-instance`, `nephos.pro/service-instance`, `nephos.pro/capability`, and `nephos.pro/binding-alias`; Nephos does not use Kubernetes `ownerReferences` for platform relationships.
-- Batch 22 ingress/domain decisions are accepted: Phase 1 supports multiple configured ingress root domains with one default/canonical domain and at least one root domain required for generated route hosts; Nephos generates host rules for every configured root domain; default route hostnames use `<app-instance>.<root-domain>` and non-default route hostnames use `<route>.<app-instance>.<root-domain>`; root domains are aliases for the same route intent; path-based App routing is out of scope; manual Cloudflare Tunnel remains compatible but user-managed; Nephos-managed ingress is HTTP-only; generated hostname collisions fail; Services do not expose admin routes through Nephos ingress.
-- Batch 23 ingress root domain config decisions are accepted: ingress root domains are platform desired state in the Nephos API/database, managed through Nephos API/CLI platform configuration operations, not App manifest fields; semantic shape is `rootDomains[]` with `name`, `domain`, and `default`; `domain` is a DNS suffix only and rejects URLs, paths, wildcards, schemes, and ports; operations are add/list/remove/set-default; setup creates initial platform configuration before Apps are installed, including at least one root domain and exactly one default/canonical domain; App status shows canonical URL plus aliases.
-- Batch 24 setup/CLI boundary is deferred: setup UX and command implementation belong in `nephos-cli` after Nephos API `0.0.1`; this repo should not decide command spelling yet. Accepted backend-side behavior: the backend may start with an empty database and reports platform configuration as incomplete until setup creates required desired state.
-- Batch 25 Service operation boundary is accepted: Service operations are typed backend/API-owned Service management actions; they are reserved but bounded in Phase 1; arbitrary shell commands, Helm hooks, Kubernetes jobs, and user-provided scripts are not product semantics; Phase 1 may use internal typed Service handlers for minimal accepted provisioning work; no general user-facing Service operation API or CLI UX is included.
-- Batch 26 API resource model is accepted: API 0.0.1 uses REST-ish resources, installed Apps are internal `AppInstance` records exposed publicly under `/apps`, installed Services are internal `ServiceInstance` records exposed under `/services`, bindings are first-class API/database resources, root domain resources use `/platform/config/domains`, lifecycle and status are separate, latest status is persisted with reasons/evidence, mutating API calls update desired state and create a persisted reconciliation request, and API 0.0.1 scope is limited to the Paperless plus PostgreSQL reference flow.
-- Batch 27 database desired-state model is accepted: API 0.0.1 uses SQLite with plain SQL through a small repository/data-access layer, no full ORM, explicit SQL migration files with `migrations/0000_initial.sql` as the initial schema, destructive local reset allowed before the first usable version, normalized table families for app instances/service instances/bindings/platform domains/status snapshots/reconciliation requests/schema migrations, JSON text columns for validated snapshots and flexible payloads, catalog identity/version/source/digest metadata on installed records, latest status snapshots only, DB-persisted reconciliation requests, desired-state mutation and reconciliation request in one transaction, and destroy removes active desired-state rows after successful teardown without requiring audit/history in API 0.0.1.
-- Batch 28 catalog/manifest loading is accepted: API 0.0.1 supports one repo-shipped catalog root plus optional backend-local configured filesystem roots, custom roots are not platform DB desired state yet, manifests are read/validated on demand, catalog entries are not imported into SQLite before use, directory slug must match `metadata.name`, duplicate kind/name across roots errors unless source is explicitly selected, validation starts with typed Python/Pydantic domain models, JSON Schema remains blocked, install selects catalog kind/name plus optional source rather than arbitrary path, installed records store catalog kind/name/version-if-present/source and SHA-256 manifest digest, full manifest snapshots are not stored by default, drafts stay non-canonical until API validation models exist and Fer approves promotion, and `metadata.version` remains optional.
-- Batch 29 reconciliation execution is accepted: API 0.0.1 uses an API-owned in-process background reconciler with persisted SQLite reconciliation requests; mutating API calls write desired-state changes plus a reconciliation request in one transaction and return after commit; requests target one App instance, Service instance, binding, or platform domain configuration; request states are `pending`, `running`, `succeeded`, `failed`, and `blocked`; handlers must be idempotent and safe to retry; one serialized worker is accepted initially; simple capped retry is intended but automatic retry may be deferred from API 0.0.1 if heavy; the reconciler writes latest status snapshots; failures do not roll back desired state; drift is detected/reported for Nephos-owned resources and reconciled only when desired state or manual reconciliation asks for it.
-- Batch 30 API lifecycle action shape is accepted: install mutation uses `POST /apps` and `POST /services` with catalog refs in the body; catalog install endpoints are not primary; lifecycle uses `POST /apps/{appInstance}/actions/start|stop|remove|destroy` and equivalent Service paths; destroy stays a confirmed `POST .../actions/destroy`, not `DELETE`; dependency-blocked Service lifecycle returns `409 Conflict` with impact list unless forced; mutating responses prefer `202 Accepted` with resource/reconciliation request/status metadata; repeated lifecycle requests to the same desired state are idempotent.
-- Batch 31 API payload/error shape is accepted: public API paths use installed instance slugs, not opaque UUIDs; install bodies use `catalogRef` with `kind`, `name`, optional `source`, optional `instanceName`, optional `config`, and App install `bindings`; lifecycle action bodies use optional `force` and `confirm`, with `confirm` required only for destroy; mutation responses use `{ resource, reconciliation, status? }`; Nephos-owned domain errors use `{ error: { code, message, details? } }`; dependency-blocked impact details include `requiresForce`, dependent App instance, binding id, binding alias, and capability; FastAPI/Pydantic validation errors may remain framework-shaped for API 0.0.1 and are not stable Nephos product API.
-- Batch 32 database schema mechanics are accepted: database relationships use internal stable text ids, user-addressable installed resources use unique public slugs, core domain tables include `id`, `created_at`, and `updated_at`, state fields use SQLite `CHECK` constraints, SQLite foreign keys are enabled with restrictive relationships by default, lifecycle deletes happen through explicit domain transactions rather than broad cascades, JSON text columns are only for validated snapshots/flexible payloads, API 0.0.1 reconciliation requests use the bounded accepted field set, latest status snapshots are keyed by resource target, and `schema_migrations` uses `version TEXT PRIMARY KEY` plus `applied_at TEXT`.
-- Batch 33 API read/status/catalog shape is accepted: internal ids use typed prefixes plus UUID4 hex suffixes, timestamps are app-generated UTC ISO strings with `Z`, read payloads are domain snapshots with ids and slugs rather than raw DB rows, status payloads include level/lifecycle/reconciliation/reason/message/evidence/observedAt, manual reconcile uses target-specific action subresources, and read-only catalog endpoints are `/catalog/apps`, `/catalog/apps/{name}`, `/catalog/services`, and `/catalog/services/{name}` with optional source selection.
-- Batch 34 API response field details are accepted: App read payloads expose top-level `bindings` and `routes`; Service read payloads expose top-level `provides` and `dependents`; Binding read payloads expose alias, capability, App instance, Service instance, redacted output or Secret summary, status, and timestamps; status evidence entries use `source`, `subject`, `reason`, `message`, `observedAt`, and optional redacted `data`; catalog responses use normalized summaries by default rather than raw manifest blobs; API 0.0.1 has no rename API and installed App/Service slugs are immutable.
-- Batch 35 nested response entry fields are accepted: App `bindings[]` entries use id/alias/capability/serviceInstance/status; App `routes[]` entries use name/visibility/target/canonicalUrl/aliases/status; Service `provides[]` entries use capability/optional alias/optional version/bindingOutputTargets; Service `dependents[]` entries use appInstance/bindingId/bindingAlias/capability/lifecycle/status; Binding redacted output or Secret summaries use target/secretName/namespace/keys/redacted true; App catalog summaries include requires/routes and Service catalog summaries include provides.
-- Batch 36 nested response subfields are accepted: nested entry status summaries use level/reason/message/observedAt; App route targets are semantic and expose port; App catalog requires entries use capability/alias/optional provider; App catalog routes entries use name/visibility/target; Service catalog provides entries use capability/optional alias/optional version/bindingOutputTargets; validation error normalization is deferred until after API 0.0.1.
-- Batch 37 destroy/reconciliation/database mechanics are accepted: destroy keeps desired-state rows present while teardown is pending and deletes them only after successful teardown; no `destroying` lifecycle state is added; reconciliation requests include durable `action`, `payload_json`, and target snapshot support; desired-state rows include integer `generation`; status/reconciliation may record target or observed generation; SQLite uses one API process, one serialized reconciler, short explicit transactions, foreign keys on, and WAL mode; `migrations/0000_initial.sql` contains all API 0.0.1 tables and accepted constraints.
-- Batch 38 API 0.0.1 database table shape is accepted: App/Service tables use explicit catalog identity, lifecycle, generation, config, pending destroy, and timestamp columns; bindings use explicit App/Service relationship, alias, capability, generation, output summary, and timestamp columns; platform domains are one row per root domain; status snapshots use target/status columns plus evidence JSON and observed generation; reconciliation requests use target generation, action, payload JSON, and target snapshot JSON; indexes enforce unique slugs, binding alias per App, one default domain, one latest status per target, and reconciliation queue lookup by state/created_at.
-- Batch 39 SQLite and command-boundary mechanics are accepted: refer to this backend/API repo as `nephos-api` when distinguishing from `nephos-cli`; `nephos <command>` belongs to the user-facing `nephos-cli` product command; backend-local migration/reset commands are `nephos-api` dev/ops commands, with exact spelling resolved in Batch 40; SQLite uses TEXT for ids/slugs/enums/timestamps/JSON/digests, INTEGER for generation/booleans, narrow NOT NULL rules, CHECK constraints for state/is_default/generation, polymorphic type/id targets with domain validation, and Python/domain validation for JSON payloads.
-- Batch 40 backend package and dev command shape is accepted: this repository uses `src/nephos_api/`, exposes backend-local `nephos-api` commands, uses `nephos_api.main:app` as the FastAPI entrypoint, accepts `uv run nephos-api db migrate`, `uv run nephos-api db reset --force`, and `uv run nephos-api serve`, keeps `nephos <command>` reserved for `nephos-cli`, and starts API 0.0.1 implementation with the migration/database layer before API skeleton, catalog loader, and reconciler.
-- Batch 41 API bootstrap mechanics are accepted: API 0.0.1 backend bootstrap config is env-only with `NEPHOS_API_DB_PATH` and `NEPHOS_API_CATALOG_ROOTS`; SQLite defaults to `.nephos/state/nephos.db`; migrations apply `*.sql` files lexically and record filename-stem versions; dirty migration state fails without automatic repair; rollback/downgrade are out of scope; SQLite uses foreign keys, WAL, and `busy_timeout=5000` with no app-level write retry; repo catalog root is `catalog/`; pytest markers are `unit`, `integration`, and `k3s`; default backend tests exclude `k3s`; Makefile/task-runner wrappers are deferred.
-- Batch 42 catalog source identity and errors are accepted: repo-shipped catalog source id is `default`; configured local roots use `local-1`, `local-2`, and `local-3` in configured order; source ids are stable only for the current backend configuration/order; API responses expose source ids but not raw paths by default; `catalogRef.source` and catalog detail `?source=` use source ids; ambiguous duplicate entries return `409 Conflict` with code `catalog_entry_ambiguous`; missing source ids return `404 Not Found` with code `catalog_source_not_found`; installed App/Service rows store `catalog_source_id` and `catalog_source_path`.
-- Batch 43 K3s dev integration mechanics are accepted: `nephos-api` tests require a pre-existing reachable K3s cluster and must not install/start/stop/reset/destroy K3s; backend runtime and K3s tests use normal Kubernetes client config resolution with optional `NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT`; K3s tests require `NEPHOS_API_RUN_K3S_TESTS=1` plus Kubernetes API reachability; default CI excludes K3s integration; K3s tests use generated namespaces/resources labeled `app.kubernetes.io/managed-by: nephos`; cleanup is limited to generated labeled test resources; cluster setup/lifecycle remains user-managed or `nephos-cli`-managed.
+- This repository is `nephos-api`, the backend/control-plane repository.
+- The user-facing CLI belongs to the separate `../nephos-cli` repository.
+- Bootstrap foundation exists for migrations, repositories, API skeleton, catalog loading, lifecycle actions, reconciliation requests, status snapshots, and Kubernetes client/runtime primitives.
+- Backend package layout is `src/nephos_api/`.
+- FastAPI entrypoint is `nephos_api.main:app`.
+- Backend-local command is `nephos-api`.
+- Accepted backend-local commands are:
+  - `uv run nephos-api init`
+  - `uv run nephos-api db migrate`
+  - `uv run nephos-api db reset --force`
+  - `uv run nephos-api serve`
+  - `uv run nephos-api dev smoke`
+- `uv run nephos-api init` loads backend bootstrap environment, applies pending migrations, and ensures one default internal platform domain without mutating the selected Kubernetes cluster or creating App/Service reconciliation requests.
+- The default internal platform domain is `internal` / `nephos.local`; `NEPHOS_API_INTERNAL_DOMAIN` or `uv run nephos-api init --internal-domain <dns-suffix>` overrides the domain suffix on first initialization.
+- Local browser testing without `/etc/hosts` should use a resolvable suffix such as `nephos.localhost`; Traefik or another ingress controller does not provide DNS resolution by itself.
+- `uv run nephos-api serve` applies pending migrations before starting FastAPI and the reconciler worker.
+- SQLite is the canonical Phase 1 desired-state database.
+- Default DB path is `.nephos/state/nephos.db` relative to the backend process working directory.
+- Bootstrap configuration is environment-only:
+  - `NEPHOS_API_DB_PATH`
+  - `NEPHOS_API_CATALOG_ROOTS`
+  - `NEPHOS_API_KUBECONFIG`
+  - `NEPHOS_API_KUBE_CONTEXT`
+  - `NEPHOS_API_INTERNAL_DOMAIN`
+  - `NEPHOS_API_INGRESS_CLASS`
+- Migrations live under `migrations/`, run lexically, and record filename stems in `schema_migrations`.
+- SQLite connections must enable foreign keys, WAL mode, and `busy_timeout=5000`.
+- API 0.0.1 initial schema contains:
+  - `app_instances`
+  - `service_instances`
+  - `bindings`
+  - `platform_domains`
+  - `status_snapshots`
+  - `reconciliation_requests`
+  - `schema_migrations`
+- Kubernetes runtime tests target the selected kubeconfig/context, are opt-in with `NEPHOS_API_RUN_KUBERNETES_TESTS=1`, and are excluded from default tests.
+- Accepted namespace strategy is `app-<slug>` for Apps and `svc-<slug>` for Services.
+- Nephos-owned namespaces and resources must carry `app.kubernetes.io/managed-by: nephos` plus accepted relationship labels.
+- Reconciler handlers must be idempotent and mutate only Nephos-owned resources.
+- Pulumi is accepted as the forward internal provider execution backend: Nephos owns meaning, Pulumi performs labor.
+- Nephos API/SQLite desired state remains canonical; Pulumi state is observed provider state.
+- API handlers and CLI clients do not call Pulumi directly.
+- API 0.0.1 App and Service provider packages are Python-only.
+- Expected internal package direction is `src/nephos_api/providers/`.
+- The existing direct Helm CLI adapter is superseded as the forward direction by the Pulumi provider boundary, though it may remain as temporary implementation history or fallback while Pulumi provider code lands.
+- Direct Helm is secondary for Services because Services need typed provider actions beyond generated config files.
+- Service provider actions include lifecycle, app-scoped binding provisioning, deprovisioning, status/evidence, and future maintenance behavior.
+- Helm charts may remain implementation inputs underneath Python Pulumi Service providers.
+- Manifest runtime references support provider-backed runtimes with `spec.runtime.type: provider` and `spec.runtime.provider.name`; Helm chart metadata is required only for `spec.runtime.type: helm`.
+- The default deployer routes provider-backed runtimes to internal Python Pulumi/Kubernetes providers and Helm-backed runtimes to the Pulumi Helm provider.
+- PostgreSQL app-scoped provisioning is accepted as a typed backend/API-owned internal handler.
+- API 0.0.1 PostgreSQL provisioning uses backend-owned Kubernetes API calls, a Nephos-owned Service-side credential Secret, the PostgreSQL provider administrator Secret convention, and idempotent `psql` execution inside the Nephos-owned PostgreSQL runtime pod.
+- PostgreSQL `psql` execution uses an explicit shell exit marker and fails closed when Kubernetes exec output does not prove the command exit code.
+- API 0.0.1 generated App Ingress resources route to the internal App runtime Service name `app-<app-instance>` and use App route `target.port` as the backend Service port.
+- API 0.0.1 generated App Ingress resources set `ingressClassName` from `NEPHOS_API_INGRESS_CLASS`, or auto-detect exactly one/default cluster `IngressClass`.
+- Successful binding materialization enqueues an App reconcile request for the consuming App so App runtime convergence can recover if the initial App install request was blocked on missing binding values.
+- Binding reconciliation treats removed or pending-destroy consumer Apps as not applicable and does not provision app-scoped Service resources, create App namespaces, or write binding Secrets for them.
+- Successful Service runtime deployment enqueues reconciliation for current dependent bindings so bindings can recover when a Service becomes available after an earlier blocked attempt, without duplicating an already pending or running binding request for the same generation and without waking removed or pending-destroy Apps.
+- Existing runtime namespaces are reused only when they carry the expected Nephos ownership labels.
+- The default lazy runtime/provisioner wrappers used by `nephos-api serve` forward lifecycle and deprovisioning operations, not just install/provision operations.
+- App destroy uninstalls the App runtime before deprovisioning app-scoped Service resources.
+- Forced Service destroy removes dependent binding rows before deleting the Service desired-state row.
+- Kubernetes runtime safety refusals are reported as blocked reconciliation with reason `runtime_safety_blocked`, not generic runtime failures.
+- Nested App binding and Service dependent entries expose compact binding status snapshots when status exists.
+- Kubernetes runtime deletion helpers wait for Nephos-owned App Ingresses and namespaces to read as absent before reconciliation marks remove/destroy work succeeded.
+- Kubernetes runtime refuses to reuse, scale, or reconcile Ingress in terminating namespaces.
+- Binding Secret writes and binding Secret reads require an active Nephos-owned App namespace.
+- PostgreSQL app-scoped provisioning requires an active Nephos-owned Service namespace before reading administrator Secrets, runtime pods, or Service-side credential Secrets.
+- Catalog validation rejects invalid or duplicate App binding aliases, invalid or duplicate App route names, invalid capability/provider identifiers, duplicate provided Service aliases, and duplicate Service binding output names.
+- Catalog validation rejects invalid App config option names, config defaults whose value type does not match the declared option type, enum config options without values, and enum defaults outside the allowed values.
+- App install explicit provider selection uses `bindings.<alias>.serviceInstance`, where `alias` is the App requirement alias after defaulting and `serviceInstance` is the installed Service instance slug.
+- App install validates supplied config against the App manifest's Phase 1 config options before writing desired state.
+- App install rejects missing or pending-destroy Service providers with `binding_provider_unavailable`.
+- Platform domain reconciliation marks domain desired state reconciled and enqueues App `reconcile` requests for installed, non-removed Apps with route intent so ingress host changes converge through the normal App runtime path.
+- Manual platform domain reconciliation is exposed through `POST /platform/config/domains/actions/reconcile` and queues the same platform-domain reconciliation flow.
+- Manual App/Service `reconcile` must converge the persisted desired lifecycle. It must not redeploy removed resources or treat stopped resources as running.
+- Repeated App/Service lifecycle requests that already match the current desired lifecycle do not bump desired-state generation.
+- Pending destroy blocks later `start`, `stop`, and `remove` lifecycle mutations with `409 Conflict`; repeated `destroy` keeps the original `deleteRequestedAt` timestamp.
+- Repeated Service `stop`, `remove`, or `destroy` requests that are already no-ops do not require `force` just because dependents still exist.
+- Reconciler-written App/Service status snapshots include the persisted desired lifecycle in the status payload.
+- App route response entries expose compact App runtime status once reconciliation has observed the App.
+- The previous manual reference flow leaked a temporary local chart server and external catalog root into user testing; that path is removed.
+- `uv run nephos-api dev smoke` now runs the Nephos-owned runtime proof: it creates a temporary internal reference catalog, reconciles a provider-backed PostgreSQL Service and reference web App through internal Python Pulumi/Kubernetes providers, verifies binding/route/lifecycle behavior, and cleans up owned runtime resources.
+- The opt-in Kubernetes runtime test now uses the same provider-backed reference catalog shape and no longer requires a configured reference catalog root.
+- Local development and manual testing can put bootstrap variables in `.env`; real environment variables override `.env`.
+- Pulumi CLI is installed locally for runtime testing and reports `v3.244.0`.
+- Pulumi local backend runtime testing requires `PULUMI_CONFIG_PASSPHRASE` or `PULUMI_CONFIG_PASSPHRASE_FILE`; missing configuration blocks with `pulumi_passphrase_missing`.
 
 Files likely to change:
 
-- `AGENTS.md`
-- `.agents/AGENTS.md`
-- `.agents/context/nephos-architecture.md`
-- `.agents/context/nephos-decisions.md`
-- `.agents/context/nephos-glossary.md`
-- `.agents/context/nephos-open-questions.md`
-- `.agents/context/nephos-auth.md`
-- `.agents/context/nephos-resource-policy.md`
-- `.agents/context/nephos-upgrades.md`
-- `.agents/context/nephos-backups.md`
-- `.agents/context/nephos-health-status.md`
-- `.agents/context/nephos-runtime-boundaries.md`
-- `.agents/context/nephos-phase1.md`
-- `.agents/context/nephos-non-goals.md`
-- `.agents/context/nephos-service-ownership.md`
-- `.agents/context/nephos-packaging.md`
-- `.agents/context/nephos-catalog.md`
-- `.agents/context/nephos-stack.md`
-- `.agents/context/nephos-reconciliation.md`
-- `.agents/context/nephos-dev-workflow.md`
-- `.agents/context/nephos-contribution-and-agent-workflow.md`
-- `.agents/context/nephos-reference-scenario.md`
-- `docs/adr/20260517-source-of-truth-for-desired-state.md`
-- `docs/adr/20260517-controller-and-reconciliation-architecture.md`
-- `docs/adr/20260517-initial-implementation-stack.md`
-- `docs/adr/20260517-app-and-service-package-format.md`
-- `docs/adr/20260517-app-service-ownership-semantics.md`
-- `docs/adr/20260517-resource-policy-philosophy.md`
-- `docs/adr/20260517-auth-and-user-model.md`
-- `docs/adr/20260517-upgrade-policy.md`
-- `docs/adr/20260517-storage-and-backup-semantics.md`
-- `docs/adr/20260517-app-and-service-lifecycle-semantics.md`
-- `docs/adr/20260517-health-and-status-model.md`
-- `docs/adr/20260517-phase-1-scope.md`
-- `docs/adr/20260517-namespace-strategy.md`
-- `docs/adr/20260517-ingress-and-visibility-model.md`
-- `docs/adr/20260517-secrets-model.md`
-- `docs/adr/20260517-catalog-source-and-trust-model.md`
-- `docs/adr/20260517-local-development-testing-and-distribution.md`
-- `docs/adr/20260517-architecture-decision-and-agent-workflow.md`
-- `docs/adr/20260517-reference-scenario.md`
-- `docs/adr/20260517-nephos-manifest-schema-shape.md`
-- `docs/adr/20260517-manifest-field-conventions.md`
-- `docs/adr/20260518-reconciliation-execution-model.md`
-- `docs/adr/20260518-api-lifecycle-action-shape.md`
-- `docs/adr/20260518-api-payload-and-error-shape.md`
-- `docs/adr/20260518-database-schema-mechanics.md`
-- `docs/adr/20260522-api-read-status-and-catalog-shape.md`
-- `docs/adr/20260522-api-response-field-details.md`
-- `docs/adr/20260522-api-nested-response-entry-fields.md`
+- `PLANS.md`
+- `src/nephos_api/reconciler.py`
+- `src/nephos_api/providers/`
+- `src/nephos_api/repository.py`
+- `src/nephos_api/kubernetes_runtime.py`
+- `src/nephos_api/catalog.py`
+- `src/nephos_api/api/resources.py`
+- `tests/test_reconciler.py`
+- `tests/test_kubernetes_runtime.py`
+- `tests/test_kubernetes_runtime_integration.py`
+- runtime-focused tests under `tests/`
+- architecture context or ADRs only if implementation exposes a missing decision, after explicit notice to Fer
 
 Proposed steps:
 
-- Add the agent rule requiring explicit notice before ADR/context writes.
-- Record the accepted stack and repository-boundary decision.
-- Accept the source-of-truth ADR.
-- Accept the controller/reconciler ADR.
-- Update architecture and open-question context.
-- Accept the App and Service package format ADR.
-- Add packaging context and Service operation terminology.
-- Accept the App/Service ownership semantics ADR.
-- Add Service instance, shared Service instance, and dedicated Service instance terminology.
-- Accept the resource policy ADR.
-- Accept the auth and user model ADR.
-- Add Phase 1 and non-goal context for resource/auth scope.
-- Accept the upgrade policy ADR.
-- Accept the storage and backup semantics ADR.
-- Update lifecycle semantics for destructive confirmation.
-- Add upgrade and backup context.
-- Accept the health and status model ADR.
-- Add health/status context and terminology.
-- Accept the Phase 1 scope ADR.
-- Update Phase 1 and non-goal context.
-- Accept the namespace strategy ADR.
-- Accept the ingress and visibility model ADR.
-- Accept the secrets model ADR.
-- Add runtime-boundary context.
-- Accept the catalog source and trust model ADR.
-- Add catalog context.
-- Accept the local development, testing, and distribution ADR.
-- Add development workflow context.
-- Accept the architecture decision and agent workflow ADR.
-- Add contribution and agent workflow context.
-- Accept the reference scenario ADR.
-- Add reference scenario context and draft manifest workspace README.
-- Accept the manifest schema shape ADR.
-- Add non-canonical draft manifest sketches under `.agents/drafts/manifests/`.
-- Accept the manifest field conventions ADR.
-- Move draft sketches into directory-per-entry catalog layout under `.agents/drafts/manifests/`.
-- Accept the binding model ADR.
-- Update binding output and provisioning context.
-- Accept required/optional manifest field rules.
-- Record the decision not to add PostgreSQL output `fields:` syntax in Phase 1.
-- Accept PostgreSQL `app-secret` key serialization.
-- Accept Phase 1 config option type set.
-- Accept unknown-field rejection after schemas exist.
-- Defer raw Kubernetes manifest fallback shape.
-- Accept config option object field shape.
-- Accept enum option value shape.
-- Defer config validation bounds.
-- Keep runtime mapping outside config option objects.
-- Accept Phase 1 runtime value mapping shape.
-- Defer route/storage mapping source kinds and transforms.
-- Accept the reconciliation execution model.
-- Add reconciliation context and ADR.
-- Accept the API lifecycle action shape.
-- Accept the API payload and error shape.
-- Accept the database schema mechanics.
-- Accept the API read/status/catalog shape.
-- Accept the API response field details.
-- Accept the nested API response entry fields.
-- Continue the interview with API implementation details or remaining open questions.
+1. Runtime namespace convergence slice:
+   - Inject a Kubernetes runtime adapter into the reconciler.
+   - Handle App and Service install requests by ensuring accepted namespaces and labels exist.
+   - Mark reconciled install requests `succeeded` only after runtime mutation succeeds.
+   - Write `healthy` status snapshots with structured evidence.
+   - Keep unsupported targets/actions explicitly blocked rather than pretending full convergence.
+2. Runtime lifecycle namespace safety slice:
+   - Preserve namespaces for stop/remove.
+   - Delete only Nephos-owned namespaces for destroy after the accepted API destroy confirmation path creates a request.
+   - Wait for namespace absence before treating destroy runtime teardown as succeeded.
+   - Keep desired-state rows until runtime teardown succeeds.
+   - Refuse to reuse pre-existing unowned namespaces during install/start/reconcile.
+   - Refuse to treat terminating namespaces as valid runtime targets.
+   - Forward stop scaling through the lazy runtime path used by `nephos-api serve`.
+3. Binding materialization slice:
+   - Create App namespace Secrets for binding outputs with accepted names, labels, and redacted summaries.
+   - Require the App namespace to be active and Nephos-owned before writing or reading binding Secrets.
+   - Keep Secret values out of API status and evidence.
+   - Block PostgreSQL credential materialization until provisioning output exists.
+   - Enqueue an App reconcile request after binding materialization so dependency ordering races do not strand App install.
+   - Allow App install callers to select a provider explicitly when multiple eligible Service instances exist.
+4. Helm runtime decision slice:
+   - Treat the direct Helm CLI adapter as superseded implementation history.
+   - Keep Helm chart identity below Nephos manifests where Helm packaging gives leverage.
+5. Pulumi provider boundary slice:
+   - Add internal Python provider package boundaries under `src/nephos_api/providers/`. Done.
+   - Keep reconciler-owned calls to provider interfaces; do not let API handlers call Pulumi. Done.
+   - Add Pulumi-backed App and Service runtime providers behind the existing deploy/uninstall contract. Done.
+   - Make Service providers expose typed internal actions beyond Helm install/uninstall/config values.
+   - Ensure Pulumi state, previews, and apply outputs are redacted runtime evidence only. Pending evidence-field design.
+   - Preserve Nephos SQLite desired state as the source of truth. Done.
+   - Keep API 0.0.1 providers Python-only. Done.
+6. PostgreSQL provisioning implementation slice:
+   - Implement idempotent app-scoped database/user provisioning for the accepted PostgreSQL capability.
+   - Return accepted binding output fields: `host`, `port`, `database`, `username`, `password`, and `uri`.
+   - Ensure the default lazy provisioner path forwards App destroy deprovisioning.
+   - Uninstall App runtime before deprovisioning App-scoped resources.
+   - Remove dependent binding rows during forced Service destroy so the Service row deletion satisfies SQLite constraints.
+7. End-to-end Kubernetes reference flow:
+   - Run opt-in Kubernetes runtime tests only with `NEPHOS_API_RUN_KUBERNETES_TESTS=1`.
+   - Requires a pre-existing reachable Kubernetes cluster.
+   - Use Nephos-owned temporary provider-backed reference catalog entries; do not require an external catalog root or local chart server.
+   - Verify Service install, App install, binding materialization, generated Ingress, route intent/status, lifecycle, App Ingress absence after remove, and namespace absence after destroy.
+   - Verify manual App reconcile respects stopped and removed desired lifecycle states.
+   - Verify platform domain changes enqueue App route reconciliation rather than leaving platform-domain requests blocked.
+   - Keep cluster lifecycle external to this repo.
+8. Manual runtime smoke command:
+   - Expose the end-to-end runtime proof as `uv run nephos-api dev smoke`.
+   - Drive the flow through Nephos API desired state and the reconciler, not pytest as the user interface.
+   - Keep reference catalog generation internal and temporary.
+   - Do not require Helm, a local chart server, or `NEPHOS_API_K3S_REFERENCE_CATALOG_ROOT`.
+
+Current verification:
+
+- `uv run pytest -m "not kubernetes"` passes.
+- `uv run ruff check .` passes.
+- `uv lock --check` passes.
+- `git diff --check` passes.
+- `uv run nephos-api db reset --force` passes against a temp SQLite DB.
+- `uv run nephos-api db migrate` passes against a temp SQLite DB.
+- `uv run nephos-api serve --port 8765` starts successfully with the Pulumi provider path configured.
+- `curl http://127.0.0.1:8765/version` returns `{"name":"nephos-api","version":"0.0.1"}`.
+- `curl http://127.0.0.1:8765/healthz` returns `{"status":"ok"}`.
+- `uv run pytest -m kubernetes -q` skips Kubernetes runtime tests without explicit opt-in, as intended.
+- `uv run nephos-api init` passes against a temp SQLite DB, creates `internal` / configured internal domain, and writes no reconciliation requests.
+- Fresh minimal flow passes with `/private/tmp/nephos-flow-check/nephos.db`: `uv run nephos-api init`, `uv run nephos-api serve --port 8766`, `curl /version`, and `curl /healthz`.
+- `pulumi version` returns `v3.244.0`.
+- `uv run nephos-api dev smoke --timeout-seconds 240` passes against `.env` selecting `NEPHOS_API_KUBE_CONTEXT=docker-desktop`; it verified provider-backed PostgreSQL Service install, reference web App install, binding materialization, generated route `http://reference-web-<suffix>.nephos.localhost`, stop/start lifecycle, and App/Service destroy cleanup.
+- `uv run pytest tests/test_kubernetes_runtime_integration.py -m kubernetes -q` passes against `.env` selecting `NEPHOS_API_KUBE_CONTEXT=docker-desktop`: 3 passed, 17 warnings.
+- Manual route proof: `curl http://hello-world.nephos.localhost/` returns `200 OK` through the selected cluster ingress controller after generated Ingress uses `ingressClassName: nginx`.
 
 Risks:
 
-- Over-specifying implementation details too early.
-- Accidentally documenting the CLI as part of this repository.
-- Letting Phase 1 pragmatism weaken the desired-state boundary.
-- Letting Helm values become the Nephos product model.
-- Pretending Service operation design is finished before real Services prove the contract.
-- Reintroducing hidden per-App infrastructure by failing to model dedicated Service instances as Services.
-- Duplicating dependent tracking outside bindings.
-- Accidentally implying Phase 1 has production-grade resource isolation.
-- Designing resource profiles before real workload data exists.
-- Designing auth around future multi-user scenarios before the local-first core exists.
-- Implying Phase 1 has working backup/restore when it only tracks semantics.
-- Treating Kubernetes PVC snapshots as sufficient for database correctness.
-- Making Service upgrades look safe without backup support.
-- Flattening health into raw Kubernetes readiness and losing Nephos-specific relationship failures.
-- Mixing lifecycle state with health status.
-- Showing opaque green/red status without reasons.
-- Letting Phase 1 expand into Web UI, backup implementation, service mesh, or HA before the platform model exists.
-- Hardcoding app behavior instead of exercising the local filesystem catalog/manifest path.
-- Accidentally making Cloudflare Tunnel/Tailscale foundational instead of compatible future/manual exposure options.
-- Breaking local-first App-to-Service communication by adding default-deny NetworkPolicy before a policy model exists.
-- Leaking secrets through status/logs while trying to improve operational transparency.
-- Treating local catalog trust as permission to execute arbitrary shell from catalog entries.
-- Creating a separate catalog index before manifest metadata proves insufficient.
-- Prematurely enforcing strict backend/CLI compatibility before the API, manifest schema, and release matrix stabilize.
-- Letting unit tests require a Kubernetes cluster.
-- Letting this repository quietly become responsible for CLI implementation workflow.
-- Letting agents silently create architecture by implementation.
-- Treating draft manifests as accepted schemas or examples.
-- Rewriting accepted ADR history instead of superseding/amending decisions.
-- Accidentally inferring concrete manifest schema from the reference scenario.
-- Letting the Paperless reference scenario expand with Redis/object storage before Phase 1 proves the minimal model.
-- Mistaking the Kubernetes-like manifest envelope for CRD-first source of truth.
-- Treating draft manifest field names as accepted schema fields.
-- Confusing catalog entries with installed App/Service instances.
-- Baking full hostnames into App manifests before domain policy is decided.
-- Letting binding output details accidentally become raw Secret templates.
-- Treating provisioning as arbitrary shell or Helm hooks instead of a typed Nephos contract.
-- Letting API handlers mutate Kubernetes inline and bypass the persisted reconciliation request model.
-- Overbuilding reconciliation concurrency before single-user/local-first needs it.
-- Making drift correction too aggressive and hiding operator changes.
-- Making install mutation look owned by the catalog instead of the installed App/Service collection.
-- Using `DELETE` for destroy and losing confirmation/force/body semantics.
-- Treating framework validation errors as a stable public contract before deciding normalization.
-- Exposing opaque ids publicly and weakening local-first inspectability.
-- Coupling public slugs to foreign-key relationships and making future rename behavior unnecessarily painful.
-- Letting broad database cascades bypass Nephos lifecycle and data-deletion semantics.
-- Letting JSON columns become generic untyped resource blobs.
-- Overbuilding queue leasing and retry columns before the serialized local-first worker proves it needs them.
-- Returning raw database rows as API payloads and freezing persistence shape as product API.
-- Dumping raw Kubernetes objects into status and weakening Nephos-aware status semantics.
-- Making catalog endpoints own install mutation after deciding install belongs to `/apps` and `/services`.
-- Hiding Service dependents behind another endpoint and weakening operational impact visibility.
-- Returning raw manifest blobs as catalog responses and freezing draft manifest shape too early.
-- Implementing slug rename before route, binding, and relationship consequences are designed.
-- Making nested response entries too thin and forcing common inspection workflows into unnecessary follow-up requests.
-- Exposing Secret values while trying to make Binding output summaries transparent.
+- Weakening the desired-state boundary by making FastAPI handlers mutate Kubernetes inline.
+- Promoting draft manifests into canonical catalog examples without approval.
+- Implementing PostgreSQL provisioning mechanics without an accepted decision.
+- Letting reset/migration commands look like `nephos-cli` product UX.
+- Hiding authoritative relationships in JSON blobs.
+- Letting Kubernetes namespace deletion bypass lifecycle and data-deletion semantics.
+- Letting Pulumi stack state, generated programs, or provider outputs become canonical Nephos state.
+- Letting Pulumi collapse Nephos lifecycle verbs into create/update/destroy.
+- Treating Services as Helm charts plus config files rather than Python provider actions.
+- Supporting multiple provider implementation languages before the Python-only API 0.0.1 provider package proves itself.
+- Treating framework validation errors as stable Nephos domain errors.
+- Overbuilding queue leasing, retry, or concurrency before API 0.0.1 needs it.
+- Calling the API 0.0.1 ready while requests still stop at `runtime_handler_missing`.
+- Letting Pulumi local backend prerequisites fail as raw Pulumi errors instead of Nephos runtime blockers.
 
 Validation commands:
 
-- `rg --files .agents/context docs/adr`
-- `rg -n "CRD|SQLite|Typer|FastAPI|source of truth|reconciler|nephos-cli" .agents/context docs/adr AGENTS.md .agents/AGENTS.md`
-- `rg -n "Nephos manifest|Service operation|Helm|raw Kubernetes|local filesystem catalog" .agents/context docs/adr`
-- `rg -n "Service instance|dedicated Service instance|shared Service instance|dependent|impact list|default provider" .agents/context docs/adr`
-- `rg -n "resource policy|replicas|BestEffort|single-owner|trusted local CLI|RBAC|autoscaling|HA|Phase 1" .agents/context docs/adr`
-- `rg -n "upgrade|backup|restore|rollback|destroy|destructive confirmation|persistent data|manual|pinned" .agents/context docs/adr`
-- `rg -n "health status|lifecycle state|status reason|status evidence|Nephos-aware|not_applicable|unsupported" .agents/context docs/adr`
-- `rg -n "single-node|minimal cluster lifecycle|disable|service mesh|multi-component|Paperless|PostgreSQL|local filesystem catalog" .agents/context docs/adr`
-- `rg -n "namespace|NetworkPolicy|Traefik|Cloudflare|Tailscale|Kubernetes Secrets|redacted|route intent" .agents/context docs/adr`
-- `rg -n "local filesystem catalog|repo-shipped reference|user-configured|user-created|trusted local-owner|catalog index|remote catalog|signing|sandbox" .agents/context docs/adr`
-- `rg -n "uv|pytest|ruff|mocks|fakes|K3s integration|container image|version endpoint|strict compatibility|nephos-cli" .agents/context docs/adr`
-- `rg -n "ADR|required|draft|proposed|accepted|superseded|open question|schemas|examples|temporary draft|non-canonical|same change|separate commits" AGENTS.md .agents/AGENTS.md .agents/context docs/adr`
-- `rg -n "Paperless|PostgreSQL|postgres|reference scenario|paperless.nephos.local|impact list|draft manifests|.agents/drafts/manifests" AGENTS.md .agents/AGENTS.md .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "apiVersion|kind|metadata|spec|Kubernetes-like|CRD|YAML|non-canonical|catalog/apps/paperless|catalog/services/postgres" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "nephos.pro/v1alpha1|catalog/apps|catalog/services|app.yaml|service.yaml|spec.requires|spec.provides|spec.routes|app-secret|values.mappings|full hostnames|domain policy" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "app-secret|host|port|database|username|password|uri|app-scoped-resource|provisioning|deterministic Secret|Secret key serialization" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "required|defaults to an empty list|fields:|canonical examples|manifest validation|command/status shape" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "Secret keys|secret App config|unknown manifest fields|raw Kubernetes manifest fallback shape|string|integer|boolean|enum" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "config options use required|stable machine key|required.*false|value.*label|validation bounds|spec.runtime.values.mappings" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "from.kind|to.helmValue|helmValue|mapping source|missing mapping|transforms|dot path" .agents/context docs/adr .agents/drafts PLANS.md`
-- `rg -n "reconciliation request|pending|running|succeeded|failed|blocked|serialized worker|idempotent|retry|drift" .agents/context docs/adr PLANS.md`
-- `rg -n "POST /apps|POST /services|actions/destroy|DELETE|202 Accepted|409 Conflict|force|impact list|idempotent" .agents/context docs/adr PLANS.md`
-- `rg -n "catalogRef|instanceName|resource.*reconciliation|dependency_blocked|requiresForce|bindingAlias|validation errors|/apps/paperless" .agents/context docs/adr PLANS.md`
-- `rg -n "internal stable text|unique public|created_at|updated_at|CHECK|foreign key|ON DELETE|schema_migrations|target_type|target_id|resource_type|resource_id|JSON text" .agents/context docs/adr PLANS.md`
-- `rg -n "appinst_|svcinst_|binding_|domain_|reconcile_|status_|createdAt|updatedAt|observedAt|/catalog/apps|/catalog/services|actions/reconcile|status payload|domain snapshots" .agents/context docs/adr PLANS.md`
-- `rg -n "bindings|routes|provides|dependents|redacted output|Secret summary|source|subject|manifestDigest|raw manifest|rename API|immutable" .agents/context docs/adr PLANS.md`
-- `rg -n "serviceInstance|canonicalUrl|bindingOutputTargets|bindingAlias|secretName|namespace|redacted|requires|aliases|target" .agents/context docs/adr PLANS.md`
-- `git diff -- AGENTS.md .agents/AGENTS.md .agents/context docs/adr PLANS.md`
+- `uv run pytest -m "not kubernetes"`
+- `uv run ruff check .`
+- `uv run nephos-api init`
+- `uv run nephos-api db migrate`
+- `uv run nephos-api db reset --force`
+- `uv run nephos-api serve`
+- `uv run nephos-api dev smoke`
+- `NEPHOS_API_RUN_KUBERNETES_TESTS=1 PULUMI_CONFIG_PASSPHRASE=<local-passphrase> uv run pytest tests/test_kubernetes_runtime_integration.py -m kubernetes -q`
+- `rg --files src tests migrations`
+- `git diff --check`
 
 Rollback notes:
 
-- Revert only these documentation edits if the accepted decisions change.
-- Do not revert Fer's ADR filename renames.
+- Revert only implementation files from the current slice if the approach changes.
+- Keep accepted ADR/context decisions intact unless Fer explicitly changes them.
+- Remove `.nephos/state/` generated local state rather than committing it.
+- Do not revert unrelated user changes.
 
 Open questions:
 
-- Manifest validation schema details.
-- Service operation declaration/schema/API/CLI design beyond the accepted boundary.
-- Dedicated Service sharing policy details.
-- Future resource profile design.
-- Future auth/RBAC model.
-- Concrete backup implementation design.
-- Health/status check implementation details.
-- Reference scenario manifest sketches and data preservation checks.
-- Exact CLI command spelling for ingress root domain operations.
-- Whether Nephos setup is interactive, flag-driven, or both.
-- Exact setup command spelling in `nephos-cli`.
-- Setup idempotency behavior.
-- App install behavior when setup is missing.
-- Secret rotation details.
-- Catalog source/trust beyond local filesystem.
-- `../nephos-cli` local backend configuration details.
-- Exact `nephos-cli` cluster setup/reset workflow.
-- Exact generated K3s test namespace name format, stricter allowed-context/server safety checks, future K3s CI job shape, Kubernetes client fixture implementation, and coverage expectations.
-- Backend/CLI release process and future compatibility matrix.
-- Reference scenario exact command spelling and status output.
-- Draft manifest naming and cleanup conventions.
-- Target snapshot JSON fields, request claiming behavior, polling, retry count/backoff, and status evidence data payloads.
-- Additional implementation-only response model names and exact FastAPI/Pydantic validation model names.
+- Canonical catalog example promotion.
+- Stricter Kubernetes allowed-context/server safety checks beyond explicit opt-in and reachability.
+- Future Kubernetes runtime CI job shape.
+- Canonicalizing the reference catalog examples in this repository remains unapproved.
+- Provider operation lock table shape.
+- Exact redacted Pulumi preview/apply evidence fields.

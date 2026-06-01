@@ -4,6 +4,16 @@
 - Date: 2026-05-17
 - Tags: phase-1, scope, k3s, cli, catalog, lifecycle
 
+Amended by:
+
+- `20260529-pulumi-provider-boundary.md`
+- `20260601-kubernetes-runtime-target-and-local-ingress-dns.md`
+
+The original Helm-primary runtime deployment line now means Helm chart
+packaging remains available underneath Nephos manifests. The forward API 0.0.1
+execution boundary is internal Python Pulumi providers behind the reconciler.
+Direct Helm is secondary for Services.
+
 ## Context and Problem Statement
 
 Nephos needs a tight Phase 1 boundary.
@@ -12,9 +22,9 @@ The first phase should prove the platform model without expanding into Web UI, H
 
 ## Decision
 
-Phase 1 targets single-node K3s.
+Phase 1 targets a selected single-node Kubernetes cluster.
 
-K3s is the default real runtime backend.
+K3s is one compatible target, not the API 0.0.1 runtime assumption.
 
 Cluster lifecycle support is minimal.
 
@@ -35,7 +45,8 @@ Phase 1 includes:
 - separate Python/Typer CLI
 - local filesystem catalog
 - separate App and Service Nephos manifests
-- Helm-primary runtime deployment
+- Helm chart runtime packaging underneath Nephos manifests
+- internal Python Pulumi provider execution boundary
 - raw Kubernetes manifest fallback
 - raw Kubernetes manifest fallback shape deferred until first needed
 - App and Service model

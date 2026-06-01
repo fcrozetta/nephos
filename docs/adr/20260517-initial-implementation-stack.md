@@ -47,6 +47,7 @@ Expose backend-local development/ops commands through `nephos-api`.
 Accepted backend-local command shapes:
 
 ```bash
+uv run nephos-api init
 uv run nephos-api db migrate
 uv run nephos-api db reset --force
 uv run nephos-api serve
@@ -144,7 +145,8 @@ The backend must expose stable enough API contracts for the CLI to operate witho
 
 Backend unit tests use mocks/fakes.
 
-Kubernetes integration tests use real K3s.
+Kubernetes integration tests use the selected kubeconfig/context and a
+pre-existing reachable Kubernetes cluster.
 
 Phase 1 backend distribution is a local development process plus backend container image.
 

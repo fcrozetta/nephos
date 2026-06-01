@@ -7,13 +7,13 @@ The core model is:
 - Apps: user-facing workloads/products.
 - Services: shared platform capabilities/infrastructure.
 - Capabilities: typed abilities exposed by Services and consumed by Apps.
-- Runtime: K3s/Kubernetes substrate.
+- Runtime: selected Kubernetes substrate.
 
 Do not use "plugin" for shared infrastructure. Use "Service".
 
-Default backend: K3s.
+Runtime target: the selected kubeconfig/context.
 
-Other Kubernetes backends may be added later through cluster adapters, but K3s is the primary real backend.
+K3s is one compatible local cluster option, not the assumed backend.
 
 Nephos owns platform intent, catalogs, service binding, lifecycle state, dependency resolution, secrets injection policy, health/status, backups semantics, and ingress abstraction.
 

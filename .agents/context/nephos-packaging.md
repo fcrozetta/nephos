@@ -315,7 +315,17 @@ The provisioning contract is typed and backend/API-owned.
 
 Do not model provisioning as arbitrary user-facing shell scripts or as Helm hooks exposed as product semantics.
 
-The concrete provisioning execution mechanism remains open.
+For API 0.0.1, app-scoped provisioning uses internal backend-owned Python
+handlers called by the reconciler during Binding reconciliation.
+
+These handlers are not a public API, CLI UX, manifest operation schema,
+catalog-declared script surface, Helm hook contract, or user-authored Kubernetes
+Job model.
+
+Secret values produced by handlers are materialized into Kubernetes Secrets and
+must not be stored in API-visible redacted binding summaries.
+
+SQLite binding output summaries store redacted metadata only.
 
 `spec.operations[]` is reserved.
 
@@ -347,7 +357,7 @@ Accepted Phase 1 deployment mechanisms:
 - Helm chart reference as primary
 - raw Kubernetes manifest reference as fallback
 
-Accepted Helm-primary field direction:
+Accepted Helm runtime field direction:
 
 - `spec.runtime.type: helm`
 - `spec.runtime.chart.repository`
@@ -373,7 +383,37 @@ Do not silently ignore unknown fields in canonical manifests.
 
 Before schemas exist, draft manifests remain non-canonical and must not be treated as validation contracts.
 
-## Helm-Primary Policy
+## Pulumi Provider And Helm Packaging Policy
+
+The accepted forward execution model is an internal Python Pulumi provider
+package under Nephos reconciliation.
+
+Pulumi is runtime labor.
+
+Nephos manifests and Nephos desired state remain the product model and source of
+truth.
+
+API 0.0.1 App and Service provider packages are Python-only.
+
+Additional provider implementation languages may be considered later, but they
+are not part of API 0.0.1.
+
+Helm remains valuable as runtime packaging underneath Nephos manifests when a
+chart gives leverage, but direct Helm is secondary for Services.
+
+The preferred direction is to invoke Helm through Pulumi-backed provider code,
+not to expose Helm directly as API, CLI, catalog source of truth, or user UX.
+
+Services are not just Helm charts plus generated config files.
+
+Service providers need typed internal actions for lifecycle, app-scoped binding
+resource provisioning, deprovisioning, status/evidence, and future backup or
+maintenance behavior.
+
+For Services, the internal Python Pulumi provider owns those actions and may use
+Helm as one implementation tool underneath.
+
+## Helm Packaging Policy
 
 Use Helm as the primary underlying deployment mechanism when:
 
@@ -387,6 +427,26 @@ Nephos should pin chart versions.
 Nephos should generate values from Nephos-level config, bindings, storage intent, and visibility intent.
 
 Users should not normally edit Helm values directly through Nephos.
+
+The direct backend-owned Helm CLI adapter proved the first API 0.0.1 runtime
+path, but it is superseded as the forward direction by the internal Python
+Pulumi provider boundary.
+
+Runtime providers are called by the reconciler, not by API handlers or CLI
+clients.
+
+Pulumi provider code may use Pulumi Kubernetes/Helm support for install/update
+and teardown.
+
+For Services, install/update/teardown are only part of the provider contract.
+The Service provider must also be able to perform typed behavior that cannot be
+represented as chart values alone.
+
+Release names and namespaces use the accepted runtime names `app-<slug>` and
+`svc-<slug>`.
+
+Generated Helm values files are temporary runtime artifacts and must not become
+catalog source of truth, product API, or canonical examples.
 
 ## Raw Manifest Fallback Policy
 

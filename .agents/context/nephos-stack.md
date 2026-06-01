@@ -44,6 +44,7 @@ API framework:
 Backend-local command surface:
 
 - `nephos-api`
+- `uv run nephos-api init`
 - `uv run nephos-api db migrate`
 - `uv run nephos-api db reset --force`
 - `uv run nephos-api serve`
@@ -69,12 +70,14 @@ Persistence:
 - Kubernetes target selection uses normal Kubernetes client config resolution by default
 - `NEPHOS_API_KUBECONFIG` optionally overrides the kubeconfig path
 - `NEPHOS_API_KUBE_CONTEXT` optionally overrides the kube context
-- backend runtime and K3s integration tests use the same kubeconfig/context resolution
+- `NEPHOS_API_INGRESS_CLASS` optionally overrides generated Kubernetes `ingressClassName`
+- backend runtime and Kubernetes integration tests use the same kubeconfig/context resolution
 - The Nephos API/database is the source of truth for desired platform state
 - Use plain SQL through a small repository/data-access layer
 - Do not introduce a full ORM for API 0.0.1
 - Platform configuration that affects reconciliation, such as ingress root domains, is stored in the API/database as desired state
 - The backend may start with an empty database and report platform configuration as incomplete until setup creates required desired state
+- `uv run nephos-api init` creates the local desired-state database and ensures one default internal platform domain, defaulting to `NEPHOS_API_INTERNAL_DOMAIN` or `nephos.local`
 - API 0.0.1 uses REST-ish resource APIs over installed Apps, installed Services, bindings, platform configuration domains, and status
 - Installed Apps are internal `AppInstance` records and may be exposed under `/apps`
 - Installed Services are internal `ServiceInstance` records and may be exposed under `/services`
@@ -173,14 +176,14 @@ Kubernetes client:
 - normal Kubernetes client configuration resolution by default
 - optional `NEPHOS_API_KUBECONFIG`
 - optional `NEPHOS_API_KUBE_CONTEXT`
-- `nephos-api` does not install, start, stop, reset, or destroy K3s
+- `nephos-api` does not install, start, stop, reset, or destroy the selected Kubernetes cluster
 
 Local development:
 
 - `uv` is the canonical backend Python workflow
 - backend runs as a local process during development through `uv run nephos-api serve`
 - CLI points at the local backend/API during development
-- cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now
+- cluster setup and lifecycle are user-managed or `nephos-cli`-managed for now
 - API 0.0.1 implementation starts with migration/database layer, then API skeleton, then catalog loader, then reconciler
 - Makefile and task-runner wrappers are deferred; raw `uv run ...` commands are the accepted local command surface
 
@@ -189,16 +192,16 @@ Testing:
 - `pytest` for backend tests
 - `ruff` for backend linting/formatting checks
 - mocks/fakes for backend unit tests
-- real K3s for Kubernetes integration tests
-- accepted pytest markers are `unit`, `integration`, and `k3s`
-- tests marked `k3s` require real K3s and should also be marked `integration`
-- K3s integration tests require a pre-existing reachable K3s cluster
-- K3s integration tests require `NEPHOS_API_RUN_K3S_TESTS=1`
-- K3s integration test preflight verifies explicit opt-in and Kubernetes API reachability
-- default CI runs unit and non-K3s tests only
-- default backend test command is `uv run pytest -m "not k3s"`
-- explicit K3s integration test command is `uv run pytest -m k3s`
-- K3s integration tests use generated test namespaces
+- real selected Kubernetes cluster for Kubernetes integration tests
+- accepted pytest markers are `unit`, `integration`, and `kubernetes`
+- tests marked `kubernetes` require real selected Kubernetes and should also be marked `integration`
+- Kubernetes integration tests require a pre-existing reachable selected Kubernetes cluster
+- Kubernetes integration tests require `NEPHOS_API_RUN_KUBERNETES_TESTS=1`
+- Kubernetes integration test preflight verifies explicit opt-in and Kubernetes API reachability
+- default CI runs unit and non-Kubernetes-runtime tests only
+- default backend test command is `uv run pytest -m "not kubernetes"`
+- explicit Kubernetes integration test command is `uv run pytest -m kubernetes`
+- Kubernetes integration tests use generated test namespaces
 - generated test namespaces and test-owned resources use `app.kubernetes.io/managed-by: nephos`
 - test cleanup may delete only generated test namespaces/resources that it created and labeled
 
@@ -261,9 +264,9 @@ Some runtime, testing, and distribution details remain open.
 
 Need to decide:
 
-- exact generated K3s test namespace name format
+- exact generated Kubernetes test namespace name format
 - stricter allowed-context/server safety checks beyond opt-in and API reachability
-- future K3s CI job shape, if K3s integration is added to CI
+- future Kubernetes runtime CI job shape, if Kubernetes integration is added to CI
 - exact Kubernetes client fixture implementation
 - exact `nephos-cli` cluster setup/reset workflow
 - backend image layout and registry

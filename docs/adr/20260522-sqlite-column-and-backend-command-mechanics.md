@@ -54,7 +54,7 @@ JSON columns should default to `'{}'` or `'[]'` where the response/domain shape 
 
 Validate JSON payloads in Python/domain models, not through SQLite JSON functions.
 
-Migration and reset commands are backend-local development/ops commands owned by `nephos-api`.
+Initialization, migration, and reset commands are backend-local development/ops commands owned by `nephos-api`.
 
 They are not product CLI commands and must not use the `nephos <command>` spelling in this repository.
 
@@ -62,6 +62,7 @@ The accepted backend-local command spelling is defined by [Backend Package and D
 
 Accepted backend-local command shapes include:
 
+- `uv run nephos-api init`
 - `uv run nephos-api db migrate`
 - `uv run nephos-api db reset --force`
 
@@ -113,7 +114,7 @@ Do not document `uv run nephos ...` for backend-local commands.
 - Good, because malformed JSON can be rejected by the database.
 - Bad, because JSON function availability can vary and the domain still must validate shape.
 
-### Backend-local migration/reset commands
+### Backend-local init/migration/reset commands
 
 - Good, because schema management belongs to `nephos-api`.
 - Good, because the product CLI boundary stays clean.

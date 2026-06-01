@@ -44,6 +44,26 @@ Accepted App install shape:
 }
 ```
 
+When explicit provider selection is needed, `bindings` is keyed by the App
+requirement alias after defaulting:
+
+```json
+{
+  "bindings": {
+    "database": {
+      "serviceInstance": "postgres-main"
+    }
+  }
+}
+```
+
+`serviceInstance` is the installed Service instance slug.
+
+If exactly one eligible Service instance exposes the required capability, Nephos
+may auto-bind by default. If multiple eligible Service instances expose the
+required capability and no default provider is configured, the caller must pass
+an explicit `bindings.<alias>.serviceInstance` selection.
+
 Accepted Service install shape:
 
 ```json

@@ -1,0 +1,85 @@
+from pathlib import Path
+
+from catalog_fixtures import write_app, write_service
+from fastapi.testclient import TestClient
+
+from nephos_api.config import Settings
+from nephos_api.main import create_app
+
+
+def _client(catalog_roots: tuple[Path, ...]) -> TestClient:
+    app = create_app(
+        settings=Settings(
+            db_path=Path("/tmp/not-used.db"),
+            catalog_roots=catalog_roots,
+            kubeconfig=None,
+            kube_context=None,
+        )
+    )
+    return TestClient(app)
+
+
+def test_catalog_api_lists_apps_and_services(tmp_path: Path) -> None:
+    root = tmp_path / "default"
+    write_app(root)
+    write_service(root)
+    client = _client((root,))
+
+    apps = client.get("/catalog/apps")
+    services = client.get("/catalog/services")
+
+    assert apps.status_code == 200
+    assert services.status_code == 200
+    assert apps.json()["apps"][0]["name"] == "paperless"
+    assert services.json()["services"][0]["name"] == "postgres"
+
+
+def test_catalog_api_returns_selected_detail(tmp_path: Path) -> None:
+    default_root = tmp_path / "default"
+    local_root = tmp_path / "local"
+    write_app(default_root)
+    write_app(local_root)
+    client = _client((default_root, local_root))
+
+    response = client.get("/catalog/apps/paperless?source=local-1")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "local-1"
+
+
+def test_catalog_api_returns_ambiguous_error(tmp_path: Path) -> None:
+    default_root = tmp_path / "default"
+    local_root = tmp_path / "local"
+    write_service(default_root)
+    write_service(local_root)
+    client = _client((default_root, local_root))
+
+    response = client.get("/catalog/services/postgres")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "catalog_entry_ambiguous",
+            "message": "Catalog entry is ambiguous.",
+            "details": {
+                "kind": "Service",
+                "name": "postgres",
+                "sources": ["default", "local-1"],
+            },
+        }
+    }
+
+
+def test_catalog_api_returns_unknown_source_error(tmp_path: Path) -> None:
+    client = _client((tmp_path / "default",))
+
+    response = client.get("/catalog/apps/paperless?source=missing")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "catalog_source_not_found",
+            "message": "Catalog source was not found.",
+            "details": {"source": "missing"},
+        }
+    }

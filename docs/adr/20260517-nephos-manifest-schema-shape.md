@@ -4,6 +4,15 @@
 - Date: 2026-05-17
 - Tags: manifests, schema, packaging, apps, services
 
+Amended by:
+
+- `20260529-pulumi-provider-boundary.md`
+
+The original Helm-primary runtime reference direction now means Helm chart
+identity remains available underneath Nephos manifests. The forward execution
+boundary is internal Python Pulumi providers behind the reconciler. Direct Helm
+is secondary for Services.
+
 ## Context and Problem Statement
 
 Nephos needs a manifest shape for App and Service package definitions.
@@ -69,7 +78,10 @@ Service manifests may include more infrastructure-specific concerns than App man
 
 Runtime deployment references stay underneath Nephos manifests.
 
-Phase 1 remains Helm-primary.
+Phase 1 keeps Helm chart identity available underneath Nephos manifests.
+
+The forward execution boundary is internal Python Pulumi providers behind the
+reconciler.
 
 Helm runtime references should carry the chart identity needed for pinned deployment, such as repository, chart name, and chart version.
 
