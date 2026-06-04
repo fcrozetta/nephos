@@ -33,7 +33,7 @@ Use simple explicit SQL migrations for Phase 1 database versioning.
 
 Before the first usable version, local development may destroy and recreate the SQLite database.
 
-Initial schema should live in `migrations/0000_initial.sql`.
+Initial schema should live in `src/nephos_api/migrations/0000_initial.sql`.
 
 Forward-compatible migration discipline starts after the first usable version is established.
 

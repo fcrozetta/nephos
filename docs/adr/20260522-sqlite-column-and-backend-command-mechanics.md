@@ -6,7 +6,7 @@
 
 ## Context and Problem Statement
 
-API 0.0.1 has accepted the table shape for `migrations/0000_initial.sql`.
+API 0.0.1 has accepted the table shape for `src/nephos_api/migrations/0000_initial.sql`.
 
 The remaining SQL mechanics are column type/nullability, CHECK constraints, polymorphic target handling, JSON column treatment, and migration/reset command ownership.
 

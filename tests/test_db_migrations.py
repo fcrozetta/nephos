@@ -1,4 +1,5 @@
 import sqlite3
+from importlib import resources
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,18 @@ def _table_names(db_path: Path) -> set[str]:
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()
     return {row[0] for row in rows}
+
+
+def test_migrations_are_packaged_resources() -> None:
+    migrations_dir = resources.files("nephos_api").joinpath("migrations")
+
+    migration_names = sorted(
+        migration.name
+        for migration in migrations_dir.iterdir()
+        if migration.is_file() and migration.name.endswith(".sql")
+    )
+
+    assert migration_names == ["0000_initial.sql"]
 
 
 def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:

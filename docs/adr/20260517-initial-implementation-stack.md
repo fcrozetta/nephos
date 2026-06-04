@@ -36,7 +36,7 @@ Do not introduce a full ORM for API 0.0.1.
 
 Before the first usable version, local development may destroy and recreate the SQLite database.
 
-Initial schema should live in `migrations/0000_initial.sql`.
+Initial schema should live in `src/nephos_api/migrations/0000_initial.sql`.
 
 Use the official Python Kubernetes client.
 

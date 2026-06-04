@@ -61,7 +61,7 @@ The default path is relative to the backend process working directory. In normal
 Use explicit SQL migration files under:
 
 ```text
-migrations/
+src/nephos_api/migrations/
 ```
 
 `uv run nephos-api db migrate` applies pending `*.sql` files in lexical filename order.
@@ -91,7 +91,7 @@ cluster, or create runtime reconciliation requests.
 Use the migration filename stem as the `schema_migrations.version` value. Example:
 
 ```text
-migrations/0000_initial.sql -> 0000_initial
+src/nephos_api/migrations/0000_initial.sql -> 0000_initial
 ```
 
 Record a migration version only after that migration succeeds.

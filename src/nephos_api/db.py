@@ -4,9 +4,13 @@ import re
 import sqlite3
 from contextlib import suppress
 from datetime import UTC, datetime
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
-MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
+MigrationResource = Path | Traversable
+
+MIGRATIONS_DIR = resources.files("nephos_api").joinpath("migrations")
 _MIGRATION_VERSION_RE = re.compile(r"^[0-9]{4}_[a-z0-9_]+$")
 
 
@@ -27,10 +31,10 @@ def connect_database(db_path: Path) -> sqlite3.Connection:
 def migrate_database(
     *,
     db_path: Path,
-    migrations_dir: Path = MIGRATIONS_DIR,
+    migrations_dir: MigrationResource = MIGRATIONS_DIR,
 ) -> None:
     migrations = _migration_files(migrations_dir)
-    available_versions = {path.stem for path in migrations}
+    available_versions = {_migration_version(path) for path in migrations}
 
     with connect_database(db_path) as connection:
         applied_versions = set(_applied_versions(connection))
@@ -42,7 +46,7 @@ def migrate_database(
             )
 
         for migration in migrations:
-            if migration.stem in applied_versions:
+            if _migration_version(migration) in applied_versions:
                 continue
             _apply_migration(connection, migration)
 
@@ -51,7 +55,7 @@ def reset_database(
     *,
     db_path: Path,
     force: bool,
-    migrations_dir: Path = MIGRATIONS_DIR,
+    migrations_dir: MigrationResource = MIGRATIONS_DIR,
 ) -> None:
     if not force:
         raise ValueError("db reset requires --force")
@@ -67,20 +71,31 @@ def reset_database(
     migrate_database(db_path=db_path, migrations_dir=migrations_dir)
 
 
-def _migration_files(migrations_dir: Path) -> list[Path]:
-    if not migrations_dir.exists():
+def _migration_files(migrations_dir: MigrationResource) -> list[MigrationResource]:
+    if not migrations_dir.is_dir():
         raise MigrationStateError(
             f"migrations directory does not exist: {migrations_dir}"
         )
 
-    migrations = sorted(migrations_dir.glob("*.sql"))
+    migrations = sorted(
+        (
+            migration
+            for migration in migrations_dir.iterdir()
+            if migration.is_file() and migration.name.endswith(".sql")
+        ),
+        key=lambda migration: migration.name,
+    )
     if not migrations:
         raise MigrationStateError(f"no SQL migrations found in {migrations_dir}")
 
     for migration in migrations:
-        if not _MIGRATION_VERSION_RE.fullmatch(migration.stem):
+        if not _MIGRATION_VERSION_RE.fullmatch(_migration_version(migration)):
             raise MigrationStateError(f"invalid migration filename: {migration.name}")
     return migrations
+
+
+def _migration_version(migration: MigrationResource) -> str:
+    return migration.name.removesuffix(".sql")
 
 
 def _applied_versions(connection: sqlite3.Connection) -> list[str]:
@@ -100,8 +115,11 @@ def _applied_versions(connection: sqlite3.Connection) -> list[str]:
     return [row["version"] for row in rows]
 
 
-def _apply_migration(connection: sqlite3.Connection, migration: Path) -> None:
-    script = migration.read_text()
+def _apply_migration(
+    connection: sqlite3.Connection, migration: MigrationResource
+) -> None:
+    script = migration.read_text(encoding="utf-8")
+    version = _migration_version(migration)
     timestamp = utc_now()
     try:
         connection.executescript(
@@ -109,7 +127,7 @@ def _apply_migration(connection: sqlite3.Connection, migration: Path) -> None:
             BEGIN;
             {script}
             INSERT INTO schema_migrations(version, applied_at)
-            VALUES ('{migration.stem}', '{timestamp}');
+            VALUES ('{version}', '{timestamp}');
             COMMIT;
             """
         )

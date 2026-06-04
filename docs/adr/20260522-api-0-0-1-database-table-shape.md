@@ -8,7 +8,7 @@
 
 Nephos has accepted SQLite as the canonical API 0.0.1 desired-state database, explicit SQL migrations, normalized table families, durable reconciliation requests, generation tracking, and destroy rows that remain present until teardown succeeds.
 
-API 0.0.1 now needs the concrete table and index shape for `migrations/0000_initial.sql`.
+API 0.0.1 now needs the concrete table and index shape for `src/nephos_api/migrations/0000_initial.sql`.
 
 This ADR defines the intended table shape only.
 
@@ -179,7 +179,7 @@ JSON columns are accepted only for validated flexible payloads and snapshots.
 
 ## Consequences
 
-`migrations/0000_initial.sql` should create these tables and accepted indexes.
+`src/nephos_api/migrations/0000_initial.sql` should create these tables and accepted indexes.
 
 Implementation should keep public slugs unique while using internal ids for relationships.
 

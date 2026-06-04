@@ -40,7 +40,7 @@ Phase 1 includes:
 - SQLite desired-state database
 - simple explicit SQL migrations
 - plain SQL through a small repository/data-access layer
-- initial schema file `migrations/0000_initial.sql`
+- initial schema file `src/nephos_api/migrations/0000_initial.sql`
 - in-process API-owned reconciler
 - separate Python/Typer CLI
 - local filesystem catalog

@@ -63,7 +63,7 @@ Current understanding:
   - `NEPHOS_API_KUBE_CONTEXT`
   - `NEPHOS_API_INTERNAL_DOMAIN`
   - `NEPHOS_API_INGRESS_CLASS`
-- Migrations live under `migrations/`, run lexically, and record filename stems in `schema_migrations`.
+- Migrations live under `src/nephos_api/migrations/`, run lexically, and record filename stems in `schema_migrations`.
 - SQLite connections must enable foreign keys, WAL mode, and `busy_timeout=5000`.
 - API 0.0.1 initial schema contains:
   - `app_instances`

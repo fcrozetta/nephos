@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 
 from nephos_api.config import load_settings
 from nephos_api.db import migrate_database, reset_database
-from nephos_api.dev_reference import run_reference_smoke
 from nephos_api.domain import InvalidDomainSuffixError
 from nephos_api.repository import DesiredStateRepository
 
@@ -13,6 +14,12 @@ db_app = typer.Typer(no_args_is_help=True)
 dev_app = typer.Typer(no_args_is_help=True)
 app.add_typer(db_app, name="db")
 app.add_typer(dev_app, name="dev")
+
+
+def run_reference_smoke(*args: Any, **kwargs: Any) -> Any:
+    from nephos_api.dev_reference import run_reference_smoke as _run_reference_smoke
+
+    return _run_reference_smoke(*args, **kwargs)
 
 
 @app.command("init")
