@@ -172,6 +172,21 @@ App install shape:
 }
 ```
 
+When explicit provider selection is needed, `bindings` is keyed by the App
+requirement alias after defaulting:
+
+```json
+{
+  "bindings": {
+    "database": {
+      "serviceInstance": "postgres-main"
+    }
+  }
+}
+```
+
+`serviceInstance` is the installed Service instance slug.
+
 Service install shape:
 
 ```json
@@ -191,6 +206,23 @@ Service install shape:
 `catalogRef.source` uses catalog source ids such as `default` or `local-1`.
 
 `instanceName`, `config`, and `bindings` are optional where accepted defaults are available.
+
+If exactly one eligible installed Service exposes the required capability,
+Nephos may auto-bind by default. If multiple eligible providers exist, App
+install must include `bindings.<alias>.serviceInstance` unless a later accepted
+default-provider configuration covers that capability.
+
+If no eligible installed Service exposes a required capability, App install
+returns `binding_provider_unavailable`.
+
+Unknown explicit binding aliases return `binding_requirement_unknown`.
+
+Missing explicit Service providers return `binding_provider_not_found`.
+
+Ineligible explicit Service providers return `binding_provider_ineligible`.
+
+Explicit Service providers with pending destroy intent return
+`binding_provider_unavailable`.
 
 Do not use catalog install action endpoints as the primary API shape.
 
@@ -293,6 +325,13 @@ Bindings are the source of dependent tracking.
 
 Do not infer bindings only from Kubernetes Secret metadata.
 
+Binding read endpoints are:
+
+```text
+GET /bindings
+GET /bindings/{bindingId}
+```
+
 Binding read payloads include:
 
 - `id`
@@ -326,6 +365,18 @@ Accepted Phase 1 API path:
 ```text
 /platform/config/domains
 ```
+
+Accepted Phase 1 operations:
+
+```text
+GET /platform/config/domains
+POST /platform/config/domains
+POST /platform/config/domains/{name}/actions/set-default
+POST /platform/config/domains/{name}/actions/remove
+```
+
+Root domain mutations return the normal mutation envelope with `resource` and
+`reconciliation` metadata.
 
 These are Nephos ingress root domain resources, not generic DNS-management resources.
 

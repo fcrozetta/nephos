@@ -29,7 +29,7 @@ Before the first usable version, local development may destroy and recreate the 
 The initial schema should live in:
 
 ```text
-migrations/0000_initial.sql
+src/nephos_api/migrations/0000_initial.sql
 ```
 
 Forward-compatible migration discipline starts after the first usable version is established.

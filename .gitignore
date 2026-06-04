@@ -1,5 +1,8 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+/.nephos/
+/.pytest_cache/
+/.ruff_cache/
 *.py[codz]
 *$py.class
 

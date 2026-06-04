@@ -19,6 +19,7 @@ Backend-local command spelling is refined by [Backend Package and Dev Command Sh
 Accepted backend-local commands:
 
 ```bash
+uv run nephos-api init
 uv run nephos-api db migrate
 uv run nephos-api db reset --force
 uv run nephos-api serve
@@ -28,26 +29,26 @@ Use `pytest` and `ruff` as the required backend test/lint baseline.
 
 Use mocks/fakes for backend unit tests.
 
-Use real K3s for Kubernetes integration tests.
+Use a real selected Kubernetes cluster for Kubernetes integration tests.
 
 Use pytest markers:
 
 - `unit`
 - `integration`
-- `k3s`
+- `kubernetes`
 
-Tests marked `k3s` require real K3s and should also be marked `integration`.
+Tests marked `kubernetes` require real selected Kubernetes and should also be marked `integration`.
 
 Default backend test command:
 
 ```bash
-uv run pytest -m "not k3s"
+uv run pytest -m "not kubernetes"
 ```
 
-Explicit K3s integration test command:
+Explicit Kubernetes integration test command:
 
 ```bash
-uv run pytest -m k3s
+uv run pytest -m kubernetes
 ```
 
 Makefile and task-runner wrappers are deferred for API 0.0.1.
@@ -87,7 +88,7 @@ Future strict compatibility rules require an explicit decision.
 - Keep Phase 1 shippable.
 - Preserve the backend/CLI repository boundary.
 - Avoid pretending the API is stable before the model settles.
-- Test Kubernetes reconciliation against real K3s where runtime behavior matters.
+- Test Kubernetes reconciliation against a real selected Kubernetes cluster where runtime behavior matters.
 - Keep unit tests fast and isolated.
 
 ## Consequences
@@ -96,9 +97,9 @@ Backend implementation can start with a clear Python toolchain.
 
 Unit tests can run without a Kubernetes cluster.
 
-Integration tests require K3s and should be separated from fast unit tests.
+Integration tests require a selected Kubernetes cluster and should be separated from fast unit tests.
 
-K3s-dependent tests do not run in the default backend test command.
+Kubernetes-runtime tests do not run in the default backend test command.
 
 The backend can be packaged for runtime without solving the full installer story.
 
@@ -114,4 +115,4 @@ Do not add strict CLI/backend compatibility gates without a new decision.
 
 API bootstrap environment, migration runner, catalog root, SQLite timeout, and wrapper details are refined by [API Bootstrap Mechanics](20260522-api-bootstrap-mechanics.md).
 
-K3s test execution, kubeconfig/context selection, and the boundary that `nephos-api` does not manage K3s lifecycle are refined by [K3s Dev Integration Mechanics](20260522-k3s-dev-integration-mechanics.md).
+Kubernetes runtime test execution, kubeconfig/context selection, and the boundary that `nephos-api` does not manage cluster lifecycle are refined by [Kubernetes Runtime Target and Local Ingress DNS](20260601-kubernetes-runtime-target-and-local-ingress-dns.md).

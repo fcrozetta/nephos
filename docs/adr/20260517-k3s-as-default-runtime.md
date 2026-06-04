@@ -1,8 +1,13 @@
 # K3s as the Default Runtime
 
-- Status: accepted
+- Status: superseded
 - Date: 2026-05-17
 - Tags: runtime, kubernetes, k3s, cluster
+
+Superseded by
+[Kubernetes Runtime Target and Local Ingress DNS](./20260601-kubernetes-runtime-target-and-local-ingress-dns.md).
+K3s is now one compatible selected Kubernetes target, not the API 0.0.1
+default runtime assumption.
 
 ## Context and Problem Statement
 

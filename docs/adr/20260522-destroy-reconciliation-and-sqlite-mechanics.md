@@ -56,7 +56,7 @@ SQLite write behavior for API 0.0.1:
 The initial schema lives in a single migration:
 
 ```text
-migrations/0000_initial.sql
+src/nephos_api/migrations/0000_initial.sql
 ```
 
 The initial migration should contain all API 0.0.1 tables and accepted constraints.

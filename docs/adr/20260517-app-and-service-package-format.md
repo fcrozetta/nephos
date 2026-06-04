@@ -4,6 +4,16 @@
 - Date: 2026-05-17
 - Tags: catalog, manifests, apps, services, schema
 
+Amended by:
+
+- `20260529-pulumi-provider-boundary.md`
+
+The original Helm-primary runtime packaging decision now means Helm chart
+packaging remains useful underneath Nephos manifests. The forward execution
+boundary is internal Python Pulumi providers behind the reconciler. Direct Helm
+is secondary for Services because Services need typed provider actions beyond
+generated chart values.
+
 ## Context and Problem Statement
 
 Nephos needs a format for defining installable Apps and Services.
@@ -22,7 +32,12 @@ Service creators should model infrastructure capabilities, provisioning behavior
 
 The Nephos manifest layer owns platform semantics.
 
-Helm charts are the primary Phase 1 runtime deployment mechanism underneath Nephos manifests.
+Helm charts are a Phase 1 runtime packaging mechanism underneath Nephos manifests.
+
+The forward API 0.0.1 execution boundary is internal Python Pulumi providers
+behind the reconciler.
+
+For Services, direct Helm is secondary to typed provider actions.
 
 Raw Kubernetes manifests are allowed as a fallback runtime deployment mechanism.
 
@@ -81,7 +96,7 @@ A Nephos manifest may point to runtime deployment implementation:
 - Helm chart
 - raw Kubernetes manifests
 
-Helm-primary runtime references use `spec.runtime` with chart repository, name, and version.
+Helm runtime references use `spec.runtime` with chart repository, name, and version.
 
 `spec.runtime.values.mappings[]` is reserved for Nephos-owned mapping from Nephos semantics into Helm values.
 
@@ -89,13 +104,17 @@ Helm and raw Kubernetes manifests stay below the Nephos product model.
 
 Users should not normally interact with Helm values or Kubernetes object specs as the primary Nephos UX.
 
-## Helm-Primary Deployment
+## Helm Packaging
 
-Use Helm as the primary underlying deployment mechanism when a credible chart exists or when Helm lifecycle/versioning gives leverage.
+Use Helm as an underlying packaging mechanism when a credible chart exists or
+when Helm lifecycle/versioning gives leverage.
 
 Nephos should pin chart versions and map Nephos-level config, bindings, storage intent, and visibility intent into Helm values.
 
 Do not expose arbitrary Helm values as the primary product model.
+
+For Services, Helm charts may be used by internal Python Pulumi providers, but
+Helm is not the Service provider contract.
 
 ## Raw Kubernetes Manifest Fallback
 
@@ -202,11 +221,16 @@ Later accepted binding/provisioning direction:
 - missing mapping sources block reconciliation with a reason
 - unknown manifest fields are rejected once canonical schemas exist
 - raw Kubernetes manifest fallback shape is deferred until first needed
-- the provisioning execution mechanism remains open
+- provisioning execution uses internal backend-owned Python handlers or provider
+  actions in API 0.0.1
 
 ## Decision Outcome
 
 Chosen option: "Separate App and Service Nephos manifests with Helm-primary runtime deployment and raw manifest fallback", because it preserves Nephos platform semantics while using existing Kubernetes packaging where that gives leverage.
+
+This outcome is amended by the Pulumi provider boundary ADR. Helm remains
+runtime packaging; internal Python Pulumi providers are the forward execution
+boundary.
 
 ## Status Notes
 

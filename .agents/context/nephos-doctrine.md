@@ -238,23 +238,22 @@ Users should not need to think in:
 
 ---
 
-## K3s Philosophy
+## Kubernetes Runtime Philosophy
 
-K3s is the primary runtime backend.
+Kubernetes is the runtime backend boundary.
 
-Other Kubernetes-compatible backends may exist later through adapters.
+API 0.0.1 targets the selected kubeconfig/context rather than assuming one
+Kubernetes distribution.
 
 Examples:
 
+- Docker Desktop Kubernetes
 - kind
-- minikube
+- kubeadm
+- K3s
 - external kubeconfig
 
-These are not equal-priority runtime targets.
-
-K3s is the primary real runtime substrate.
-
-kind and minikube are primarily development/testing/demo adapters unless future needs justify more.
+Cluster lifecycle remains backend-specific and outside `nephos-api`.
 
 ---
 

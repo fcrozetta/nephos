@@ -9,13 +9,16 @@ Architecture:
 Nephos CLI
 -> Nephos API
 -> Nephos Controller / Reconciler
--> Kubernetes Runtime
+-> Internal Python Provider Packages
+-> Pulumi Provider Labor
+-> Kubernetes / External Runtime State
 
 The Web UI is deferred for Phase 1.
 
-Default runtime backend:
+Runtime target:
 
-- K3s
+- selected Kubernetes kubeconfig/context
+- K3s is one compatible option, not an assumed cluster type
 
 ## Repository Boundaries
 
@@ -136,6 +139,42 @@ Binding redacted output or Secret summaries expose `target`, `secretName`, `name
 Install mutation happens through `POST /apps` and `POST /services` with catalog references in the request body.
 
 Install bodies use `catalogRef`, optional `instanceName`, optional `config`, and App install `bindings` when needed.
+
+Explicit App install binding provider selection uses `bindings.<alias>.serviceInstance`, where `alias` is the App requirement alias after defaulting and `serviceInstance` is the installed Service instance slug.
+
+### Provider Layer
+
+The accepted forward provider layer is an internal Python package boundary.
+
+Expected package direction:
+
+```text
+nephos_api.providers
+```
+
+Provider packages are called by the reconciler.
+
+API handlers and CLI clients do not call providers directly.
+
+Pulumi is the accepted under-the-hood execution engine for provider labor.
+
+Pulumi state is observed provider state, not Nephos canonical state.
+
+If Nephos desired state and Pulumi provider state disagree, Nephos desired state
+wins.
+
+For API 0.0.1, App and Service provider implementations are Python-only.
+
+Additional provider implementation languages are deferred.
+
+Direct Helm is secondary for Services.
+
+Services require typed provider actions beyond generated config files:
+lifecycle, app-scoped provisioning, deprovisioning, status, and future
+maintenance behavior.
+
+Helm charts may still be used underneath a Service provider where they give
+leverage, but Helm is not the Service provider contract.
 
 Lifecycle actions use `POST /apps/{appInstance}/actions/{action}` and `POST /services/{serviceInstance}/actions/{action}`.
 
@@ -273,11 +312,12 @@ API mutations that change desired state must write desired-state changes and the
 
 Backend unit tests should use mocks/fakes.
 
-Kubernetes integration tests should run against real K3s.
+Kubernetes integration tests should run against a real selected Kubernetes cluster.
 
-K3s integration tests require a pre-existing reachable cluster and explicit `NEPHOS_API_RUN_K3S_TESTS=1` opt-in.
+Kubernetes integration tests require a pre-existing reachable cluster selected
+by kubeconfig/context and explicit `NEPHOS_API_RUN_KUBERNETES_TESTS=1` opt-in.
 
-K3s integration tests use generated namespaces and must clean up only generated labeled resources they created.
+Kubernetes integration tests use generated namespaces and must clean up only generated labeled resources they created.
 
 API 0.0.1 implementation should start with the migration and database layer, then the API skeleton, then the catalog loader, then the reconciler.
 
@@ -323,9 +363,17 @@ The reconciler/runtime backend uses normal Kubernetes client configuration resol
 
 `NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT` are optional backend overrides.
 
-Cluster setup and K3s lifecycle are user-managed or `nephos-cli`-managed for now.
+`NEPHOS_API_INGRESS_CLASS` optionally overrides generated Kubernetes
+`ingressClassName`; otherwise Nephos auto-detects a single/default cluster
+`IngressClass`.
 
-`nephos-api` must not install, start, stop, reset, or destroy K3s.
+For local development and manual testing, `.env` in the backend process working
+directory may populate missing process environment variables. Real environment
+variables override `.env`.
+
+Cluster setup and lifecycle are user-managed or `nephos-cli`-managed for now.
+
+`nephos-api` must not install, start, stop, reset, or destroy the selected Kubernetes cluster.
 
 ### Kubernetes Runtime
 
@@ -378,7 +426,12 @@ Nephos does not use Kubernetes `ownerReferences` to represent platform relations
 
 Phase 1 does not enable default-deny NetworkPolicy.
 
-Traefik is the Phase 1 default ingress controller because K3s includes it by default.
+Traefik may be the Phase 1 default ingress controller, but Nephos does not
+assume K3s.
+
+Traefik does not provide local DNS resolution. Browser-openable local routes
+without `/etc/hosts` require a resolvable root domain such as
+`nephos.localhost`.
 
 Nephos owns route and visibility intent.
 
@@ -423,6 +476,13 @@ If generated hostnames collide, Nephos fails and requires explicit user input.
 Services do not expose admin routes through Nephos ingress in Phase 1.
 
 Nephos setup must create initial platform configuration before Apps are installed, including at least one ingress root domain and exactly one default/canonical root domain.
+
+For API 0.0.1 backend-local development, `uv run nephos-api init` creates the
+initial internal root domain. If no domain is passed, the default is
+`nephos.local` with platform-domain name `internal`.
+
+`NEPHOS_API_INTERNAL_DOMAIN` may provide that initial domain from `.env` or the
+process environment.
 
 Phase 1 uses Kubernetes Secrets.
 

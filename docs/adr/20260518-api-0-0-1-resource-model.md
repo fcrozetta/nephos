@@ -53,6 +53,10 @@ The request body uses `catalogRef` and carries the catalog reference, optional e
 
 `catalogRef.source` uses catalog source ids such as `default` or `local-1`.
 
+App install provider choices use `bindings.<alias>.serviceInstance`, where
+`alias` is the App requirement alias after defaulting and `serviceInstance` is
+the installed Service instance slug.
+
 Do not put install mutation under catalog endpoints as the primary API shape.
 
 Do not make arbitrary YAML path install the primary API shape.

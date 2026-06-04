@@ -114,6 +114,35 @@ Nephos-owned Kubernetes resources must be identifiable through accepted Nephos l
 
 Handlers must not mutate Kubernetes resources Nephos does not own.
 
+API 0.0.1 app-scoped provisioning uses internal backend-owned provisioning
+handlers called by the reconciler during Binding reconciliation.
+
+Provisioning handlers are Python adapter code, not public Service operation APIs,
+CLI commands, manifest-declared scripts, Helm hooks, or user-authored Kubernetes
+Jobs.
+
+Binding reconciliation may ask an internal provisioning handler for output values,
+then materialize the accepted `app-secret` Secret in the consuming App namespace.
+
+Secret values flow from handler to Kubernetes Secret materialization and must not
+be exposed in API responses, status evidence, or redacted binding summaries.
+
+SQLite binding output summaries store redacted metadata only, such as target,
+Secret name, namespace, and output key names.
+
+If a required handler is unavailable or cannot produce values, Binding
+reconciliation becomes `blocked` with structured evidence.
+
+The API 0.0.1 PostgreSQL app-scoped provisioning handler uses backend-owned
+Kubernetes API calls. It reads or creates a Nephos-owned Service-side credential
+Secret, reads the PostgreSQL administrator password from the Helm release Secret
+using the API 0.0.1 chart convention, executes idempotent `psql` statements
+inside the Nephos-owned PostgreSQL runtime pod, and returns the accepted
+`host`, `port`, `database`, `username`, `password`, and `uri` output fields.
+
+Those pod, Secret, SQL, and chart-convention details are adapter internals, not
+public manifest, API, or CLI contracts.
+
 ## Retry And Failure Semantics
 
 Simple capped retry is the intended model.
@@ -178,3 +207,114 @@ Nephos may reconcile Nephos-owned resources when desired state is explicit or wh
 Nephos should not continuously overwrite runtime drift in ways that hide operator changes without reporting them.
 
 Nephos must not mutate resources it does not own.
+
+## Pulumi Provider Runtime Invocation
+
+The accepted forward runtime-provider direction is an internal Python Pulumi
+provider package behind the reconciler.
+
+Nephos owns meaning.
+
+Pulumi performs labor.
+
+The reconciler calls Pulumi-backed provider code through narrow Python
+interfaces only.
+
+API handlers and CLI clients do not call Pulumi directly.
+
+Pulumi state is observed provider state, not canonical Nephos product state.
+
+If Nephos desired state and Pulumi state disagree, Nephos desired state wins.
+
+API 0.0.1 internal App and Service provider implementations are Python-only.
+
+The expected internal package direction is:
+
+```text
+nephos_api.providers
+```
+
+Provider packages may manage runtime App deployment, runtime Service
+deployment, generated Kubernetes resources, Helm releases through Pulumi
+Kubernetes/Helm support, app-scoped Service resources, and redacted provider
+status normalization.
+
+API 0.0.1 runtime deployment dispatch uses:
+
+```text
+src/nephos_api/providers/
+```
+
+The default deployment path is:
+
+```text
+ProviderRuntimeDeployer
+-> PulumiHelmProvider
+-> Pulumi Automation API
+-> kubernetes:helm.sh/v3:Release
+```
+
+Pulumi state uses a local file backend by default:
+
+```text
+.nephos/pulumi/state
+```
+
+Pulumi workspaces use:
+
+```text
+.nephos/pulumi/workspaces
+```
+
+Stack names match runtime names:
+
+```text
+app-<slug>
+svc-<slug>
+```
+
+The host running `nephos-api` must have the Pulumi CLI available on `PATH`.
+If the CLI is missing, reconciliation blocks with `pulumi_cli_missing`.
+
+The Pulumi local file backend requires a configured secrets provider through
+`PULUMI_CONFIG_PASSPHRASE` or `PULUMI_CONFIG_PASSPHRASE_FILE`.
+
+If neither variable is set, reconciliation blocks with
+`pulumi_passphrase_missing` before stack creation.
+
+Direct Helm is secondary for Services.
+
+Services need typed provider actions beyond generated config files:
+
+- install runtime resources
+- update runtime resources
+- start and stop runtime workloads
+- remove runtime deployment while preserving data
+- destroy runtime deployment and Service-owned data after confirmation
+- provision and deprovision app-scoped binding resources
+- produce redacted status/evidence
+
+For Services, Helm charts may be packaging inputs used by the Python Pulumi
+provider, but the provider action contract is Nephos-owned Python code.
+
+Provider packages must not define the public product model, lifecycle semantics,
+dependency graph, source of truth, or secret exposure policy.
+
+Release names, stack names, and namespaces must preserve accepted runtime
+identity:
+
+- `app-<slug>`
+- `svc-<slug>`
+
+`NEPHOS_API_KUBECONFIG` and `NEPHOS_API_KUBE_CONTEXT` remain bootstrap inputs
+for runtime provider configuration.
+
+Generated Pulumi programs, previews, apply results, Helm values, and provider
+state are runtime artifacts.
+
+They are not product API, catalog source of truth, committed examples, or
+canonical Nephos state.
+
+The previous direct Helm CLI adapter is superseded as the forward direction but
+remains useful implementation history and may temporarily exist as a fallback
+while Pulumi provider code lands.

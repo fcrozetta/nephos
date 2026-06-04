@@ -1,14 +1,21 @@
 # K3s Dev Integration Mechanics
 
-- Status: accepted
+- Status: superseded
 - Date: 2026-05-22
 - Tags: k3s, kubernetes, testing, development, phase-1
 
+Superseded for API 0.0.1 runtime target naming and integration test naming by
+[Kubernetes Runtime Target and Local Ingress DNS](./20260601-kubernetes-runtime-target-and-local-ingress-dns.md).
+The retained decision is that `nephos-api` tests do not manage cluster
+lifecycle and require explicit opt-in before mutating a selected Kubernetes
+cluster.
+
 ## Context and Problem Statement
 
-Nephos targets K3s as the Phase 1 real runtime backend.
+Nephos targets K3s as the Phase 1 default/reference runtime backend.
 
-Earlier decisions accepted real K3s integration tests, pytest markers, and a default backend test command that excludes K3s tests.
+Earlier decisions accepted real Kubernetes integration tests, pytest markers
+named `k3s`, and a default backend test command that excludes those tests.
 
 The missing decisions were:
 
@@ -29,9 +36,11 @@ They must also keep `nephos-api` from becoming a raw cluster lifecycle manager.
 
 ## Decision
 
-`nephos-api` tests do not install, start, stop, reset, or destroy K3s.
+`nephos-api` tests do not install, start, stop, reset, or destroy K3s or any
+other Kubernetes cluster.
 
-K3s integration tests require a pre-existing reachable K3s cluster.
+K3s-marked integration tests require a pre-existing reachable Kubernetes
+cluster selected through kubeconfig/context.
 
 Kubernetes target selection uses the normal Kubernetes client configuration resolution by default.
 
@@ -55,7 +64,8 @@ Stricter context/server/namespace allow-listing may be added later, but the firs
 
 Default CI runs unit and non-K3s tests only.
 
-K3s integration tests are local/manual until a later CI decision defines a real K3s job.
+K3s integration tests are local/manual until a later CI decision defines a
+real Kubernetes runtime job.
 
 K3s integration tests use generated test namespaces.
 
@@ -71,18 +81,19 @@ The runtime backend uses the same kubeconfig/context resolution as K3s integrati
 
 Cluster setup and lifecycle remain user-managed or `nephos-cli`-managed for now.
 
-`nephos-api` must not start K3s itself.
+`nephos-api` must not start K3s, k3d, kind, kubeadm, or any other cluster
+itself.
 
 ## Considered Options
 
-### Green: pre-existing K3s cluster, explicit opt-in tests
+### Green: pre-existing Kubernetes cluster, explicit opt-in tests
 
 - Good, because `nephos-api` tests stay focused on backend behavior.
 - Good, because cluster lifecycle remains separate from API/reconciler logic.
 - Good, because accidental mutation risk is reduced by explicit opt-in.
-- Bad, because developers must prepare a K3s cluster before running integration tests.
+- Bad, because developers must prepare a compatible Kubernetes cluster before running integration tests.
 
-### Amber: test harness starts and resets K3s
+### Amber: test harness starts and resets K3s or another cluster
 
 - Good, because test setup can be more repeatable.
 - Bad, because `nephos-api` would start owning cluster lifecycle before the CLI/setup contract exists.
@@ -92,7 +103,7 @@ Cluster setup and lifecycle remain user-managed or `nephos-cli`-managed for now.
 
 - Good, because it is easy to implement.
 - Bad, because it can mutate the wrong cluster.
-- Bad, because K3s-dependent tests would become unsafe and surprising.
+- Bad, because Kubernetes-dependent tests would become unsafe and surprising.
 
 ### Green: normal kubeconfig resolution plus explicit env overrides
 
@@ -140,16 +151,18 @@ The explicit K3s integration command remains:
 uv run pytest -m k3s
 ```
 
-Default CI must not run K3s tests until a later decision accepts a K3s CI job.
+Default CI must not run K3s tests until a later decision accepts a Kubernetes
+runtime CI job.
 
 K3s integration tests must use generated namespaces and ownership labels so cleanup is bounded.
 
-`nephos-api` can reconcile into Kubernetes, but it does not own cluster setup or K3s lifecycle.
+`nephos-api` can reconcile into Kubernetes, but it does not own cluster setup
+or cluster lifecycle.
 
 ## Open Questions
 
 - exact generated test namespace name format
 - exact stricter allowed-context/server safety check beyond opt-in and reachability
-- future K3s CI job shape, if K3s integration is added to CI
+- future Kubernetes runtime CI job shape, if K3s integration is added to CI
 - exact Kubernetes client fixture implementation
 - exact `nephos-cli` local backend and cluster setup workflow
