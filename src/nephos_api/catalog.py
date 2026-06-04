@@ -12,6 +12,10 @@ from nephos_api.domain import (
     validate_machine_identifier,
 )
 
+_KUBERNETES_DNS_LABEL_MAX_LENGTH = 63
+_BINDING_SECRET_NAME_PREFIX = "nephos-bind-"
+_ROUTE_INGRESS_NAME_PREFIX = "nephos-route-"
+
 
 class CatalogValidationError(ValueError):
     pass
@@ -369,6 +373,13 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             label="binding alias",
             value=alias,
         )
+        _validate_generated_kubernetes_name(
+            path=path,
+            label="binding alias",
+            value=alias,
+            prefix=_BINDING_SECRET_NAME_PREFIX,
+            resource_kind="Secret",
+        )
         if alias in aliases:
             raise CatalogValidationError(
                 f"invalid App manifest {path}: duplicate binding alias {alias!r}"
@@ -387,6 +398,13 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             path=path,
             label="route name",
             value=route.name,
+        )
+        _validate_generated_kubernetes_name(
+            path=path,
+            label="route name",
+            value=route.name,
+            prefix=_ROUTE_INGRESS_NAME_PREFIX,
+            resource_kind="Ingress",
         )
         if route.name in route_names:
             raise CatalogValidationError(
@@ -477,6 +495,23 @@ def _validate_catalog_identifier(*, path: Path, label: str, value: str) -> None:
         raise CatalogValidationError(
             f"invalid manifest {path}: invalid {label} {value!r}"
         ) from exc
+
+
+def _validate_generated_kubernetes_name(
+    *,
+    path: Path,
+    label: str,
+    value: str,
+    prefix: str,
+    resource_kind: str,
+) -> None:
+    name = f"{prefix}{value}"
+    if len(name) > _KUBERNETES_DNS_LABEL_MAX_LENGTH:
+        raise CatalogValidationError(
+            f"invalid App manifest {path}: {label} {value!r} creates "
+            f"Kubernetes {resource_kind} name {name!r} longer than "
+            f"{_KUBERNETES_DNS_LABEL_MAX_LENGTH} characters"
+        )
 
 
 def _app_summary(

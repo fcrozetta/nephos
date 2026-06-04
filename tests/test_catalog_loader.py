@@ -199,6 +199,68 @@ spec:
         loader.list_apps()
 
 
+def test_catalog_loader_rejects_binding_alias_that_exceeds_secret_name_limit(
+    tmp_path: Path,
+) -> None:
+    alias = "a" * 52
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  requires:
+    - capability: postgres
+      as: {alias}
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="binding alias"):
+        loader.list_apps()
+
+
+def test_catalog_loader_rejects_route_name_that_exceeds_ingress_name_limit(
+    tmp_path: Path,
+) -> None:
+    route_name = "r" * 51
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  routes:
+    - name: {route_name}
+      visibility: local
+      target:
+        port: http
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="route name"):
+        loader.list_apps()
+
+
 def test_catalog_loader_rejects_unsupported_route_visibility(
     tmp_path: Path,
 ) -> None:
