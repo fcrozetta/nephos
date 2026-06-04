@@ -30,6 +30,7 @@ class FakeCoreV1Api:
         self.deleted: list[str] = []
         self.created_secrets: list[V1Secret] = []
         self.replaced_secrets: list[V1Secret] = []
+        self.deleted_secrets: list[tuple[str, str]] = []
 
     def create_namespace(self, body: V1Namespace) -> V1Namespace:
         assert body.metadata is not None
@@ -73,6 +74,13 @@ class FakeCoreV1Api:
         self.secrets[key] = body
         self.replaced_secrets.append(body)
         return body
+
+    def delete_namespaced_secret(self, namespace: str, name: str) -> None:
+        key = (namespace, name)
+        if key not in self.secrets:
+            raise ApiException(status=404, reason="Not Found")
+        self.deleted_secrets.append(key)
+        del self.secrets[key]
 
 
 class SlowDeletingCoreV1Api(FakeCoreV1Api):
@@ -429,6 +437,61 @@ def test_runtime_refuses_to_replace_unowned_binding_secret() -> None:
             alias="database",
             capability="postgres",
             values={"uri": "new"},
+        )
+
+
+def test_runtime_deletes_owned_binding_secret() -> None:
+    api = FakeCoreV1Api()
+    runtime = KubernetesRuntime(api)
+    runtime.ensure_namespace("app_instance", "paperless")
+    runtime.ensure_binding_secret(
+        app_slug="paperless",
+        service_slug="postgres",
+        alias="database",
+        capability="postgres",
+        values={"uri": "postgresql://example"},
+    )
+
+    assert runtime.delete_binding_secret_if_owned(
+        app_slug="paperless",
+        service_slug="postgres",
+        alias="database",
+        capability="postgres",
+    ) is True
+
+    assert api.deleted_secrets == [("app-paperless", "nephos-bind-database")]
+    assert ("app-paperless", "nephos-bind-database") not in api.secrets
+
+
+def test_runtime_delete_binding_secret_returns_false_when_secret_is_absent() -> None:
+    api = FakeCoreV1Api()
+    runtime = KubernetesRuntime(api)
+    runtime.ensure_namespace("app_instance", "paperless")
+
+    assert runtime.delete_binding_secret_if_owned(
+        app_slug="paperless",
+        service_slug="postgres",
+        alias="database",
+        capability="postgres",
+    ) is False
+
+
+def test_runtime_refuses_to_delete_unowned_binding_secret() -> None:
+    api = FakeCoreV1Api()
+    runtime = KubernetesRuntime(api)
+    runtime.ensure_namespace("app_instance", "paperless")
+    namespace = namespace_name("app_instance", "paperless")
+    secret_name = binding_secret_name("database")
+    api.secrets[(namespace, secret_name)] = V1Secret(
+        metadata=V1ObjectMeta(name=secret_name, namespace=namespace, labels={})
+    )
+
+    with pytest.raises(KubernetesRuntimeSafetyError, match="unowned Secret"):
+        runtime.delete_binding_secret_if_owned(
+            app_slug="paperless",
+            service_slug="postgres",
+            alias="database",
+            capability="postgres",
         )
 
 

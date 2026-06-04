@@ -137,6 +137,47 @@ class KubernetesRuntime:
             body=secret,
         )
 
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool:
+        namespace = namespace_name("app_instance", app_slug)
+        namespace_resource = self._read_namespace(namespace)
+        if namespace_resource is None:
+            return False
+        _assert_active_namespace(
+            namespace_resource,
+            resource_type="app_instance",
+            slug=app_slug,
+            name=namespace,
+        )
+        name = binding_secret_name(alias)
+        existing = self._read_secret(namespace=namespace, name=name)
+        if existing is None:
+            return False
+        if not _is_owned_binding_secret(
+            existing,
+            app_slug=app_slug,
+            service_slug=service_slug,
+            alias=alias,
+            capability=capability,
+        ):
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to delete unowned Secret {namespace}/{name}"
+            )
+        try:
+            self._core_v1_api.delete_namespaced_secret(namespace=namespace, name=name)
+        except ApiException as exc:
+            if exc.status == 404:
+                return False
+            raise
+        self._wait_until_secret_absent(namespace=namespace, name=name)
+        return True
+
     def scale_workloads(
         self,
         resource_type: ResourceType,
@@ -314,6 +355,18 @@ class KubernetesRuntime:
             if time.monotonic() >= deadline:
                 raise TimeoutError(
                     f"timed out waiting for Ingress {namespace}/{name} deletion"
+                )
+            if self._namespace_delete_poll_interval_seconds > 0:
+                time.sleep(self._namespace_delete_poll_interval_seconds)
+
+    def _wait_until_secret_absent(self, *, namespace: str, name: str) -> None:
+        deadline = time.monotonic() + self._namespace_delete_timeout_seconds
+        while True:
+            if self._read_secret(namespace=namespace, name=name) is None:
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"timed out waiting for Secret {namespace}/{name} deletion"
                 )
             if self._namespace_delete_poll_interval_seconds > 0:
                 time.sleep(self._namespace_delete_poll_interval_seconds)

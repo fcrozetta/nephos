@@ -175,6 +175,21 @@ class _LazyRuntimeAdapter:
             values=values,
         )
 
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool:
+        return self._get().delete_binding_secret_if_owned(
+            app_slug=app_slug,
+            service_slug=service_slug,
+            alias=alias,
+            capability=capability,
+        )
+
     def scale_workloads(
         self,
         resource_type: ResourceType,

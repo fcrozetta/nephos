@@ -17,6 +17,7 @@ class FakeRuntime:
         self.namespaces: list[tuple[str, str]] = []
         self.deleted_namespaces: list[tuple[str, str]] = []
         self.binding_secrets: list[dict[str, object]] = []
+        self.deleted_binding_secrets: list[dict[str, object]] = []
         self.scaled_workloads: list[tuple[str, str, int]] = []
         self.app_ingresses: list[dict[str, object]] = []
         self.deleted_app_ingresses: list[dict[str, object]] = []
@@ -46,6 +47,24 @@ class FakeRuntime:
                 "values": values,
             }
         )
+
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool:
+        self.deleted_binding_secrets.append(
+            {
+                "app_slug": app_slug,
+                "service_slug": service_slug,
+                "alias": alias,
+                "capability": capability,
+            }
+        )
+        return True
 
     def scale_workloads(
         self,
@@ -91,6 +110,16 @@ class FailingRuntime:
         capability: str,
         values: dict[str, str],
     ) -> None:
+        raise RuntimeError(f"boom for binding {alias}")
+
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool:
         raise RuntimeError(f"boom for binding {alias}")
 
     def scale_workloads(
@@ -171,6 +200,32 @@ class RecordingDeployer(FakeDeployer):
     def uninstall(self, *, target_type: str, slug: str) -> None:
         self.events.append(f"uninstall:{target_type}:{slug}")
         super().uninstall(target_type=target_type, slug=slug)
+
+
+class RecordingRuntime(FakeRuntime):
+    def __init__(self, events: list[str]) -> None:
+        super().__init__()
+        self.events = events
+
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool:
+        self.events.append(f"delete-binding-secret:{alias}")
+        return super().delete_binding_secret_if_owned(
+            app_slug=app_slug,
+            service_slug=service_slug,
+            alias=alias,
+            capability=capability,
+        )
+
+    def delete_namespace_if_owned(self, resource_type: str, slug: str) -> bool:
+        self.events.append(f"delete-namespace:{resource_type}:{slug}")
+        return super().delete_namespace_if_owned(resource_type, slug)
 
 
 class BlockingDeployer:
@@ -967,11 +1022,14 @@ def test_service_destroy_deletes_namespace_and_desired_state_row(
     _assert_request_succeeded(repo, request.id)
 
 
-def test_forced_service_destroy_removes_dependent_bindings_before_row_delete(
+def test_forced_service_destroy_cleans_dependent_bindings_before_row_delete(
     tmp_path: Path,
 ) -> None:
     repo = _repo(tmp_path)
-    runtime = FakeRuntime()
+    events: list[str] = []
+    runtime = RecordingRuntime(events)
+    provisioner = RecordingProvisioner(events)
+    deployer = RecordingDeployer(events)
     with repo.transaction() as tx:
         service = tx.create_service_instance(
             slug="postgres",
@@ -987,7 +1045,7 @@ def test_forced_service_destroy_removes_dependent_bindings_before_row_delete(
             catalog_source_path=str(_write_routeless_app(tmp_path)),
             manifest_digest="sha256:paperless",
         )
-        tx.create_binding(
+        binding = tx.create_binding(
             app_instance_id=app.id,
             service_instance_id=service.id,
             alias="database",
@@ -1002,11 +1060,79 @@ def test_forced_service_destroy_removes_dependent_bindings_before_row_delete(
             target_snapshot={"slug": service.slug},
         )
 
-    assert Reconciler(repo, runtime=runtime).run_once() == 1
+    assert (
+        Reconciler(
+            repo,
+            runtime=runtime,
+            provisioner=provisioner,
+            deployer=deployer,
+        ).run_once()
+        == 1
+    )
 
+    assert events == [
+        "deprovision:database",
+        "delete-binding-secret:database",
+        "uninstall:service_instance:postgres",
+        "delete-namespace:service_instance:postgres",
+    ]
+    assert provisioner.deprovisioned_contexts == [
+        BindingProvisioningContext(
+            binding_id=binding.id,
+            app_slug="paperless",
+            service_slug="postgres",
+            alias="database",
+            capability="postgres",
+        )
+    ]
+    assert runtime.deleted_binding_secrets == [
+        {
+            "app_slug": "paperless",
+            "service_slug": "postgres",
+            "alias": "database",
+            "capability": "postgres",
+        }
+    ]
     assert repo.get_service_row("postgres") is None
     assert repo.get_app_row("paperless") is not None
     assert repo.list_bindings_for_app(app.id) == []
+    with sqlite3.connect(repo.db_path) as connection:
+        app_reconcile = connection.execute(
+            """
+            SELECT target_type, target_id, target_generation, action, state,
+                target_snapshot_json
+            FROM reconciliation_requests
+            WHERE target_type = 'app_instance'
+            """
+        ).fetchone()
+        status = connection.execute(
+            """
+            SELECT level, reconciliation, reason, message, observed_generation
+            FROM status_snapshots
+            WHERE resource_type = 'app_instance' AND resource_id = ?
+            """,
+            (app.id,),
+        ).fetchone()
+
+    assert app_reconcile is not None
+    assert app_reconcile[:5] == (
+        "app_instance",
+        app.id,
+        app.generation,
+        "reconcile",
+        "pending",
+    )
+    assert json.loads(app_reconcile[5]) == {"slug": "paperless"}
+    assert status == (
+        "blocked",
+        "blocked",
+        "binding_provider_destroyed",
+        (
+            "A bound Service was destroyed; App reconciliation is queued to remove "
+            "stale binding data."
+        ),
+        app.generation,
+    )
     _assert_request_succeeded(repo, request.id)
 
 

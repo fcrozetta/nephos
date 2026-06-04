@@ -99,7 +99,7 @@ Current understanding:
 - Existing runtime namespaces are reused only when they carry the expected Nephos ownership labels.
 - The default lazy runtime/provisioner wrappers used by `nephos-api serve` forward lifecycle and deprovisioning operations, not just install/provision operations.
 - App destroy uninstalls the App runtime before deprovisioning app-scoped Service resources.
-- Forced Service destroy removes dependent binding rows before deleting the Service desired-state row.
+- Forced Service destroy deprovisions dependent bindings, removes App-side binding Secrets, queues dependent App reconciliation, and only then removes dependent binding rows before deleting the Service desired-state row.
 - Kubernetes runtime safety refusals are reported as blocked reconciliation with reason `runtime_safety_blocked`, not generic runtime failures.
 - Nested App binding and Service dependent entries expose compact binding status snapshots when status exists.
 - Kubernetes runtime deletion helpers wait for Nephos-owned App Ingresses and namespaces to read as absent before reconciliation marks remove/destroy work succeeded.
@@ -180,7 +180,7 @@ Proposed steps:
    - Return accepted binding output fields: `host`, `port`, `database`, `username`, `password`, and `uri`.
    - Ensure the default lazy provisioner path forwards App destroy deprovisioning.
    - Uninstall App runtime before deprovisioning App-scoped resources.
-   - Remove dependent binding rows during forced Service destroy so the Service row deletion satisfies SQLite constraints.
+   - During forced Service destroy, deprovision dependent bindings while the Service runtime still exists, delete App-side binding Secrets, queue affected App reconciliation, then remove binding rows before deleting the Service row.
 7. End-to-end Kubernetes reference flow:
    - Run opt-in Kubernetes runtime tests only with `NEPHOS_API_RUN_KUBERNETES_TESTS=1`.
    - Requires a pre-existing reachable Kubernetes cluster.

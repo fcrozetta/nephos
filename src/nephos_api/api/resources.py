@@ -17,8 +17,8 @@ from nephos_api.catalog import (
     CatalogSourceNotFoundError,
     CatalogValidationError,
 )
-from nephos_api.domain import validate_machine_identifier
 from nephos_api.errors import NephosError
+from nephos_api.kubernetes_runtime import ResourceType, namespace_name
 from nephos_api.repository import DesiredStateRepository
 
 router = APIRouter(tags=["resources"])
@@ -84,7 +84,7 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
         )
     )
     slug = payload.instanceName or catalog_entry["name"]
-    validate_machine_identifier(slug)
+    _validate_runtime_namespace_slug("service_instance", slug)
     source_path = _catalog_source_path(
         request,
         kind="Service",
@@ -202,7 +202,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
         )
     )
     slug = payload.instanceName or catalog_entry["name"]
-    validate_machine_identifier(slug)
+    _validate_runtime_namespace_slug("app_instance", slug)
     source_path = _catalog_source_path(
         request,
         kind="App",
@@ -309,6 +309,28 @@ def app_action(
         "resource": _app_snapshot(request, updated),
         "reconciliation": {"id": reconciliation.id, "state": reconciliation.state},
     }
+
+
+def _validate_runtime_namespace_slug(resource_type: ResourceType, slug: str) -> None:
+    try:
+        namespace_name(resource_type, slug)
+    except ValueError as exc:
+        label = "App" if resource_type == "app_instance" else "Service"
+        prefix = "app-" if resource_type == "app_instance" else "svc-"
+        raise NephosError(
+            status_code=400,
+            code="runtime_namespace_name_invalid",
+            message=(
+                f"{label} instance name is not valid for the generated "
+                "Kubernetes namespace."
+            ),
+            details={
+                "instanceName": slug,
+                "namespacePrefix": prefix,
+                "maxInstanceNameLength": 63 - len(prefix),
+                "reason": str(exc),
+            },
+        ) from exc
 
 
 def _resolve_binding_providers(

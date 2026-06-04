@@ -140,6 +140,8 @@ class RuntimeRef(BaseModel):
     def validate_runtime_reference(self) -> RuntimeRef:
         if self.type == "helm" and self.chart is None:
             raise ValueError("helm runtime requires chart")
+        if self.type == "helm" and self.provider is not None:
+            raise ValueError("helm runtime must not define provider")
         if self.type == "provider" and self.provider is None:
             raise ValueError("provider runtime requires provider")
         if self.type == "provider" and self.chart is not None:

@@ -32,6 +32,15 @@ class RuntimeAdapter(Protocol):
         values: dict[str, str],
     ) -> object: ...
 
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool: ...
+
     def scale_workloads(
         self,
         resource_type: ResourceType,
@@ -308,6 +317,7 @@ class Reconciler:
                 continue
             binding = self._repository.get_binding_row(str(dependent["binding_id"]))
             if binding is not None:
+                binding["app_lifecycle"] = dependent["app_lifecycle"]
                 bindings.append(binding)
         return bindings
 
@@ -406,6 +416,11 @@ class Reconciler:
         slug = _target_slug(request)
         if target_type == "app_instance":
             self._delete_app_ingresses(slug)
+        service_dependent_bindings: list[dict[str, object]] = []
+        if target_type == "service_instance":
+            service_dependent_bindings = self._cleanup_service_dependent_bindings(
+                service_instance_id=str(request["target_id"]),
+            )
         if self._deployer is not None:
             self._deployer.uninstall(target_type=target_type, slug=slug)
         if target_type == "app_instance":
@@ -415,6 +430,40 @@ class Reconciler:
         self._runtime.delete_namespace_if_owned(_resource_type(target_type), slug)
         message = "Kubernetes namespace teardown completed."
         with self._repository.transaction() as tx:
+            for binding in service_dependent_bindings:
+                tx.create_reconciliation_request_if_not_active(
+                    target_type="app_instance",
+                    target_id=str(binding["app_instance_id"]),
+                    target_generation=int(str(binding["app_instance_generation"])),
+                    action="reconcile",
+                    target_snapshot={"slug": str(binding["app_instance_slug"])},
+                )
+                tx.upsert_status_snapshot(
+                    resource_type="app_instance",
+                    resource_id=str(binding["app_instance_id"]),
+                    level="blocked",
+                    lifecycle=str(binding.get("app_lifecycle", "running")),
+                    reconciliation="blocked",
+                    reason="binding_provider_destroyed",
+                    message=(
+                        "A bound Service was destroyed; App reconciliation is "
+                        "queued to remove stale binding data."
+                    ),
+                    evidence=[
+                        {
+                            "source": "nephos-api",
+                            "subject": str(request["id"]),
+                            "reason": "binding_provider_destroyed",
+                            "message": (
+                                "Bound Service was destroyed during forced "
+                                "Service teardown."
+                            ),
+                            "bindingAlias": str(binding["alias"]),
+                            "serviceSlug": str(binding["service_instance_slug"]),
+                        }
+                    ],
+                    observed_generation=int(str(binding["app_instance_generation"])),
+                )
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),
                 state="succeeded",
@@ -494,6 +543,36 @@ class Reconciler:
                     capability=str(binding["capability"]),
                 )
             )
+
+    def _cleanup_service_dependent_bindings(
+        self,
+        *,
+        service_instance_id: str,
+    ) -> list[dict[str, object]]:
+        assert self._runtime is not None
+        bindings = self._dependent_bindings_for_service(service_instance_id)
+        deprovision = (
+            getattr(self._provisioner, "deprovision_binding", None)
+            if self._provisioner is not None
+            else None
+        )
+        for binding in bindings:
+            context = BindingProvisioningContext(
+                binding_id=str(binding["id"]),
+                app_slug=str(binding["app_instance_slug"]),
+                service_slug=str(binding["service_instance_slug"]),
+                alias=str(binding["alias"]),
+                capability=str(binding["capability"]),
+            )
+            if deprovision is not None:
+                deprovision(context)
+            self._runtime.delete_binding_secret_if_owned(
+                app_slug=context.app_slug,
+                service_slug=context.service_slug,
+                alias=context.alias,
+                capability=context.capability,
+            )
+        return bindings
 
     def _reconcile_platform_domain_request(self, request: dict[str, object]) -> bool:
         target_type = str(request["target_type"])

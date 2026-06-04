@@ -363,6 +363,34 @@ spec:
     assert loader.list_services()[0]["name"] == "postgres"
 
 
+def test_catalog_loader_rejects_provider_metadata_on_helm_runtime(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+    provider:
+      name: paperless-provider
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="must not define provider"):
+        loader.list_apps()
+
+
 def test_catalog_loader_requires_source_for_ambiguous_duplicates(
     tmp_path: Path,
 ) -> None:

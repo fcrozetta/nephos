@@ -15,6 +15,7 @@ class FakeRuntime:
         self.namespaces: list[tuple[str, str]] = []
         self.deleted_namespaces: list[tuple[str, str]] = []
         self.binding_secrets: list[dict[str, object]] = []
+        self.deleted_binding_secrets: list[dict[str, object]] = []
         self.app_ingresses: list[dict[str, object]] = []
         self.scaled_workloads: list[tuple[str, str, int]] = []
 
@@ -43,6 +44,24 @@ class FakeRuntime:
                 "values": values,
             }
         )
+
+    def delete_binding_secret_if_owned(
+        self,
+        *,
+        app_slug: str,
+        service_slug: str,
+        alias: str,
+        capability: str,
+    ) -> bool:
+        self.deleted_binding_secrets.append(
+            {
+                "app_slug": app_slug,
+                "service_slug": service_slug,
+                "alias": alias,
+                "capability": capability,
+            }
+        )
+        return True
 
     def ensure_app_ingresses(
         self,

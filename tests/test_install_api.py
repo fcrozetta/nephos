@@ -71,6 +71,70 @@ def test_install_service_from_catalog_creates_desired_state(tmp_path: Path) -> N
     assert list_response.json()["services"][0]["slug"] == "postgres"
 
 
+def test_install_service_rejects_instance_name_that_exceeds_namespace_limit(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    slug = "s" * 60
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "instanceName": slug,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "runtime_namespace_name_invalid",
+            "message": (
+                "Service instance name is not valid for the generated "
+                "Kubernetes namespace."
+            ),
+            "details": {
+                "instanceName": slug,
+                "namespacePrefix": "svc-",
+                "maxInstanceNameLength": 59,
+                "reason": f"svc-{slug} exceeds Kubernetes namespace length",
+            },
+        }
+    }
+
+
+def test_install_app_rejects_instance_name_that_exceeds_namespace_limit(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+    slug = "a" * 60
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "instanceName": slug,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "runtime_namespace_name_invalid",
+            "message": (
+                "App instance name is not valid for the generated "
+                "Kubernetes namespace."
+            ),
+            "details": {
+                "instanceName": slug,
+                "namespacePrefix": "app-",
+                "maxInstanceNameLength": 59,
+                "reason": f"app-{slug} exceeds Kubernetes namespace length",
+            },
+        }
+    }
+
+
 def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
     client = _client(tmp_path)
     service = client.post(
