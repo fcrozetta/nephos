@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from pathlib import Path
 from typing import Protocol
 
@@ -565,7 +566,12 @@ class Reconciler:
                 capability=str(binding["capability"]),
             )
             if deprovision is not None:
-                deprovision(context)
+                # Force-destroy tears down the whole Service namespace next. If
+                # the Service runtime/admin Secret/pod is already gone,
+                # provider cleanup cannot run but App-side binding cleanup and
+                # Service teardown must still proceed.
+                with suppress(Exception):
+                    deprovision(context)
             self._runtime.delete_binding_secret_if_owned(
                 app_slug=context.app_slug,
                 service_slug=context.service_slug,

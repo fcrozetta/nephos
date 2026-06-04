@@ -192,6 +192,12 @@ class RecordingProvisioner(FakeProvisioner):
         super().deprovision_binding(context)
 
 
+class FailingDeprovisionProvisioner(RecordingProvisioner):
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        super().deprovision_binding(context)
+        raise RuntimeError("service runtime is already gone")
+
+
 class RecordingDeployer(FakeDeployer):
     def __init__(self, events: list[str]) -> None:
         super().__init__()
@@ -1133,6 +1139,83 @@ def test_forced_service_destroy_cleans_dependent_bindings_before_row_delete(
         ),
         app.generation,
     )
+    _assert_request_succeeded(repo, request.id)
+
+
+def test_forced_service_destroy_continues_when_deprovision_runtime_is_gone(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    events: list[str] = []
+    runtime = RecordingRuntime(events)
+    provisioner = FailingDeprovisionProvisioner(events)
+    deployer = RecordingDeployer(events)
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path="catalog/services/postgres/service.yaml",
+            manifest_digest="sha256:postgres",
+        )
+        app = tx.create_app_instance(
+            slug="paperless",
+            catalog_name="paperless",
+            catalog_source_id="default",
+            catalog_source_path=str(_write_routeless_app(tmp_path)),
+            manifest_digest="sha256:paperless",
+        )
+        binding = tx.create_binding(
+            app_instance_id=app.id,
+            service_instance_id=service.id,
+            alias="database",
+            capability="postgres",
+            output_summary={"target": "app-secret", "redacted": True},
+        )
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action="destroy",
+            target_snapshot={"slug": service.slug},
+        )
+
+    assert (
+        Reconciler(
+            repo,
+            runtime=runtime,
+            provisioner=provisioner,
+            deployer=deployer,
+        ).run_once()
+        == 1
+    )
+
+    assert events == [
+        "deprovision:database",
+        "delete-binding-secret:database",
+        "uninstall:service_instance:postgres",
+        "delete-namespace:service_instance:postgres",
+    ]
+    assert provisioner.deprovisioned_contexts == [
+        BindingProvisioningContext(
+            binding_id=binding.id,
+            app_slug="paperless",
+            service_slug="postgres",
+            alias="database",
+            capability="postgres",
+        )
+    ]
+    assert runtime.deleted_binding_secrets == [
+        {
+            "app_slug": "paperless",
+            "service_slug": "postgres",
+            "alias": "database",
+            "capability": "postgres",
+        }
+    ]
+    assert repo.get_service_row("postgres") is None
+    assert repo.get_app_row("paperless") is not None
+    assert repo.list_bindings_for_app(app.id) == []
     _assert_request_succeeded(repo, request.id)
 
 
