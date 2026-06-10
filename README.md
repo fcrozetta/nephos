@@ -18,6 +18,7 @@ semantics above raw Kubernetes objects.
 ## Contents
 
 - [QuickStart](#quickstart)
+- [Adding Registries](#adding-registries)
 - [Why Nephos](#why-nephos)
 - [How It Works](#how-it-works)
 - [Advanced: Why Reconciliation Exists](#advanced-why-reconciliation-exists)
@@ -52,6 +53,66 @@ NEPHOS_API_INTERNAL_DOMAIN=nephos.localhost
 ```
 
 Your selected Kubernetes cluster still needs a reachable ingress controller.
+
+## Adding Registries
+
+Nephos discovers installable Apps and Services from catalog roots. API 0.0.1
+always loads this repository's built-in `catalog/` root, and you can add more
+local registry checkouts with `NEPHOS_API_CATALOG_ROOTS`.
+
+A registry root is any local directory with this shape:
+
+```text
+apps/
+  <app-slug>/
+    app.yaml
+services/
+  <service-slug>/
+    service.yaml
+```
+
+Clone or create the registry roots you want to use, then add their local paths
+to your Nephos environment.
+
+For an interactive shell:
+
+```bash
+export NEPHOS_API_CATALOG_ROOTS="/path/to/registry-a:/path/to/registry-b:/path/to/registry-c"
+```
+
+For `.env`, use `~` or absolute paths; Nephos does not expand `$HOME` inside
+`.env` values:
+
+```dotenv
+NEPHOS_API_CATALOG_ROOTS=~/nephos-registries/registry-a:~/nephos-registries/registry-b:~/nephos-registries/registry-c
+```
+
+On macOS and Linux, separate registry roots with `:`. On Windows, use `;`.
+Configured roots are loaded in order and receive source IDs `local-1`,
+`local-2`, `local-3`, and so on. The built-in repo catalog is `default`.
+
+After starting `nephos-api`, verify the loaded catalog entries through the API:
+
+```bash
+curl -sS http://127.0.0.1:8000/catalog/apps
+curl -sS http://127.0.0.1:8000/catalog/services
+```
+
+If two registries contain the same App or Service name, Nephos reports the entry
+as ambiguous. Select the desired source explicitly when installing:
+
+```json
+{
+  "catalogRef": {
+    "kind": "Service",
+    "name": "postgres",
+    "source": "local-1"
+  }
+}
+```
+
+For API 0.0.1, registries are local filesystem catalog roots. Remote Git/OCI
+registry sync and a `nephos registry add` command are future work.
 
 ## Why Nephos
 
