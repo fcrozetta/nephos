@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115,<1",
+    "httpx>=0.27,<1",
+    "httpx2>=2,<3",
     "kubernetes>=31,<35",
     "pydantic>=2,<3",
     "pulumi>=3,<4",
@@ -20,7 +22,6 @@ nephos-api = "nephos_api.cli:main"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.27,<1",
     "pytest>=8,<9",
     "ruff>=0.8,<1",
 ]
