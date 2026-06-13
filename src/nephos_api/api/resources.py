@@ -17,6 +17,7 @@ from nephos_api.catalog import (
     CatalogSourceNotFoundError,
     CatalogValidationError,
 )
+from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
 from nephos_api.kubernetes_runtime import ResourceType, namespace_name
 from nephos_api.repository import DesiredStateRepository
@@ -76,6 +77,7 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
             details={"kind": payload.catalogRef.kind},
         )
 
+    _validate_catalog_name(payload.catalogRef.name)
     loader = _loader(request)
     catalog_entry = _catalog_or_404(
         lambda: loader.get_service(
@@ -200,6 +202,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
             details={"kind": payload.catalogRef.kind},
         )
 
+    _validate_catalog_name(payload.catalogRef.name)
     loader = _loader(request)
     catalog_entry = _catalog_or_404(
         lambda: loader.get_app(
@@ -342,6 +345,18 @@ def _validate_runtime_namespace_slug(resource_type: ResourceType, slug: str) -> 
                 "maxInstanceNameLength": 63 - len(prefix),
                 "reason": str(exc),
             },
+        ) from exc
+
+
+def _validate_catalog_name(name: str) -> None:
+    try:
+        validate_machine_identifier(name)
+    except InvalidMachineIdentifierError as exc:
+        raise NephosError(
+            status_code=400,
+            code="catalog_name_invalid",
+            message="Catalog name is invalid.",
+            details={"name": name},
         ) from exc
 
 

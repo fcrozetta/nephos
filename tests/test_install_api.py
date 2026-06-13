@@ -135,6 +135,42 @@ def test_install_app_rejects_instance_name_that_exceeds_namespace_limit(
     }
 
 
+def test_install_app_returns_invalid_catalog_name_error(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/apps",
+        json={"catalogRef": {"kind": "App", "name": "Bad_Name"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "catalog_name_invalid",
+            "message": "Catalog name is invalid.",
+            "details": {"name": "Bad_Name"},
+        }
+    }
+
+
+def test_install_service_returns_invalid_catalog_name_error(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "Bad_Name"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "catalog_name_invalid",
+            "message": "Catalog name is invalid.",
+            "details": {"name": "Bad_Name"},
+        }
+    }
+
+
 def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
     client = _client(tmp_path)
     service = client.post(

@@ -11,6 +11,7 @@ from nephos_api.catalog import (
     CatalogSourceNotFoundError,
     CatalogValidationError,
 )
+from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -27,6 +28,7 @@ def get_app(
     request: Request,
     source: str | None = None,
 ) -> dict[str, Any]:
+    _validate_catalog_name(name)
     return _handle_catalog_errors(lambda: _loader(request).get_app(name, source=source))
 
 
@@ -41,6 +43,7 @@ def get_service(
     request: Request,
     source: str | None = None,
 ) -> dict[str, Any]:
+    _validate_catalog_name(name)
     return _handle_catalog_errors(
         lambda: _loader(request).get_service(name, source=source)
     )
@@ -48,6 +51,18 @@ def get_service(
 
 def _loader(request: Request) -> CatalogLoader:
     return CatalogLoader(request.app.state.settings.catalog_roots)
+
+
+def _validate_catalog_name(name: str) -> None:
+    try:
+        validate_machine_identifier(name)
+    except InvalidMachineIdentifierError as exc:
+        raise NephosError(
+            status_code=400,
+            code="catalog_name_invalid",
+            message="Catalog name is invalid.",
+            details={"name": name},
+        ) from exc
 
 
 def _handle_catalog_errors(call: Any) -> dict[str, Any]:
