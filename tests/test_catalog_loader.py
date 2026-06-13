@@ -102,6 +102,70 @@ spec:
     ]
 
 
+@pytest.mark.parametrize("target_port", [0, -1, 65536, 70000])
+def test_catalog_loader_rejects_invalid_numeric_route_target_port(
+    tmp_path: Path,
+    target_port: int,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  routes:
+    - name: web
+      visibility: local
+      target:
+        port: {target_port}
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="route target port"):
+        loader.list_apps()
+
+
+def test_catalog_loader_rejects_boolean_route_target_port(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  routes:
+    - name: web
+      visibility: local
+      target:
+        port: true
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="route target port"):
+        loader.list_apps()
+
+
 def test_catalog_loader_uses_local_source_ids(tmp_path: Path) -> None:
     default_root = tmp_path / "default"
     local_root = tmp_path / "local"

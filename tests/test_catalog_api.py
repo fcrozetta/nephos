@@ -47,6 +47,36 @@ def test_catalog_api_returns_selected_detail(tmp_path: Path) -> None:
     assert response.json()["source"] == "local-1"
 
 
+def test_catalog_api_returns_invalid_app_name_error(tmp_path: Path) -> None:
+    client = _client((tmp_path / "default",))
+
+    response = client.get("/catalog/apps/Bad_Name")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "catalog_name_invalid",
+            "message": "Catalog name is invalid.",
+            "details": {"name": "Bad_Name"},
+        }
+    }
+
+
+def test_catalog_api_returns_invalid_service_name_error(tmp_path: Path) -> None:
+    client = _client((tmp_path / "default",))
+
+    response = client.get("/catalog/services/Bad_Name")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "catalog_name_invalid",
+            "message": "Catalog name is invalid.",
+            "details": {"name": "Bad_Name"},
+        }
+    }
+
+
 def test_catalog_api_returns_ambiguous_error(tmp_path: Path) -> None:
     default_root = tmp_path / "default"
     local_root = tmp_path / "local"

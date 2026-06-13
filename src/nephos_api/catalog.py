@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from nephos_api.domain import (
     InvalidMachineIdentifierError,
@@ -63,6 +70,13 @@ class RouteTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     port: str | int
+
+    @field_validator("port", mode="before")
+    @classmethod
+    def reject_boolean_port(cls, value: Any) -> Any:
+        if type(value) is bool:
+            raise ValueError("route target port must be a string name or integer")
+        return value
 
 
 class AppRoute(BaseModel):
@@ -406,6 +420,7 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             prefix=_ROUTE_INGRESS_NAME_PREFIX,
             resource_kind="Ingress",
         )
+        _validate_route_target_port(path=path, route=route)
         if route.name in route_names:
             raise CatalogValidationError(
                 f"invalid App manifest {path}: duplicate route name {route.name!r}"
@@ -511,6 +526,15 @@ def _validate_generated_kubernetes_name(
             f"invalid App manifest {path}: {label} {value!r} creates "
             f"Kubernetes {resource_kind} name {name!r} longer than "
             f"{_KUBERNETES_DNS_LABEL_MAX_LENGTH} characters"
+        )
+
+
+def _validate_route_target_port(*, path: Path, route: AppRoute) -> None:
+    port = route.target.port
+    if isinstance(port, int) and not 1 <= port <= 65535:
+        raise CatalogValidationError(
+            f"invalid App manifest {path}: route target port {port!r} "
+            "must be between 1 and 65535"
         )
 
 
