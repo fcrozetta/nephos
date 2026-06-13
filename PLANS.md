@@ -198,6 +198,12 @@ Proposed steps:
    - Keep reference catalog generation internal and temporary.
    - Do not require Helm, a local chart server, or `NEPHOS_API_K3S_REFERENCE_CATALOG_ROOT`.
    - Keep the command runnable from an installed wheel by packaging runtime dependencies imported by the command path, including FastAPI/Starlette `TestClient`'s `httpx`/`httpx2` dependencies.
+9. Code simplification batch:
+   - Preserve public API behavior, lifecycle semantics, reconciliation request semantics, and exact Nephos error codes.
+   - Consolidate duplicated App/Service lifecycle action application in `api/resources.py`.
+   - Consolidate duplicated App/Service desired-state repository insert/update helpers in `repository.py`.
+   - Split binding provider resolution in `api/resources.py` into smaller explicit validation/selection helpers.
+   - Do not touch reconciler/runtime/provider architecture in this batch.
 
 Current verification:
 
