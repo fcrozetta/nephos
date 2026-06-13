@@ -144,7 +144,7 @@ def service_action(
         action=action,
         row=row,
     )
-    if action in {"stop", "remove", "destroy"} and not _service_action_is_noop(
+    if action in {"stop", "remove", "destroy"} and not _lifecycle_action_is_noop(
         row,
         action,
     ):
@@ -155,7 +155,13 @@ def service_action(
         _require_destroy_confirmation(service_instance, payload)
 
     with repo.transaction() as tx:
-        updated = _apply_service_action(tx, service_instance, action, row)
+        updated = _apply_lifecycle_action(
+            tx,
+            target_type="service_instance",
+            slug=service_instance,
+            action=action,
+            current=row,
+        )
         reconciliation = tx.create_reconciliation_request(
             target_type="service_instance",
             target_id=str(updated["id"]),
@@ -296,7 +302,13 @@ def app_action(
         _require_destroy_confirmation(app_instance, payload)
 
     with repo.transaction() as tx:
-        updated = _apply_app_action(tx, app_instance, action, row)
+        updated = _apply_lifecycle_action(
+            tx,
+            target_type="app_instance",
+            slug=app_instance,
+            action=action,
+            current=row,
+        )
         reconciliation = tx.create_reconciliation_request(
             target_type="app_instance",
             target_id=str(updated["id"]),
@@ -342,118 +354,212 @@ def _resolve_binding_providers(
     repo = _repo(request)
     loader = _loader(request)
     service_rows = repo.list_service_rows()
-    requirements = {
-        requirement["alias"]: requirement
-        for requirement in app_catalog_entry["requires"]
-    }
-    unknown_aliases = sorted(set(selections) - set(requirements))
-    if unknown_aliases:
-        raise NephosError(
-            status_code=400,
-            code="binding_requirement_unknown",
-            message="Binding selection does not match an App requirement.",
-            details={"aliases": unknown_aliases},
-        )
+    requirements = _requirements_by_alias(app_catalog_entry)
+    _reject_unknown_binding_aliases(selections, requirements)
 
     providers: dict[str, dict[str, object]] = {}
     for requirement in app_catalog_entry["requires"]:
         alias = requirement["alias"]
+        capability = requirement["capability"]
         capable = _capability_provider_rows(
             loader=loader,
             service_rows=service_rows,
-            capability=requirement["capability"],
+            capability=capability,
         )
-        eligible = [
-            service_row
-            for service_row in capable
-            if _binding_provider_is_available(service_row)
-        ]
-        selection = selections.get(alias)
-        if selection is not None:
-            selected = next(
-                (
-                    service_row
-                    for service_row in service_rows
-                    if service_row["slug"] == selection.serviceInstance
-                ),
-                None,
-            )
-            if selected is None:
-                raise NephosError(
-                    status_code=404,
-                    code="binding_provider_not_found",
-                    message="Selected binding provider was not found.",
-                    details={
-                        "alias": alias,
-                        "serviceInstance": selection.serviceInstance,
-                    },
-                )
-            if str(selected["id"]) not in {str(row["id"]) for row in capable}:
-                raise NephosError(
-                    status_code=409,
-                    code="binding_provider_ineligible",
-                    message=(
-                        "Selected binding provider does not expose the "
-                        "required capability."
-                    ),
-                    details={
-                        "alias": alias,
-                        "capability": requirement["capability"],
-                        "serviceInstance": selection.serviceInstance,
-                        "eligibleProviders": [row["slug"] for row in eligible],
-                    },
-                )
-            if selected["delete_requested_at"] is not None:
-                raise NephosError(
-                    status_code=409,
-                    code="binding_provider_unavailable",
-                    message="Selected binding provider is not available.",
-                    details={
-                        "alias": alias,
-                        "capability": requirement["capability"],
-                        "reason": "destroy_already_requested",
-                        "serviceInstance": selection.serviceInstance,
-                    },
-                )
-            if selected["lifecycle"] != "running":
-                raise NephosError(
-                    status_code=409,
-                    code="binding_provider_unavailable",
-                    message="Selected binding provider is not available.",
-                    details={
-                        "alias": alias,
-                        "capability": requirement["capability"],
-                        "reason": "service_not_running",
-                        "lifecycle": selected["lifecycle"],
-                        "serviceInstance": selection.serviceInstance,
-                    },
-                )
-            providers[alias] = selected
-            continue
-        if not eligible:
-            raise NephosError(
-                status_code=409,
-                code="binding_provider_unavailable",
-                message="No eligible Service provider exposes the required capability.",
-                details={
-                    "alias": alias,
-                    "capability": requirement["capability"],
-                    "eligibleProviders": [],
-                },
-            )
-        if len(eligible) > 1:
-            raise NephosError(
-                status_code=409,
-                code="binding_provider_selection_required",
-                message="Required capability needs explicit provider selection.",
-                details={
-                    "alias": alias,
-                    "capability": requirement["capability"],
-                    "eligibleProviders": [row["slug"] for row in eligible],
-                },
-            )
-        providers[alias] = eligible[0]
+        providers[alias] = _select_binding_provider(
+            alias=alias,
+            capability=capability,
+            service_rows=service_rows,
+            capable=capable,
+            selection=selections.get(alias),
+        )
     return providers
+
+
+def _requirements_by_alias(
+    app_catalog_entry: dict[str, Any],
+) -> dict[str, dict[str, object]]:
+    return {
+        requirement["alias"]: requirement
+        for requirement in app_catalog_entry["requires"]
+    }
+
+
+def _reject_unknown_binding_aliases(
+    selections: dict[str, BindingSelection],
+    requirements: dict[str, dict[str, object]],
+) -> None:
+    unknown_aliases = sorted(set(selections) - set(requirements))
+    if not unknown_aliases:
+        return
+    raise NephosError(
+        status_code=400,
+        code="binding_requirement_unknown",
+        message="Binding selection does not match an App requirement.",
+        details={"aliases": unknown_aliases},
+    )
+
+
+def _select_binding_provider(
+    *,
+    alias: str,
+    capability: str,
+    service_rows: list[dict[str, object]],
+    capable: list[dict[str, object]],
+    selection: BindingSelection | None,
+) -> dict[str, object]:
+    eligible = [
+        service_row
+        for service_row in capable
+        if _binding_provider_is_available(service_row)
+    ]
+    if selection is not None:
+        return _selected_binding_provider(
+            alias=alias,
+            capability=capability,
+            service_rows=service_rows,
+            capable=capable,
+            eligible=eligible,
+            selection=selection,
+        )
+    return _automatic_binding_provider(
+        alias=alias,
+        capability=capability,
+        eligible=eligible,
+    )
+
+
+def _selected_binding_provider(
+    *,
+    alias: str,
+    capability: str,
+    service_rows: list[dict[str, object]],
+    capable: list[dict[str, object]],
+    eligible: list[dict[str, object]],
+    selection: BindingSelection,
+) -> dict[str, object]:
+    selected = next(
+        (
+            service_row
+            for service_row in service_rows
+            if service_row["slug"] == selection.serviceInstance
+        ),
+        None,
+    )
+    if selected is None:
+        raise NephosError(
+            status_code=404,
+            code="binding_provider_not_found",
+            message="Selected binding provider was not found.",
+            details={
+                "alias": alias,
+                "serviceInstance": selection.serviceInstance,
+            },
+        )
+    _reject_ineligible_binding_provider(
+        alias=alias,
+        capability=capability,
+        capable=capable,
+        eligible=eligible,
+        selected=selected,
+        selection=selection,
+    )
+    _reject_unavailable_binding_provider(
+        alias=alias,
+        capability=capability,
+        selected=selected,
+        selection=selection,
+    )
+    return selected
+
+
+def _reject_ineligible_binding_provider(
+    *,
+    alias: str,
+    capability: str,
+    capable: list[dict[str, object]],
+    eligible: list[dict[str, object]],
+    selected: dict[str, object],
+    selection: BindingSelection,
+) -> None:
+    if str(selected["id"]) in {str(row["id"]) for row in capable}:
+        return
+    raise NephosError(
+        status_code=409,
+        code="binding_provider_ineligible",
+        message="Selected binding provider does not expose the required capability.",
+        details={
+            "alias": alias,
+            "capability": capability,
+            "serviceInstance": selection.serviceInstance,
+            "eligibleProviders": [row["slug"] for row in eligible],
+        },
+    )
+
+
+def _reject_unavailable_binding_provider(
+    *,
+    alias: str,
+    capability: str,
+    selected: dict[str, object],
+    selection: BindingSelection,
+) -> None:
+    if selected["delete_requested_at"] is not None:
+        raise NephosError(
+            status_code=409,
+            code="binding_provider_unavailable",
+            message="Selected binding provider is not available.",
+            details={
+                "alias": alias,
+                "capability": capability,
+                "reason": "destroy_already_requested",
+                "serviceInstance": selection.serviceInstance,
+            },
+        )
+    if selected["lifecycle"] != "running":
+        raise NephosError(
+            status_code=409,
+            code="binding_provider_unavailable",
+            message="Selected binding provider is not available.",
+            details={
+                "alias": alias,
+                "capability": capability,
+                "reason": "service_not_running",
+                "lifecycle": selected["lifecycle"],
+                "serviceInstance": selection.serviceInstance,
+            },
+        )
+
+
+def _automatic_binding_provider(
+    *,
+    alias: str,
+    capability: str,
+    eligible: list[dict[str, object]],
+) -> dict[str, object]:
+    if not eligible:
+        raise NephosError(
+            status_code=409,
+            code="binding_provider_unavailable",
+            message="No eligible Service provider exposes the required capability.",
+            details={
+                "alias": alias,
+                "capability": capability,
+                "eligibleProviders": [],
+            },
+        )
+    if len(eligible) > 1:
+        raise NephosError(
+            status_code=409,
+            code="binding_provider_selection_required",
+            message="Required capability needs explicit provider selection.",
+            details={
+                "alias": alias,
+                "capability": capability,
+                "eligibleProviders": [row["slug"] for row in eligible],
+            },
+        )
+    return eligible[0]
 
 
 def _binding_provider_is_available(service_row: dict[str, object]) -> bool:
@@ -781,12 +887,8 @@ def _reject_lifecycle_mutation_after_destroy_requested(
     )
 
 
-def _service_action_is_noop(row: dict[str, object], action: str) -> bool:
-    desired_lifecycle = {
-        "start": "running",
-        "stop": "stopped",
-        "remove": "removed",
-    }.get(action)
+def _lifecycle_action_is_noop(row: dict[str, object], action: str) -> bool:
+    desired_lifecycle = _ACTION_LIFECYCLES.get(action)
     if desired_lifecycle is not None:
         return row["lifecycle"] == desired_lifecycle
     if action == "destroy":
@@ -794,52 +896,36 @@ def _service_action_is_noop(row: dict[str, object], action: str) -> bool:
     return False
 
 
-def _apply_service_action(
+_ACTION_LIFECYCLES = {
+    "start": "running",
+    "stop": "stopped",
+    "remove": "removed",
+}
+
+
+def _apply_lifecycle_action(
     tx: Any,
+    *,
+    target_type: ResourceType,
     slug: str,
     action: str,
     current: dict[str, object],
 ) -> dict[str, object]:
-    if action == "start":
-        if current["lifecycle"] == "running":
+    desired_lifecycle = _ACTION_LIFECYCLES.get(action)
+    if desired_lifecycle is not None:
+        if current["lifecycle"] == desired_lifecycle:
             return current
-        return tx.update_service_lifecycle(slug=slug, lifecycle="running")
-    if action == "stop":
-        if current["lifecycle"] == "stopped":
-            return current
-        return tx.update_service_lifecycle(slug=slug, lifecycle="stopped")
-    if action == "remove":
-        if current["lifecycle"] == "removed":
-            return current
-        return tx.update_service_lifecycle(slug=slug, lifecycle="removed")
+        if target_type == "service_instance":
+            return tx.update_service_lifecycle(
+                slug=slug,
+                lifecycle=desired_lifecycle,
+            )
+        return tx.update_app_lifecycle(slug=slug, lifecycle=desired_lifecycle)
     if action == "destroy":
         if current["delete_requested_at"] is not None:
             return current
-        return tx.mark_service_delete_requested(slug=slug)
-    return current
-
-
-def _apply_app_action(
-    tx: Any,
-    slug: str,
-    action: str,
-    current: dict[str, object],
-) -> dict[str, object]:
-    if action == "start":
-        if current["lifecycle"] == "running":
-            return current
-        return tx.update_app_lifecycle(slug=slug, lifecycle="running")
-    if action == "stop":
-        if current["lifecycle"] == "stopped":
-            return current
-        return tx.update_app_lifecycle(slug=slug, lifecycle="stopped")
-    if action == "remove":
-        if current["lifecycle"] == "removed":
-            return current
-        return tx.update_app_lifecycle(slug=slug, lifecycle="removed")
-    if action == "destroy":
-        if current["delete_requested_at"] is not None:
-            return current
+        if target_type == "service_instance":
+            return tx.mark_service_delete_requested(slug=slug)
         return tx.mark_app_delete_requested(slug=slug)
     return current
 

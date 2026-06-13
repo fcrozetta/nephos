@@ -5,6 +5,7 @@ import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from typing import cast
 
 from nephos_api.db import connect_database, utc_now
 from nephos_api.domain import (
@@ -260,49 +261,23 @@ class StateTransaction:
         config: Mapping[str, object] | None = None,
         lifecycle: str = "running",
     ) -> AppInstance:
-        validate_machine_identifier(slug)
-        now = utc_now()
-        instance = AppInstance(
-            id=generate_id("appinst"),
-            slug=slug,
-            lifecycle=lifecycle,
-            generation=1,
-        )
-        self._connection.execute(
-            """
-            INSERT INTO app_instances(
-                id,
-                slug,
-                catalog_kind,
-                catalog_name,
-                catalog_version,
-                catalog_source_id,
-                catalog_source_path,
-                manifest_digest,
-                lifecycle,
-                generation,
-                config_json,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, 'App', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                instance.id,
-                instance.slug,
-                catalog_name,
-                catalog_version,
-                catalog_source_id,
-                catalog_source_path,
-                manifest_digest,
-                instance.lifecycle,
-                instance.generation,
-                _json_object(config),
-                now,
-                now,
+        return cast(
+            AppInstance,
+            self._create_instance(
+                table="app_instances",
+                catalog_kind="App",
+                id_prefix="appinst",
+                instance_type=AppInstance,
+                slug=slug,
+                catalog_name=catalog_name,
+                catalog_source_id=catalog_source_id,
+                catalog_source_path=catalog_source_path,
+                manifest_digest=manifest_digest,
+                catalog_version=catalog_version,
+                config=config,
+                lifecycle=lifecycle,
             ),
         )
-        return instance
 
     def create_service_instance(
         self,
@@ -316,17 +291,51 @@ class StateTransaction:
         config: Mapping[str, object] | None = None,
         lifecycle: str = "running",
     ) -> ServiceInstance:
+        return cast(
+            ServiceInstance,
+            self._create_instance(
+                table="service_instances",
+                catalog_kind="Service",
+                id_prefix="svcinst",
+                instance_type=ServiceInstance,
+                slug=slug,
+                catalog_name=catalog_name,
+                catalog_source_id=catalog_source_id,
+                catalog_source_path=catalog_source_path,
+                manifest_digest=manifest_digest,
+                catalog_version=catalog_version,
+                config=config,
+                lifecycle=lifecycle,
+            ),
+        )
+
+    def _create_instance(
+        self,
+        *,
+        table: str,
+        catalog_kind: str,
+        id_prefix: str,
+        instance_type: type[AppInstance] | type[ServiceInstance],
+        slug: str,
+        catalog_name: str,
+        catalog_source_id: str,
+        catalog_source_path: str,
+        manifest_digest: str,
+        catalog_version: str | None,
+        config: Mapping[str, object] | None,
+        lifecycle: str,
+    ) -> AppInstance | ServiceInstance:
         validate_machine_identifier(slug)
         now = utc_now()
-        instance = ServiceInstance(
-            id=generate_id("svcinst"),
+        instance = instance_type(
+            id=generate_id(id_prefix),
             slug=slug,
             lifecycle=lifecycle,
             generation=1,
         )
         self._connection.execute(
-            """
-            INSERT INTO service_instances(
+            f"""
+            INSERT INTO {table}(
                 id,
                 slug,
                 catalog_kind,
@@ -341,11 +350,12 @@ class StateTransaction:
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, 'Service', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 instance.id,
                 instance.slug,
+                catalog_kind,
                 catalog_name,
                 catalog_version,
                 catalog_source_id,
@@ -684,24 +694,11 @@ class StateTransaction:
         slug: str,
         lifecycle: str,
     ) -> dict[str, object]:
-        now = utc_now()
-        self._connection.execute(
-            """
-            UPDATE service_instances
-            SET lifecycle = ?,
-                generation = generation + 1,
-                updated_at = ?
-            WHERE slug = ?
-            """,
-            (lifecycle, now, slug),
+        return self._update_lifecycle(
+            table="service_instances",
+            slug=slug,
+            lifecycle=lifecycle,
         )
-        row = self._connection.execute(
-            "SELECT * FROM service_instances WHERE slug = ?",
-            (slug,),
-        ).fetchone()
-        if row is None:
-            raise KeyError(slug)
-        return dict(row)
 
     def update_app_lifecycle(
         self,
@@ -709,10 +706,23 @@ class StateTransaction:
         slug: str,
         lifecycle: str,
     ) -> dict[str, object]:
+        return self._update_lifecycle(
+            table="app_instances",
+            slug=slug,
+            lifecycle=lifecycle,
+        )
+
+    def _update_lifecycle(
+        self,
+        *,
+        table: str,
+        slug: str,
+        lifecycle: str,
+    ) -> dict[str, object]:
         now = utc_now()
         self._connection.execute(
-            """
-            UPDATE app_instances
+            f"""
+            UPDATE {table}
             SET lifecycle = ?,
                 generation = generation + 1,
                 updated_at = ?
@@ -720,13 +730,7 @@ class StateTransaction:
             """,
             (lifecycle, now, slug),
         )
-        row = self._connection.execute(
-            "SELECT * FROM app_instances WHERE slug = ?",
-            (slug,),
-        ).fetchone()
-        if row is None:
-            raise KeyError(slug)
-        return dict(row)
+        return self._row_by_slug(table=table, slug=slug)
 
     def mark_service_delete_requested(self, *, slug: str) -> dict[str, object]:
         return self._mark_delete_requested(table="service_instances", slug=slug)
@@ -784,6 +788,9 @@ class StateTransaction:
             """,
             (now, now, slug),
         )
+        return self._row_by_slug(table=table, slug=slug)
+
+    def _row_by_slug(self, *, table: str, slug: str) -> dict[str, object]:
         row = self._connection.execute(
             f"SELECT * FROM {table} WHERE slug = ?",
             (slug,),
