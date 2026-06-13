@@ -129,12 +129,15 @@ Current understanding:
 Files likely to change:
 
 - `PLANS.md`
+- `pyproject.toml`
+- `uv.lock`
 - `src/nephos_api/reconciler.py`
 - `src/nephos_api/providers/`
 - `src/nephos_api/repository.py`
 - `src/nephos_api/kubernetes_runtime.py`
 - `src/nephos_api/catalog.py`
 - `src/nephos_api/api/resources.py`
+- `tests/test_packaging.py`
 - `tests/test_reconciler.py`
 - `tests/test_kubernetes_runtime.py`
 - `tests/test_kubernetes_runtime_integration.py`
@@ -194,6 +197,7 @@ Proposed steps:
    - Drive the flow through Nephos API desired state and the reconciler, not pytest as the user interface.
    - Keep reference catalog generation internal and temporary.
    - Do not require Helm, a local chart server, or `NEPHOS_API_K3S_REFERENCE_CATALOG_ROOT`.
+   - Keep the command runnable from an installed wheel by packaging runtime dependencies imported by the command path, including FastAPI/Starlette `TestClient`'s `httpx`/`httpx2` dependencies.
 
 Current verification:
 
@@ -211,6 +215,7 @@ Current verification:
 - Fresh minimal flow passes with `/private/tmp/nephos-flow-check/nephos.db`: `uv run nephos-api init`, `uv run nephos-api serve --port 8766`, `curl /version`, and `curl /healthz`.
 - `pulumi version` returns `v3.244.0`.
 - `uv run nephos-api dev smoke --timeout-seconds 240` passes against `.env` selecting `NEPHOS_API_KUBE_CONTEXT=docker-desktop`; it verified provider-backed PostgreSQL Service install, reference web App install, binding materialization, generated route `http://reference-web-<suffix>.nephos.localhost`, stop/start lifecycle, and App/Service destroy cleanup.
+- Clean installed-wheel smoke passes: build the wheel, install it into a fresh virtualenv without dev dependencies, verify wheel metadata includes `httpx` and `httpx2`, and run installed `nephos-api dev smoke --timeout-seconds 120` successfully.
 - `uv run pytest tests/test_kubernetes_runtime_integration.py -m kubernetes -q` passes against `.env` selecting `NEPHOS_API_KUBE_CONTEXT=docker-desktop`: 3 passed, 17 warnings.
 - Manual route proof: `curl http://hello-world.nephos.localhost/` returns `200 OK` through the selected cluster ingress controller after generated Ingress uses `ingressClassName: nginx`.
 
@@ -240,6 +245,7 @@ Validation commands:
 - `uv run nephos-api db reset --force`
 - `uv run nephos-api serve`
 - `uv run nephos-api dev smoke`
+- Clean-wheel smoke guard: build `dist/nephos_api-0.0.1-py3-none-any.whl`, install it into a fresh virtualenv without dev dependencies, and run `nephos-api dev smoke` far enough to prove `TestClient` dependencies are present.
 - `NEPHOS_API_RUN_KUBERNETES_TESTS=1 PULUMI_CONFIG_PASSPHRASE=<local-passphrase> uv run pytest tests/test_kubernetes_runtime_integration.py -m kubernetes -q`
 - `rg --files src tests migrations`
 - `git diff --check`
