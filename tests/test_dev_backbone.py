@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from nephos_api.catalog import CatalogLoader
@@ -45,6 +46,73 @@ def test_alpha_backbone_catalog_generator_writes_protocol_aware_entries(
         ("identity", "oidc", "oidc"),
         ("object-storage", "object-storage", "s3"),
         ("graph", "opencypher", "bolt"),
+    }
+
+
+def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+
+    write_alpha_backbone_catalog(catalog_root)
+
+    manifests = {
+        service_name: yaml.safe_load(
+            (catalog_root / "services" / service_name / "service.yaml").read_text()
+        )
+        for service_name in ("postgres", "zitadel", "seaweedfs", "arcadedb")
+    }
+    assert _config_option_names(manifests["postgres"]) == {
+        "storage-size",
+        "storage-class-name",
+    }
+    assert _runtime_mapping_pairs(manifests["postgres"]) == {
+        ("storage-size", "storageSize"),
+        ("storage-class-name", "storageClassName"),
+    }
+    assert _config_option_names(manifests["zitadel"]) == {
+        "image",
+        "external-host",
+        "admin-username",
+        "admin-password",
+        "master-key",
+        "database-password",
+        "storage-size",
+    }
+    assert _runtime_mapping_pairs(manifests["zitadel"]) == {
+        ("image", "image"),
+        ("external-host", "externalHost"),
+        ("admin-username", "adminUsername"),
+        ("admin-password", "adminPassword"),
+        ("master-key", "masterKey"),
+        ("database-password", "databasePassword"),
+        ("storage-size", "storageSize"),
+    }
+    assert _config_option_names(manifests["seaweedfs"]) == {
+        "image",
+        "storage-size",
+        "s3-access-key",
+        "s3-secret-key",
+    }
+    assert _runtime_mapping_pairs(manifests["seaweedfs"]) == {
+        ("image", "image"),
+        ("storage-size", "storageSize"),
+        ("s3-access-key", "s3AccessKey"),
+        ("s3-secret-key", "s3SecretKey"),
+    }
+    assert _config_option_names(manifests["arcadedb"]) == {
+        "image",
+        "storage-size",
+        "root-password",
+        "enable-gremlin",
+        "enable-mongo",
+    }
+    assert _runtime_mapping_pairs(manifests["arcadedb"]) == {
+        ("image", "image"),
+        ("storage-size", "storageSize"),
+        ("root-password", "rootPassword"),
+        ("enable-gremlin", "enableGremlin"),
+        ("enable-mongo", "enableMongo"),
     }
 
 
@@ -171,4 +239,17 @@ def _provided_pairs(service: dict[str, object]) -> set[tuple[str, str | None]]:
     return {
         (provided["capability"], provided["protocol"])
         for provided in service["provides"]
+    }
+
+
+def _config_option_names(manifest: dict[str, object]) -> set[str]:
+    options = manifest["spec"]["config"]["options"]
+    return {option["name"] for option in options}
+
+
+def _runtime_mapping_pairs(manifest: dict[str, object]) -> set[tuple[str, str]]:
+    mappings = manifest["spec"]["runtime"]["values"]["mappings"]
+    return {
+        (mapping["from"]["name"], mapping["to"]["helmValue"])
+        for mapping in mappings
     }

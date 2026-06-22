@@ -16,6 +16,7 @@ from nephos_api.catalog import (
     CatalogLoader,
     CatalogSourceNotFoundError,
     CatalogValidationError,
+    ServiceManifest,
 )
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
@@ -76,6 +77,7 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
         request,
         kind="Service",
     )
+    _validate_service_config(_load_service_manifest(source_path), payload.config)
     repo = _repo(request)
 
     try:
@@ -713,17 +715,47 @@ def _load_app_manifest(path: Path) -> AppManifest:
     return AppManifest.model_validate(yaml.safe_load(path.read_text()))
 
 
+def _load_service_manifest(path: Path) -> ServiceManifest:
+    return ServiceManifest.model_validate(yaml.safe_load(path.read_text()))
+
+
 def _validate_app_config(
     manifest: AppManifest,
     config: dict[str, Any],
 ) -> None:
-    options = {option.name: option for option in manifest.spec.config.options}
+    _validate_manifest_config(
+        options={option.name: option for option in manifest.spec.config.options},
+        config=config,
+        code_prefix="app_config",
+        label="App",
+    )
+
+
+def _validate_service_config(
+    manifest: ServiceManifest,
+    config: dict[str, Any],
+) -> None:
+    _validate_manifest_config(
+        options={option.name: option for option in manifest.spec.config.options},
+        config=config,
+        code_prefix="service_config",
+        label="Service",
+    )
+
+
+def _validate_manifest_config(
+    *,
+    options: dict[str, Any],
+    config: dict[str, Any],
+    code_prefix: str,
+    label: str,
+) -> None:
     unknown_keys = sorted(set(config) - set(options))
     if unknown_keys:
         raise NephosError(
             status_code=400,
-            code="app_config_unknown",
-            message="App config contains unknown option keys.",
+            code=f"{code_prefix}_unknown",
+            message=f"{label} config contains unknown option keys.",
             details={"keys": unknown_keys},
         )
 
@@ -735,8 +767,8 @@ def _validate_app_config(
     if missing_required:
         raise NephosError(
             status_code=400,
-            code="app_config_required",
-            message="App config is missing required option values.",
+            code=f"{code_prefix}_required",
+            message=f"{label} config is missing required option values.",
             details={"keys": missing_required},
         )
 
@@ -746,8 +778,8 @@ def _validate_app_config(
         if not _config_value_matches_type(value, expected_type):
             raise NephosError(
                 status_code=400,
-                code="app_config_invalid",
-                message="App config value does not match the declared type.",
+                code=f"{code_prefix}_invalid",
+                message=f"{label} config value does not match the declared type.",
                 details={
                     "key": key,
                     "expectedType": expected_type,
@@ -761,8 +793,8 @@ def _validate_app_config(
             if value not in allowed_values:
                 raise NephosError(
                     status_code=400,
-                    code="app_config_invalid",
-                    message="App config enum value is not allowed.",
+                    code=f"{code_prefix}_invalid",
+                    message=f"{label} config enum value is not allowed.",
                     details={
                         "key": key,
                         "allowedValues": allowed_values,

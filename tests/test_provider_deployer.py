@@ -165,6 +165,39 @@ def test_provider_runtime_deployer_passes_provider_runtime_without_chart(
     assert context.provider_name == "postgres"
 
 
+def test_provider_runtime_deployer_maps_service_config_defaults_and_overrides(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_provider_service_with_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    app_provider = RecordingProvider()
+    service_provider = RecordingProvider()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"storage-size": "8Gi"},
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=app_provider,
+        service_provider=service_provider,
+    )
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    context = service_provider.deployed[0]
+    assert context.values == {
+        "image": "postgres:16-alpine",
+        "storageSize": "8Gi",
+        "debug": {"enabled": False},
+    }
+
+
 def test_pulumi_helm_provider_maps_context_to_local_stack_operations(
     tmp_path: Path,
 ) -> None:
@@ -441,6 +474,59 @@ spec:
     type: provider
     provider:
       name: postgres
+""".strip()
+    )
+    return path
+
+
+def _write_provider_service_with_runtime_mappings(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: image
+        type: string
+        default: postgres:16-alpine
+      - name: storage-size
+        type: string
+        default: 1Gi
+      - name: debug-enabled
+        type: boolean
+        default: false
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
+    values:
+      mappings:
+        - from:
+            kind: config
+            name: image
+          to:
+            helmValue: image
+        - from:
+            kind: config
+            name: storage-size
+          to:
+            helmValue: storageSize
+        - from:
+            kind: config
+            name: debug-enabled
+          to:
+            helmValue: debug.enabled
 """.strip()
     )
     return path

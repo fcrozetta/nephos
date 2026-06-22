@@ -755,6 +755,132 @@ def test_install_app_rejects_invalid_enum_config_value(tmp_path: Path) -> None:
     }
 
 
+def test_install_service_accepts_manifest_config(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {
+                "storage-size": "8Gi",
+                "enable-backups": True,
+                "profile": "local",
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["config"] == {
+        "storage-size": "8Gi",
+        "enable-backups": True,
+        "profile": "local",
+    }
+
+
+def test_install_service_rejects_unknown_config_keys(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {"unknown": "value"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_unknown",
+            "message": "Service config contains unknown option keys.",
+            "details": {"keys": ["unknown"]},
+        }
+    }
+
+
+def test_install_service_rejects_missing_required_config(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_required",
+            "message": "Service config is missing required option values.",
+            "details": {"keys": ["storage-size"]},
+        }
+    }
+
+
+def test_install_service_rejects_invalid_config_value_type(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {
+                "storage-size": "8Gi",
+                "enable-backups": "yes",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_invalid",
+            "message": "Service config value does not match the declared type.",
+            "details": {
+                "key": "enable-backups",
+                "expectedType": "boolean",
+            },
+        }
+    }
+
+
+def test_install_service_rejects_invalid_enum_config_value(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {
+                "storage-size": "8Gi",
+                "profile": "prod",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_invalid",
+            "message": "Service config enum value is not allowed.",
+            "details": {
+                "key": "profile",
+                "allowedValues": ["local", "ci"],
+            },
+        }
+    }
+
+
 def test_service_stop_with_dependents_requires_force(tmp_path: Path) -> None:
     client = _client(tmp_path)
     assert client.post(
@@ -834,6 +960,49 @@ spec:
       repository: https://charts.example.test
       name: paperless
       version: "1.0.0"
+    values:
+      mappings: []
+""".strip()
+    )
+    return path
+
+
+def _write_configured_service(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: storage-size
+        type: string
+        required: true
+      - name: enable-backups
+        type: boolean
+        default: false
+      - name: profile
+        type: enum
+        default: local
+        values:
+          - value: local
+            label: Local
+          - value: ci
+            label: CI
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
     values:
       mappings: []
 """.strip()

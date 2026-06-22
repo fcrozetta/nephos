@@ -122,6 +122,24 @@ Service catalog `provides` entries use:
 - optional `version`
 - `bindingOutputTargets`
 
+Service manifests may declare install-time config with the same option shape as
+App manifests:
+
+```yaml
+spec:
+  config:
+    options:
+      - name: storage-size
+        type: string
+        default: 1Gi
+```
+
+Runtime value mappings may read Service config values with
+`from.kind: config`, just as App runtime mappings do.
+
+Service install config is validated against the Service manifest before desired
+state is written.
+
 For protocol-aware provisions, `capability + protocol` is the Service eligibility
 key. Capability alone is not enough for alpha backbone database bindings.
 
@@ -178,6 +196,13 @@ Do not add canonical JSON Schema files under `schemas/` until Fer approves the c
 Reject unknown manifest fields once canonical validation models exist.
 
 Loose YAML dictionary validation is not the accepted API 0.0.1 direction.
+
+App and Service config option validation uses the same rules:
+
+- option names are machine identifiers
+- default values must match declared type
+- enum options must declare allowed values
+- enum defaults must be one of the allowed values
 
 ## Install Selection
 

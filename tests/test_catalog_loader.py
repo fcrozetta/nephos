@@ -517,6 +517,84 @@ spec:
         loader.list_apps()
 
 
+def test_catalog_loader_accepts_service_config_options(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "services" / "postgres" / "service.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+  config:
+    options:
+      - name: storage-size
+        type: string
+        default: 1Gi
+      - name: enable-backups
+        type: boolean
+        default: false
+      - name: profile
+        type: enum
+        default: dev
+        values:
+          - value: dev
+            label: Development
+          - value: prod
+            label: Production
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    assert loader.get_service("postgres")["provides"][0]["capability"] == "sql"
+
+
+def test_catalog_loader_rejects_service_config_default_with_wrong_type(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "services" / "postgres" / "service.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+  config:
+    options:
+      - name: replicas
+        type: integer
+        default: two
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="invalid config default"):
+        loader.list_services()
+
+
 def test_catalog_loader_rejects_enum_config_without_values(
     tmp_path: Path,
 ) -> None:

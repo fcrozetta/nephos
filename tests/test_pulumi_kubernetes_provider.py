@@ -192,24 +192,59 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             "image": "ghcr.io/zitadel/zitadel:v2.58.0",
             "adminUsername": "root@zitadel.localhost",
             "adminPassword": "local-secret",
+            "masterKey": "0123456789abcdef0123456789abcdef",
+            "databasePassword": "db-secret",
             "externalHost": "login.nephos.localhost",
+            "storageSize": "4Gi",
         },
     )
 
     _zitadel_service(spec, k8s=k8s, opts=None)
 
     secret = k8s.secret.calls[0]
-    deployment = k8s.deployment.calls[0]
+    stateful_set = k8s.stateful_set.calls[0]
     service = k8s.service.calls[0]
-    container = deployment["spec"]["template"]["spec"]["containers"][0]
+    stateful_pod_spec = stateful_set["spec"]["template"]["spec"]
+    containers = stateful_pod_spec["containers"]
+    container = next(item for item in containers if item["name"] == "zitadel")
+    postgres = next(item for item in containers if item["name"] == "postgres")
+    pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
+    env = {item["name"]: item for item in container["env"]}
     assert secret["string_data"] == {
         "admin-username": "root@zitadel.localhost",
         "admin-password": "local-secret",
+        "master-key": "0123456789abcdef0123456789abcdef",
+        "database-password": "db-secret",
     }
     assert container["image"] == "ghcr.io/zitadel/zitadel:v2.58.0"
-    assert {"name": "ZITADEL_EXTERNALDOMAIN", "value": "login.nephos.localhost"} in (
-        container["env"]
-    )
+    assert container["args"] == ["start-from-init", "--masterkeyFromEnv"]
+    assert env["ZITADEL_EXTERNALDOMAIN"]["value"] == "login.nephos.localhost"
+    assert env["ZITADEL_EXTERNALSECURE"]["value"] == "false"
+    assert env["ZITADEL_TLS_ENABLED"]["value"] == "false"
+    assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == "127.0.0.1"
+    assert env["ZITADEL_DATABASE_POSTGRES_DATABASE"]["value"] == "zitadel"
+    assert env["ZITADEL_DATABASE_POSTGRES_USER_USERNAME"]["value"] == "zitadel"
+    assert env["ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_USERNAME"]["valueFrom"] == {
+        "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "admin-username"}
+    }
+    assert env["ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_PASSWORD"]["valueFrom"] == {
+        "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "admin-password"}
+    }
+    assert env["ZITADEL_MASTERKEY"]["valueFrom"] == {
+        "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "master-key"}
+    }
+    assert not any(name.startswith("ZITADEL_FIRSTINSTANCE_") for name in env)
+    assert postgres["image"] == "postgres:16-alpine"
+    assert {
+        "name": "POSTGRES_PASSWORD",
+        "valueFrom": {
+            "secretKeyRef": {
+                "name": "svc-zitadel-zitadel",
+                "key": "database-password",
+            }
+        },
+    } in postgres["env"]
+    assert pvc["spec"]["resources"]["requests"]["storage"] == "4Gi"
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 8080, "targetPort": "http"}
     ]
@@ -242,11 +277,14 @@ def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
     service = k8s.service.calls[0]
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
+    env_names = {item["name"] for item in container.get("env", [])}
     assert secret["string_data"] == {
         "s3-access-key": "alpha-access",
         "s3-secret-key": "alpha-secret",
     }
     assert container["image"] == "chrislusf/seaweedfs:3.85"
+    assert "WEED_S3_ACCESS_KEY" not in env_names
+    assert "WEED_S3_SECRET_KEY" not in env_names
     assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
     assert service["spec"]["ports"] == [
         {"name": "s3", "port": 8333, "targetPort": "s3"}
@@ -282,6 +320,12 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     assert secret["string_data"] == {"root-password": "arcade-secret"}
     assert container["image"] == "arcadedata/arcadedb:25.5.1"
+    assert container["command"] == ["/bin/sh", "-ec"]
+    assert "root_password=\"$(cat /run/secrets/arcadedb/root-password)\"" in (
+        container["args"][0]
+    )
+    assert "-Darcadedb.server.rootPassword=${root_password}" in container["args"][0]
+    assert "rootPasswordFile" not in container["args"][0]
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},

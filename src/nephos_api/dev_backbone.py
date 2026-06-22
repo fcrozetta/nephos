@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
+import yaml
 from fastapi.testclient import TestClient
 
 from nephos_api.config import Settings
@@ -91,6 +92,14 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         display_name="PostgreSQL",
         provider_name="postgres",
         provides=[("sql", "postgres", "postgres")],
+        config_options=[
+            {"name": "storage-size", "type": "string", "default": "1Gi"},
+            {"name": "storage-class-name", "type": "string"},
+        ],
+        runtime_mappings=[
+            ("storage-size", "storageSize"),
+            ("storage-class-name", "storageClassName"),
+        ],
     )
     _write_service(
         root,
@@ -98,6 +107,48 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         display_name="Zitadel",
         provider_name="zitadel",
         provides=[("oidc", "oidc", "oidc"), ("service-account", "jwt", "jwt")],
+        config_options=[
+            {
+                "name": "image",
+                "type": "string",
+                "default": "ghcr.io/zitadel/zitadel:v2.58.0",
+            },
+            {
+                "name": "external-host",
+                "type": "string",
+                "default": "zitadel.nephos.localhost",
+            },
+            {
+                "name": "admin-username",
+                "type": "string",
+                "default": "root@zitadel.nephos.localhost",
+            },
+            {
+                "name": "admin-password",
+                "type": "string",
+                "default": "nephos-local-zitadel",
+            },
+            {
+                "name": "master-key",
+                "type": "string",
+                "default": "0123456789abcdef0123456789abcdef",
+            },
+            {
+                "name": "database-password",
+                "type": "string",
+                "default": "nephos-local-zitadel-db",
+            },
+            {"name": "storage-size", "type": "string", "default": "1Gi"},
+        ],
+        runtime_mappings=[
+            ("image", "image"),
+            ("external-host", "externalHost"),
+            ("admin-username", "adminUsername"),
+            ("admin-password", "adminPassword"),
+            ("master-key", "masterKey"),
+            ("database-password", "databasePassword"),
+            ("storage-size", "storageSize"),
+        ],
     )
     _write_service(
         root,
@@ -105,6 +156,26 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         display_name="SeaweedFS",
         provider_name="seaweedfs",
         provides=[("object-storage", "s3", "s3")],
+        config_options=[
+            {"name": "image", "type": "string", "default": "chrislusf/seaweedfs:3.85"},
+            {"name": "storage-size", "type": "string", "default": "1Gi"},
+            {
+                "name": "s3-access-key",
+                "type": "string",
+                "default": "nephos-local-seaweedfs",
+            },
+            {
+                "name": "s3-secret-key",
+                "type": "string",
+                "default": "nephos-local-seaweedfs",
+            },
+        ],
+        runtime_mappings=[
+            ("image", "image"),
+            ("storage-size", "storageSize"),
+            ("s3-access-key", "s3AccessKey"),
+            ("s3-secret-key", "s3SecretKey"),
+        ],
     )
     _write_service(
         root,
@@ -115,6 +186,28 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             ("sql", "arcadedb", "sql"),
             ("opencypher", "bolt", "bolt"),
             ("opencypher", "n4j", "n4j"),
+        ],
+        config_options=[
+            {
+                "name": "image",
+                "type": "string",
+                "default": "arcadedata/arcadedb:25.5.1",
+            },
+            {"name": "storage-size", "type": "string", "default": "1Gi"},
+            {
+                "name": "root-password",
+                "type": "string",
+                "default": "nephos-local-arcadedb",
+            },
+            {"name": "enable-gremlin", "type": "boolean", "default": False},
+            {"name": "enable-mongo", "type": "boolean", "default": False},
+        ],
+        runtime_mappings=[
+            ("image", "image"),
+            ("storage-size", "storageSize"),
+            ("root-password", "rootPassword"),
+            ("enable-gremlin", "enableGremlin"),
+            ("enable-mongo", "enableMongo"),
         ],
     )
 
@@ -337,40 +430,50 @@ def _write_service(
     display_name: str,
     provider_name: str,
     provides: list[tuple[str, str, str]],
+    config_options: list[dict[str, object]],
+    runtime_mappings: list[tuple[str, str]],
 ) -> None:
     path = root / "services" / name / "service.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    provides_yaml = "\n".join(
-        [
-            "    - capability: "
-            f"{capability}\n"
-            f"      protocol: {protocol}\n"
-            f"      as: {alias}"
-            for capability, protocol, alias in provides
-        ]
-    )
+    manifest = {
+        "apiVersion": "nephos.pro/v1alpha1",
+        "kind": "Service",
+        "metadata": {
+            "name": name,
+            "displayName": display_name,
+        },
+        "spec": {
+            "provides": [
+                {
+                    "capability": capability,
+                    "protocol": protocol,
+                    "as": alias,
+                }
+                for capability, protocol, alias in provides
+            ],
+            "bindings": {
+                "outputs": [{"name": "connection", "target": "app-secret"}]
+            },
+            "config": {"options": config_options},
+            "provisioning": {"mode": "app-scoped-resource"},
+            "operations": [],
+            "runtime": {
+                "type": "provider",
+                "provider": {"name": provider_name},
+                "values": {
+                    "mappings": [
+                        {
+                            "from": {"kind": "config", "name": source},
+                            "to": {"helmValue": target},
+                        }
+                        for source, target in runtime_mappings
+                    ]
+                },
+            },
+        },
+    }
     path.write_text(
-        f"""
-apiVersion: nephos.pro/v1alpha1
-kind: Service
-metadata:
-  name: {name}
-  displayName: {display_name}
-spec:
-  provides:
-{provides_yaml}
-  bindings:
-    outputs:
-      - name: connection
-        target: app-secret
-  provisioning:
-    mode: app-scoped-resource
-  operations: []
-  runtime:
-    type: provider
-    provider:
-      name: {provider_name}
-""".strip()
+        yaml.safe_dump(manifest, sort_keys=False).strip()
     )
 
 

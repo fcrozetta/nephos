@@ -199,14 +199,12 @@ def _manifest_config_values(
     manifest: AppManifest | ServiceManifest,
 ) -> dict[str, object]:
     values: dict[str, object] = {}
-    if isinstance(manifest, AppManifest):
-        values.update(
-            {
-                option.name: option.default
-                for option in manifest.spec.config.options
-                if option.default is not None
-            }
-        )
+    values.update(
+        {
+            option.name: option.default
+            for option in manifest.spec.config.options
+        }
+    )
     config_json = row.get("config_json")
     if isinstance(config_json, str):
         values.update(json.loads(config_json))

@@ -18,6 +18,82 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
+## Current Plan Addendum: Alpha Backbone Service Config Plumbing
+
+Goal:
+
+- Wire Service manifest config options through catalog validation, install
+  validation, provider runtime values, and the temporary alpha backbone Service
+  manifests.
+
+Non-goals:
+
+- Do not add canonical schemas under `schemas/`.
+- Do not add canonical examples under `examples/`.
+- Do not implement live Zitadel, SeaweedFS, or ArcadeDB app-scoped API clients.
+- Do not require a live Kubernetes cluster for tests.
+
+Current understanding:
+
+- App manifests already support `spec.config.options`; Service manifests do
+  not.
+- App install config is validated before desired state is written; Service
+  install config is currently persisted without Service manifest validation.
+- Provider runtime value mapping exists, but Service manifest defaults are not
+  included when config-backed runtime values are built.
+- The temporary alpha backbone catalog must declare non-canonical Service
+  config options and runtime mappings so local smoke resources are not driven
+  only by provider hardcoded defaults.
+
+Files likely to change:
+
+- `src/nephos_api/catalog.py`
+- `src/nephos_api/api/resources.py`
+- `src/nephos_api/providers/deployer.py`
+- `src/nephos_api/providers/kubernetes.py`
+- `src/nephos_api/dev_backbone.py`
+- focused tests for catalog loading, install API, provider deployer, backbone
+  generation, and Pulumi Kubernetes resource specs
+
+Proposed steps:
+
+1. Add failing tests for Service config schema/validation and install API
+   errors.
+2. Add failing tests for Service runtime defaults plus install config reaching
+   provider values.
+3. Add failing tests for generated alpha backbone Service options/mappings.
+4. Add failing tests for Zitadel, SeaweedFS, and ArcadeDB resource specs using
+   configured values without known-broken env/property names.
+5. Implement the smallest catalog/API/provider/runtime changes needed.
+
+Risks:
+
+- Silently creating public manifest contract drift without recording it.
+- Encoding fake live auth behavior for SeaweedFS or non-Postgres binding
+  clients before those clients are verified.
+- Leaving provider hardcoded defaults as the only effective runtime path.
+
+Validation commands:
+
+- `uv run pytest tests/test_catalog_loader.py tests/test_install_api.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+- `uv run nephos-api dev backbone-smoke --timeout-seconds 600`
+
+Rollback notes:
+
+- Revert this slice as a single commit if Service config shape or alpha
+  backbone runtime plumbing needs a different accepted direction.
+
+Open questions:
+
+- None blocking; live non-Postgres client provisioning remains explicitly
+  blocked by scope.
+
+---
+
 ## Current Plan: API 0.0.1 Runtime Convergence
 
 Goal:

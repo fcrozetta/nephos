@@ -341,6 +341,12 @@ def _zitadel_service(
         "adminPassword",
         "nephos-local-zitadel",
     )
+    master_key = _zitadel_master_key(spec.values)
+    database_password = _string_value(
+        spec.values,
+        "databasePassword",
+        "nephos-local-zitadel-db",
+    )
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -352,6 +358,8 @@ def _zitadel_service(
         string_data={
             "admin-username": admin_username,
             "admin-password": admin_password,
+            "master-key": master_key,
+            "database-password": database_password,
         },
         opts=opts,
     )
@@ -368,7 +376,7 @@ def _zitadel_service(
         },
         opts=opts,
     )
-    k8s.apps.v1.Deployment(
+    k8s.apps.v1.StatefulSet(
         name,
         metadata={
             "name": name,
@@ -376,6 +384,7 @@ def _zitadel_service(
             "labels": labels,
         },
         spec={
+            "serviceName": name,
             "replicas": 1,
             "selector": {"matchLabels": selector},
             "template": {
@@ -398,7 +407,26 @@ def _zitadel_service(
                                     "value": external_host,
                                 },
                                 {
-                                    "name": "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME",
+                                    "name": "ZITADEL_EXTERNALSECURE",
+                                    "value": "false",
+                                },
+                                {
+                                    "name": "ZITADEL_TLS_ENABLED",
+                                    "value": "false",
+                                },
+                                {
+                                    "name": "ZITADEL_MASTERKEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "master-key",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_USERNAME"
+                                    ),
                                     "valueFrom": {
                                         "secretKeyRef": {
                                             "name": name,
@@ -407,7 +435,9 @@ def _zitadel_service(
                                     },
                                 },
                                 {
-                                    "name": "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD",
+                                    "name": (
+                                        "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_PASSWORD"
+                                    ),
                                     "valueFrom": {
                                         "secretKeyRef": {
                                             "name": name,
@@ -415,11 +445,104 @@ def _zitadel_service(
                                         }
                                     },
                                 },
+                                {
+                                    "name": (
+                                        "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_"
+                                        "PASSWORDCHANGEREQUIRED"
+                                    ),
+                                    "value": "false",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_HOST",
+                                    "value": "127.0.0.1",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_PORT",
+                                    "value": "5432",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_DATABASE",
+                                    "value": "zitadel",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_USER_USERNAME",
+                                    "value": "zitadel",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_USER_PASSWORD",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "database-password",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE",
+                                    "value": "disable",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME",
+                                    "value": "zitadel",
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "database-password",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE",
+                                    "value": "disable",
+                                },
+                            ],
+                        },
+                        {
+                            "name": "postgres",
+                            "image": "postgres:16-alpine",
+                            "ports": [
+                                {
+                                    "name": "postgresql",
+                                    "containerPort": 5432,
+                                }
+                            ],
+                            "env": [
+                                {
+                                    "name": "POSTGRES_DB",
+                                    "value": "zitadel",
+                                },
+                                {
+                                    "name": "POSTGRES_USER",
+                                    "value": "zitadel",
+                                },
+                                {
+                                    "name": "POSTGRES_PASSWORD",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "database-password",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "PGDATA",
+                                    "value": "/var/lib/postgresql/data/pgdata",
+                                },
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": "data",
+                                    "mountPath": "/var/lib/postgresql/data",
+                                }
                             ],
                         }
                     ]
                 },
             },
+            "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
         },
         opts=opts,
     )
@@ -490,26 +613,6 @@ def _seaweedfs_service(
                             ],
                             "ports": [
                                 {"name": "s3", "containerPort": 8333}
-                            ],
-                            "env": [
-                                {
-                                    "name": "WEED_S3_ACCESS_KEY",
-                                    "valueFrom": {
-                                        "secretKeyRef": {
-                                            "name": name,
-                                            "key": "s3-access-key",
-                                        }
-                                    },
-                                },
-                                {
-                                    "name": "WEED_S3_SECRET_KEY",
-                                    "valueFrom": {
-                                        "secretKeyRef": {
-                                            "name": name,
-                                            "key": "s3-secret-key",
-                                        }
-                                    },
-                                },
                             ],
                             "volumeMounts": [
                                 {"name": "data", "mountPath": "/data"}
@@ -592,16 +695,17 @@ def _arcadedb_service(
                         {
                             "name": "arcadedb",
                             "image": image,
-                            "ports": container_ports,
-                            "env": [
-                                {
-                                    "name": "JAVA_OPTS",
-                                    "value": (
-                                        "-Darcadedb.server.rootPasswordFile="
-                                        "/run/secrets/arcadedb/root-password"
-                                    ),
-                                }
+                            "command": ["/bin/sh", "-ec"],
+                            "args": [
+                                (
+                                    "root_password=\"$(cat "
+                                    "/run/secrets/arcadedb/root-password)\"\n"
+                                    "exec /opt/arcadedb/bin/server.sh "
+                                    "\"-Darcadedb.server.rootPassword="
+                                    "${root_password}\""
+                                )
                             ],
+                            "ports": container_ports,
                             "volumeMounts": [
                                 {
                                     "name": "data",
@@ -649,6 +753,20 @@ def _bool_value(
     if isinstance(value, str):
         return value.lower() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _zitadel_master_key(values: Mapping[str, object]) -> str:
+    master_key = _string_value(
+        values,
+        "masterKey",
+        "0123456789abcdef0123456789abcdef",
+    )
+    if len(master_key) != 32:
+        raise RuntimeBlockedError(
+            reason="runtime_config_invalid",
+            message="Zitadel masterKey must be exactly 32 characters.",
+        )
+    return master_key
 
 
 def _volume_claim_template(

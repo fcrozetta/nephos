@@ -211,6 +211,7 @@ class ServiceSpec(BaseModel):
 
     provides: list[ProvidedCapability] = Field(min_length=1)
     bindings: BindingOutputs | None = None
+    config: AppConfig = Field(default_factory=AppConfig)
     provisioning: Provisioning
     operations: list[dict[str, Any]] = Field(default_factory=list)
     runtime: RuntimeRef
@@ -439,35 +440,11 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             )
         route_names.add(route.name)
 
-    for option in manifest.spec.config.options:
-        _validate_catalog_identifier(
-            path=path,
-            label="config option name",
-            value=option.name,
-        )
-        if option.default is not None and not _config_value_matches_type(
-            option.default,
-            option.type_,
-        ):
-            raise CatalogValidationError(
-                f"invalid App manifest {path}: invalid config default "
-                f"for {option.name!r}"
-            )
-        if option.type_ == "enum":
-            allowed_values = [
-                enum_value["value"]
-                for enum_value in option.values or []
-            ]
-            if not allowed_values:
-                raise CatalogValidationError(
-                    f"invalid App manifest {path}: enum config values "
-                    f"are required for {option.name!r}"
-                )
-            if option.default is not None and option.default not in allowed_values:
-                raise CatalogValidationError(
-                    f"invalid App manifest {path}: invalid enum default "
-                    f"for {option.name!r}"
-                )
+    _validate_config_options(
+        kind="App",
+        path=path,
+        options=manifest.spec.config.options,
+    )
 
 
 def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None:
@@ -512,6 +489,48 @@ def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None
                     f"duplicate binding output name {output.name!r}"
                 )
             output_names.add(output.name)
+    _validate_config_options(
+        kind="Service",
+        path=path,
+        options=manifest.spec.config.options,
+    )
+
+
+def _validate_config_options(
+    *,
+    kind: str,
+    path: Path,
+    options: list[ConfigOption],
+) -> None:
+    for option in options:
+        _validate_catalog_identifier(
+            path=path,
+            label="config option name",
+            value=option.name,
+        )
+        if option.default is not None and not _config_value_matches_type(
+            option.default,
+            option.type_,
+        ):
+            raise CatalogValidationError(
+                f"invalid {kind} manifest {path}: invalid config default "
+                f"for {option.name!r}"
+            )
+        if option.type_ == "enum":
+            allowed_values = [
+                enum_value["value"]
+                for enum_value in option.values or []
+            ]
+            if not allowed_values:
+                raise CatalogValidationError(
+                    f"invalid {kind} manifest {path}: enum config values "
+                    f"are required for {option.name!r}"
+                )
+            if option.default is not None and option.default not in allowed_values:
+                raise CatalogValidationError(
+                    f"invalid {kind} manifest {path}: invalid enum default "
+                    f"for {option.name!r}"
+                )
 
 
 def _config_value_matches_type(value: object, expected_type: str) -> bool:
