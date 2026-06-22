@@ -331,6 +331,8 @@ def _zitadel_service(
         "externalHost",
         f"{spec.runtime_name}.nephos.localhost",
     )
+    external_port = _int_value(spec.values, "externalPort", 8080)
+    external_secure = _bool_value(spec.values, "externalSecure", False)
     admin_username = _string_value(
         spec.values,
         "adminUsername",
@@ -339,7 +341,7 @@ def _zitadel_service(
     admin_password = _string_value(
         spec.values,
         "adminPassword",
-        "nephos-local-zitadel",
+        "Nephos-local-zitadel-1!",
     )
     master_key = _zitadel_master_key(spec.values)
     database_password = _string_value(
@@ -407,8 +409,12 @@ def _zitadel_service(
                                     "value": external_host,
                                 },
                                 {
+                                    "name": "ZITADEL_EXTERNALPORT",
+                                    "value": str(external_port),
+                                },
+                                {
                                     "name": "ZITADEL_EXTERNALSECURE",
-                                    "value": "false",
+                                    "value": str(external_secure).lower(),
                                 },
                                 {
                                     "name": "ZITADEL_TLS_ENABLED",
@@ -436,6 +442,23 @@ def _zitadel_service(
                                 },
                                 {
                                     "name": (
+                                        "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS"
+                                    ),
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "admin-username",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED"
+                                    ),
+                                    "value": "true",
+                                },
+                                {
+                                    "name": (
                                         "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_PASSWORD"
                                     ),
                                     "valueFrom": {
@@ -448,6 +471,52 @@ def _zitadel_service(
                                 {
                                     "name": (
                                         "ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_"
+                                        "PASSWORDCHANGEREQUIRED"
+                                    ),
+                                    "value": "false",
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME"
+                                    ),
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "admin-username",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS"
+                                    ),
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "admin-username",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED"
+                                    ),
+                                    "value": "true",
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD"
+                                    ),
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "admin-password",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_"
                                         "PASSWORDCHANGEREQUIRED"
                                     ),
                                     "value": "false",
@@ -740,6 +809,17 @@ def _string_value(
 ) -> str:
     value = values.get(name, default)
     return str(value)
+
+
+def _int_value(
+    values: Mapping[str, object],
+    name: str,
+    default: int,
+) -> int:
+    value = values.get(name, default)
+    if type(value) is int:
+        return value
+    return int(str(value))
 
 
 def _bool_value(

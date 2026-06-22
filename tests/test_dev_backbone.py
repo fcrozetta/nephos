@@ -73,6 +73,8 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
     assert _config_option_names(manifests["zitadel"]) == {
         "image",
         "external-host",
+        "external-port",
+        "external-secure",
         "admin-username",
         "admin-password",
         "master-key",
@@ -82,6 +84,8 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
     assert _runtime_mapping_pairs(manifests["zitadel"]) == {
         ("image", "image"),
         ("external-host", "externalHost"),
+        ("external-port", "externalPort"),
+        ("external-secure", "externalSecure"),
         ("admin-username", "adminUsername"),
         ("admin-password", "adminPassword"),
         ("master-key", "masterKey"),

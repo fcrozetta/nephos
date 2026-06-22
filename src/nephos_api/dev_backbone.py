@@ -118,6 +118,8 @@ def write_alpha_backbone_catalog(root: Path) -> None:
                 "type": "string",
                 "default": "zitadel.nephos.localhost",
             },
+            {"name": "external-port", "type": "integer", "default": 8080},
+            {"name": "external-secure", "type": "boolean", "default": False},
             {
                 "name": "admin-username",
                 "type": "string",
@@ -126,7 +128,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             {
                 "name": "admin-password",
                 "type": "string",
-                "default": "nephos-local-zitadel",
+                "default": "Nephos-local-zitadel-1!",
             },
             {
                 "name": "master-key",
@@ -143,6 +145,8 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         runtime_mappings=[
             ("image", "image"),
             ("external-host", "externalHost"),
+            ("external-port", "externalPort"),
+            ("external-secure", "externalSecure"),
             ("admin-username", "adminUsername"),
             ("admin-password", "adminPassword"),
             ("master-key", "masterKey"),

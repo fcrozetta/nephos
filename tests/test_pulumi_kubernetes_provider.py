@@ -195,6 +195,8 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             "masterKey": "0123456789abcdef0123456789abcdef",
             "databasePassword": "db-secret",
             "externalHost": "login.nephos.localhost",
+            "externalPort": 443,
+            "externalSecure": True,
             "storageSize": "4Gi",
         },
     )
@@ -219,7 +221,8 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     assert container["image"] == "ghcr.io/zitadel/zitadel:v2.58.0"
     assert container["args"] == ["start-from-init", "--masterkeyFromEnv"]
     assert env["ZITADEL_EXTERNALDOMAIN"]["value"] == "login.nephos.localhost"
-    assert env["ZITADEL_EXTERNALSECURE"]["value"] == "false"
+    assert env["ZITADEL_EXTERNALPORT"]["value"] == "443"
+    assert env["ZITADEL_EXTERNALSECURE"]["value"] == "true"
     assert env["ZITADEL_TLS_ENABLED"]["value"] == "false"
     assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == "127.0.0.1"
     assert env["ZITADEL_DATABASE_POSTGRES_DATABASE"]["value"] == "zitadel"
@@ -230,10 +233,19 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     assert env["ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_PASSWORD"]["valueFrom"] == {
         "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "admin-password"}
     }
+    assert env["ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS"]["valueFrom"] == {
+        "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "admin-username"}
+    }
+    assert env["ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME"]["valueFrom"] == {
+        "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "admin-username"}
+    }
+    assert env["ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD"]["valueFrom"] == {
+        "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "admin-password"}
+    }
+    assert env["ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED"]["value"] == "true"
     assert env["ZITADEL_MASTERKEY"]["valueFrom"] == {
         "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "master-key"}
     }
-    assert not any(name.startswith("ZITADEL_FIRSTINSTANCE_") for name in env)
     assert postgres["image"] == "postgres:16-alpine"
     assert {
         "name": "POSTGRES_PASSWORD",
