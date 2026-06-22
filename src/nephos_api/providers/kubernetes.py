@@ -664,7 +664,12 @@ def _zitadel_service(
                                 {
                                     "name": "data",
                                     "mountPath": "/var/lib/postgresql/data",
-                                }
+                                },
+                                {
+                                    "name": "bootstrap",
+                                    "mountPath": bootstrap_mount_path,
+                                    "readOnly": True,
+                                },
                             ],
                         }
                     ]

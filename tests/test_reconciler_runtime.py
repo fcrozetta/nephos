@@ -1761,6 +1761,7 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
             catalog_source_id="default",
             catalog_source_path="catalog/services/zitadel/service.yaml",
             manifest_digest="sha256:zitadel",
+            config={"external-host": "login.example.test"},
         )
         app = tx.create_app_instance(
             slug="paperless",
@@ -1801,6 +1802,7 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
             alias="auth",
             capability="oidc",
             protocol="oidc",
+            service_config={"external-host": "login.example.test"},
             app_routes=(
                 {"name": "web", "visibility": "local", "target": {"port": "http"}},
             ),

@@ -1,4 +1,10 @@
+import json
 import re
+import select
+import shutil
+import socket
+import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -38,6 +44,16 @@ class PulumiZitadelProvisionerConfig:
     insecure: bool
     jwt_profile_json: str
     project_name: str = "nephos-zitadel"
+
+
+@dataclass(frozen=True)
+class KubernetesZitadelProvisionerConfig:
+    work_dir: Path
+    state_dir: Path
+    kubeconfig: Path | None = None
+    kube_context: str | None = None
+    project_name: str = "nephos-zitadel"
+    local_bind_address: str = "127.0.0.1"
 
 
 @dataclass(frozen=True)
@@ -94,6 +110,77 @@ class ZitadelPulumiRunner(Protocol):
         self,
         spec: ZitadelServiceAccountBindingSpec,
     ) -> None: ...
+
+
+class KubernetesPulumiZitadelProvisioningClient:
+    def __init__(
+        self,
+        *,
+        core_v1_api,
+        config: KubernetesZitadelProvisionerConfig,
+        runner: ZitadelPulumiRunner | None = None,
+    ) -> None:
+        self._core_v1_api = core_v1_api
+        self._config = config
+        self._runner = runner
+
+    def ensure_oidc_client(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str]:
+        with self._local_forward(context) as endpoint:
+            return self._pulumi_client(context, endpoint).ensure_oidc_client(context)
+
+    def ensure_service_account(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str]:
+        with self._local_forward(context) as endpoint:
+            client = self._pulumi_client(context, endpoint)
+            return client.ensure_service_account(context)
+
+    def delete_oidc_client(self, context: BindingProvisioningContext) -> None:
+        with self._local_forward(context) as endpoint:
+            self._pulumi_client(context, endpoint).delete_oidc_client(context)
+
+    def delete_service_account(self, context: BindingProvisioningContext) -> None:
+        with self._local_forward(context) as endpoint:
+            self._pulumi_client(context, endpoint).delete_service_account(context)
+
+    def _pulumi_client(
+        self,
+        context: BindingProvisioningContext,
+        endpoint: "_ForwardEndpoint",
+    ) -> "PulumiZitadelProvisioningClient":
+        return PulumiZitadelProvisioningClient(
+            config=PulumiZitadelProvisionerConfig(
+                work_dir=self._config.work_dir,
+                state_dir=self._config.state_dir,
+                issuer_url=_issuer_url(context),
+                domain=endpoint.host,
+                port=endpoint.port,
+                insecure=True,
+                jwt_profile_json=_bootstrap_machine_key_json(
+                    self._core_v1_api,
+                    context=context,
+                ),
+                project_name=self._config.project_name,
+            ),
+            runner=self._runner,
+        )
+
+    def _local_forward(
+        self,
+        context: BindingProvisioningContext,
+    ) -> "_KubectlPortForward":
+        return _KubectlPortForward(
+            namespace=_service_namespace(context.service_slug),
+            service_name=_zitadel_service_name(context.service_slug),
+            remote_port=8080,
+            host=self._config.local_bind_address,
+            kubeconfig=self._config.kubeconfig,
+            kube_context=self._config.kube_context,
+        )
 
 
 class PulumiZitadelProvisioningClient:
@@ -335,6 +422,259 @@ def _service_account_pulumi_program(spec: ZitadelServiceAccountBindingSpec) -> N
     )
     pulumi.export("serviceAccountId", machine.id)
     pulumi.export("keyJson", key.key_details)
+
+
+def _service_namespace(service_slug: str) -> str:
+    return f"svc-{service_slug}"
+
+
+def _zitadel_service_name(service_slug: str) -> str:
+    namespace = _service_namespace(service_slug)
+    return f"{namespace}-zitadel"
+
+
+def _zitadel_pod_name(service_slug: str) -> str:
+    return f"{_zitadel_service_name(service_slug)}-0"
+
+
+def _bootstrap_machine_key_path(context: BindingProvisioningContext) -> str:
+    value = _config_value(
+        context,
+        "bootstrap-machine-key-path",
+        "bootstrapMachineKeyPath",
+        default="/var/lib/zitadel-bootstrap/nephos-provisioner-key.json",
+    )
+    return str(value)
+
+
+def _bootstrap_machine_key_json(
+    core_v1_api,
+    *,
+    context: BindingProvisioningContext,
+) -> str:
+    from kubernetes import stream
+
+    namespace = _service_namespace(context.service_slug)
+    pod_name = _zitadel_pod_name(context.service_slug)
+    key_path = _bootstrap_machine_key_path(context)
+    _assert_service_namespace_owned(core_v1_api, context=context, namespace=namespace)
+    response = stream.stream(
+        core_v1_api.connect_get_namespaced_pod_exec,
+        pod_name,
+        namespace,
+        command=["sh", "-lc", f"cat {shlex_quote(key_path)}"],
+        container="postgres",
+        stderr=True,
+        stdin=False,
+        stdout=True,
+        tty=False,
+    )
+    key_json = str(response).strip()
+    try:
+        parsed = json.loads(key_json)
+    except json.JSONDecodeError as exc:
+        raise RuntimeBlockedError(
+            reason="binding_provisioner_unavailable",
+            message="Zitadel bootstrap machine key is not readable yet.",
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeBlockedError(
+            reason="binding_provisioner_unavailable",
+            message="Zitadel bootstrap machine key did not contain a JSON object.",
+        )
+    return key_json
+
+
+def _assert_service_namespace_owned(
+    core_v1_api,
+    *,
+    context: BindingProvisioningContext,
+    namespace: str,
+) -> None:
+    from kubernetes.client.rest import ApiException
+
+    try:
+        namespace_resource = core_v1_api.read_namespace(name=namespace)
+    except ApiException as exc:
+        if exc.status == 404:
+            namespace_resource = None
+        else:
+            raise
+    metadata = getattr(namespace_resource, "metadata", None)
+    labels = getattr(metadata, "labels", None) or {}
+    expected = {
+        "app.kubernetes.io/managed-by": "nephos",
+        "nephos.pro/resource-type": "service_instance",
+        "nephos.pro/service-instance": context.service_slug,
+    }
+    if namespace_resource is None or not all(
+        labels.get(key) == value for key, value in expected.items()
+    ):
+        raise RuntimeBlockedError(
+            reason="runtime_safety_blocked",
+            message=f"refusing to use unowned namespace {namespace}",
+        )
+
+
+def _issuer_url(context: BindingProvisioningContext) -> str:
+    host = str(_config_value(context, "external-host", "externalHost"))
+    port = int(
+        str(_config_value(context, "external-port", "externalPort", default=443))
+    )
+    secure = _bool_config_value(
+        context,
+        "external-secure",
+        "externalSecure",
+        default=True,
+    )
+    scheme = "https" if secure else "http"
+    default_port = 443 if secure else 80
+    suffix = "" if port == default_port else f":{port}"
+    return f"{scheme}://{host}{suffix}"
+
+
+def _config_value(
+    context: BindingProvisioningContext,
+    kebab_name: str,
+    camel_name: str,
+    *,
+    default: object | None = None,
+) -> object:
+    config = context.service_config or {}
+    if kebab_name in config:
+        return config[kebab_name]
+    if camel_name in config:
+        return config[camel_name]
+    if default is not None:
+        return default
+    raise RuntimeBlockedError(
+        reason="binding_provisioner_unavailable",
+        message=f"Zitadel Service config is missing required value {kebab_name}.",
+    )
+
+
+def _bool_config_value(
+    context: BindingProvisioningContext,
+    kebab_name: str,
+    camel_name: str,
+    *,
+    default: bool,
+) -> bool:
+    value = _config_value(context, kebab_name, camel_name, default=default)
+    if type(value) is bool:
+        return value
+    return str(value).lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class _ForwardEndpoint:
+    host: str
+    port: int
+
+
+class _KubectlPortForward:
+    def __init__(
+        self,
+        *,
+        namespace: str,
+        service_name: str,
+        remote_port: int,
+        host: str,
+        kubeconfig: Path | None,
+        kube_context: str | None,
+    ) -> None:
+        self._namespace = namespace
+        self._service_name = service_name
+        self._remote_port = remote_port
+        self._host = host
+        self._kubeconfig = kubeconfig
+        self._kube_context = kube_context
+        self._process: subprocess.Popen[str] | None = None
+        self._local_port = 0
+
+    def __enter__(self) -> _ForwardEndpoint:
+        if shutil.which("kubectl") is None:
+            raise RuntimeBlockedError(
+                reason="kubectl_cli_missing",
+                message="kubectl is required for Zitadel internal provisioning.",
+            )
+        self._local_port = _free_local_port(self._host)
+        command = [
+            "kubectl",
+            "-n",
+            self._namespace,
+        ]
+        if self._kubeconfig is not None:
+            command.extend(["--kubeconfig", str(self._kubeconfig)])
+        if self._kube_context is not None:
+            command.extend(["--context", self._kube_context])
+        command.extend(
+            [
+                "port-forward",
+                f"svc/{self._service_name}",
+                f"{self._local_port}:{self._remote_port}",
+                "--address",
+                self._host,
+            ]
+        )
+        self._process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        self._wait_ready()
+        return _ForwardEndpoint(host=self._host, port=self._local_port)
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        if self._process is None:
+            return
+        self._process.terminate()
+        try:
+            self._process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait(timeout=5)
+
+    def _wait_ready(self) -> None:
+        assert self._process is not None
+        deadline = time.monotonic() + 20
+        output: list[str] = []
+        while time.monotonic() < deadline:
+            if self._process.poll() is not None:
+                remaining = self._process.stdout.read() if self._process.stdout else ""
+                raise RuntimeBlockedError(
+                    reason="binding_provisioner_unavailable",
+                    message=(
+                        "Zitadel internal port-forward exited before it became "
+                        f"ready: {''.join(output)}{remaining}"
+                    ).strip(),
+                )
+            if self._process.stdout is None:
+                time.sleep(0.1)
+                continue
+            ready, _, _ = select.select([self._process.stdout], [], [], 0.1)
+            line = self._process.stdout.readline() if ready else ""
+            if line:
+                output.append(line)
+                if "Forwarding from" in line:
+                    return
+        raise RuntimeBlockedError(
+            reason="binding_provisioner_unavailable",
+            message="Timed out waiting for Zitadel internal port-forward.",
+        )
+
+
+def _free_local_port(host: str) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        return int(sock.getsockname()[1])
+
+
+def shlex_quote(value: str) -> str:
+    import shlex
+
+    return shlex.quote(value)
 
 
 def _is_oidc(context: BindingProvisioningContext) -> bool:

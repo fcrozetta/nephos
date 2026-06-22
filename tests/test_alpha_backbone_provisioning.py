@@ -1,9 +1,12 @@
 import pytest
 
+import nephos_api.provisioners.zitadel as zitadel_module
 from nephos_api.provisioning import (
     ArcadeDBAppScopedProvisioner,
     BindingProvisioningContext,
     CompositeBindingProvisioner,
+    KubernetesPulumiZitadelProvisioningClient,
+    KubernetesZitadelProvisionerConfig,
     PulumiZitadelProvisionerConfig,
     PulumiZitadelProvisioningClient,
     SeaweedFSS3Provisioner,
@@ -68,6 +71,17 @@ class FakePulumiZitadelRunner:
 
     def destroy_service_account(self, spec) -> None:
         self.destroyed_service_account_specs.append(spec)
+
+
+class FakeForward:
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+
+    def __enter__(self):
+        return zitadel_module._ForwardEndpoint(host="127.0.0.1", port=23456)
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
 
 
 class FakeSeaweedFSClient:
@@ -283,6 +297,69 @@ def test_pulumi_zitadel_client_outputs_service_account_material(tmp_path) -> Non
     assert runner.service_account_specs[0].stack_name == "zitadel-jwt-binding_machine"
 
 
+def test_kubernetes_zitadel_client_uses_service_config_and_internal_forward(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    runner = FakePulumiZitadelRunner()
+    forwards = []
+
+    def fake_forward(**kwargs):
+        forward = FakeForward(**kwargs)
+        forwards.append(forward)
+        return forward
+
+    monkeypatch.setattr(zitadel_module, "_KubectlPortForward", fake_forward)
+    monkeypatch.setattr(
+        zitadel_module,
+        "_bootstrap_machine_key_json",
+        lambda core_v1_api, *, context: '{"key":"bootstrap"}',
+    )
+    client = KubernetesPulumiZitadelProvisioningClient(
+        core_v1_api=object(),
+        config=KubernetesZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+            kube_context="docker-desktop",
+        ),
+        runner=runner,
+    )
+    context = _context(
+        service_slug="zitadel",
+        alias="auth",
+        capability="oidc",
+        protocol="oidc",
+        service_config={
+            "external-host": "login.example.test",
+            "external-port": 8443,
+            "external-secure": True,
+        },
+        app_routes=(
+            {"name": "web", "visibility": "local", "target": {"port": "http"}},
+        ),
+        platform_domains=(
+            {"name": "local", "domain": "nephos.local", "default": True},
+        ),
+    )
+
+    values = client.ensure_oidc_client(context)
+
+    assert values["issuerUrl"] == "https://login.example.test:8443"
+    assert values["clientId"] == "client-id"
+    assert forwards[0].kwargs == {
+        "namespace": "svc-zitadel",
+        "service_name": "svc-zitadel-zitadel",
+        "remote_port": 8080,
+        "host": "127.0.0.1",
+        "kubeconfig": None,
+        "kube_context": "docker-desktop",
+    }
+    assert runner.oidc_specs[0].domain == "127.0.0.1"
+    assert runner.oidc_specs[0].port == 23456
+    assert runner.oidc_specs[0].insecure is True
+    assert runner.oidc_specs[0].jwt_profile_json == '{"key":"bootstrap"}'
+
+
 def test_live_external_provisioners_block_when_client_is_not_configured() -> None:
     with pytest.raises(RuntimeBlockedError, match="Zitadel client is not configured"):
         ZitadelAppScopedProvisioner().provision_binding(
@@ -398,6 +475,7 @@ def _context(
     protocol: str,
     app_routes=(),
     platform_domains=(),
+    service_config=None,
 ) -> BindingProvisioningContext:
     return BindingProvisioningContext(
         binding_id=f"binding_{alias}",
@@ -406,6 +484,7 @@ def _context(
         alias=alias,
         capability=capability,
         protocol=protocol,
+        service_config=service_config,
         app_routes=app_routes,
         platform_domains=platform_domains,
     )

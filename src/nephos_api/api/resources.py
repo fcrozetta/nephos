@@ -682,7 +682,7 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         "kind": "Service",
         "lifecycle": row["lifecycle"],
         "catalogRef": _catalog_ref(row),
-        "config": _json_dict(row["config_json"]),
+        "config": _redacted_config(_json_dict(row["config_json"])),
         "provides": catalog_entry["provides"],
         "dependents": [
             {
@@ -1077,3 +1077,18 @@ def _json_dict(value: object) -> dict[str, Any]:
     if not isinstance(value, str):
         return {}
     return json.loads(value)
+
+
+def _redacted_config(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: "[REDACTED]" if _is_sensitive_config_key(key) else value
+        for key, value in config.items()
+    }
+
+
+def _is_sensitive_config_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(
+        marker in lowered
+        for marker in ("password", "secret", "token", "key", "credential")
+    )

@@ -363,16 +363,29 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
     from nephos_api.provisioning import (
         ArcadeDBAppScopedProvisioner,
         CompositeBindingProvisioner,
+        KubernetesPulumiZitadelProvisioningClient,
+        KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
         SeaweedFSS3Provisioner,
         ZitadelAppScopedProvisioner,
     )
 
     load_kubernetes_config(settings)
+    core_v1_api = client.CoreV1Api()
+    pulumi_dir = _pulumi_base_dir(settings) / "pulumi"
+    zitadel_client = KubernetesPulumiZitadelProvisioningClient(
+        core_v1_api=core_v1_api,
+        config=KubernetesZitadelProvisionerConfig(
+            work_dir=pulumi_dir / "workspaces",
+            state_dir=pulumi_dir / "state",
+            kubeconfig=settings.kubeconfig,
+            kube_context=settings.kube_context,
+        ),
+    )
     return CompositeBindingProvisioner(
         [
-            PostgresAppScopedProvisioner(core_v1_api=client.CoreV1Api()),
-            ZitadelAppScopedProvisioner(),
+            PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
+            ZitadelAppScopedProvisioner(client=zitadel_client),
             SeaweedFSS3Provisioner(),
             ArcadeDBAppScopedProvisioner(),
         ]

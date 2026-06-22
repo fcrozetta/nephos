@@ -285,6 +285,11 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             }
         },
     } in postgres["env"]
+    assert {
+        "name": "bootstrap",
+        "mountPath": "/var/lib/zitadel-bootstrap",
+        "readOnly": True,
+    } in postgres["volumeMounts"]
     assert data_pvc["spec"]["resources"]["requests"]["storage"] == "4Gi"
     assert bootstrap_pvc["spec"]["resources"]["requests"]["storage"] == "64Mi"
     assert service["spec"]["ports"] == [

@@ -768,6 +768,7 @@ def test_install_service_accepts_manifest_config(tmp_path: Path) -> None:
                 "storage-size": "8Gi",
                 "enable-backups": True,
                 "profile": "local",
+                "admin-password": "super-secret",
             },
         },
     )
@@ -777,6 +778,7 @@ def test_install_service_accepts_manifest_config(tmp_path: Path) -> None:
         "storage-size": "8Gi",
         "enable-backups": True,
         "profile": "local",
+        "admin-password": "[REDACTED]",
     }
 
 
@@ -997,6 +999,8 @@ spec:
             label: Local
           - value: ci
             label: CI
+      - name: admin-password
+        type: string
   provisioning:
     mode: app-scoped-resource
   runtime:

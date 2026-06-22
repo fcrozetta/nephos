@@ -512,6 +512,21 @@ class Reconciler:
             for route in manifest.spec.routes
         ]
 
+    def _service_config(self, slug: str) -> dict[str, object]:
+        row = self._repository.get_service_row(slug)
+        if row is None:
+            raise RuntimeBlockedError(
+                reason="service_not_found",
+                message="Service desired state was not found.",
+            )
+        config_json = row.get("config_json")
+        if not isinstance(config_json, str):
+            return {}
+        config = json.loads(config_json)
+        if not isinstance(config, dict):
+            return {}
+        return dict(config)
+
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
             {
@@ -537,14 +552,20 @@ class Reconciler:
         if deprovision is None:
             return
         for binding in self._repository.list_bindings_for_app(app_instance_id):
+            app_slug = str(binding["app_instance_slug"])
             deprovision(
                 BindingProvisioningContext(
                     binding_id=str(binding["id"]),
-                    app_slug=str(binding["app_instance_slug"]),
+                    app_slug=app_slug,
                     service_slug=str(binding["service_instance_slug"]),
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
                     protocol=_optional_str(binding["protocol"]),
+                    service_config=self._service_config(
+                        str(binding["service_instance_slug"])
+                    ),
+                    app_routes=tuple(self._app_routes(app_slug)),
+                    platform_domains=tuple(self._platform_domains_for_ingress()),
                 )
             )
 
@@ -561,13 +582,19 @@ class Reconciler:
             else None
         )
         for binding in bindings:
+            app_slug = str(binding["app_instance_slug"])
             context = BindingProvisioningContext(
                 binding_id=str(binding["id"]),
-                app_slug=str(binding["app_instance_slug"]),
+                app_slug=app_slug,
                 service_slug=str(binding["service_instance_slug"]),
                 alias=str(binding["alias"]),
                 capability=str(binding["capability"]),
                 protocol=_optional_str(binding["protocol"]),
+                service_config=self._service_config(
+                    str(binding["service_instance_slug"])
+                ),
+                app_routes=tuple(self._app_routes(app_slug)),
+                platform_domains=tuple(self._platform_domains_for_ingress()),
             )
             if deprovision is not None:
                 # Force-destroy tears down the whole Service namespace next. If
@@ -668,6 +695,7 @@ class Reconciler:
             return True
 
         values = _binding_output_values(binding)
+        service_config = self._service_config(str(binding["service_instance_slug"]))
         if values is None and self._provisioner is not None:
             values = self._provisioner.provision_binding(
                 BindingProvisioningContext(
@@ -677,6 +705,7 @@ class Reconciler:
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
                     protocol=_optional_str(binding["protocol"]),
+                    service_config=service_config,
                     app_routes=tuple(
                         self._app_routes(str(binding["app_instance_slug"]))
                     ),
