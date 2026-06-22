@@ -542,6 +542,7 @@ class Reconciler:
                     service_slug=str(binding["service_instance_slug"]),
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
+                    protocol=_optional_str(binding["protocol"]),
                 )
             )
 
@@ -564,6 +565,7 @@ class Reconciler:
                 service_slug=str(binding["service_instance_slug"]),
                 alias=str(binding["alias"]),
                 capability=str(binding["capability"]),
+                protocol=_optional_str(binding["protocol"]),
             )
             if deprovision is not None:
                 # Force-destroy tears down the whole Service namespace next. If
@@ -671,6 +673,7 @@ class Reconciler:
                     service_slug=str(binding["service_instance_slug"]),
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
+                    protocol=_optional_str(binding["protocol"]),
                 )
             )
         if values is None:
@@ -871,6 +874,12 @@ def _resource_type(value: str) -> ResourceType:
     if value == "service_instance":
         return "service_instance"
     raise ValueError(f"unsupported namespace resource type {value}")
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _binding_output_values(row: dict[str, object]) -> dict[str, str] | None:

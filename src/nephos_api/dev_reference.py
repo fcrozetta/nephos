@@ -177,7 +177,8 @@ metadata:
   version: "0.0.1"
 spec:
   requires:
-    - capability: postgres
+    - capability: sql
+      protocol: postgres
       as: database
   routes:
     - name: web
@@ -214,7 +215,8 @@ metadata:
   displayName: PostgreSQL
 spec:
   provides:
-    - capability: postgres
+    - capability: sql
+      protocol: postgres
       as: postgres
       version: "16"
   bindings:

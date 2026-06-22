@@ -62,6 +62,7 @@ class CapabilityRequirement(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     capability: str
+    protocol: str | None = None
     alias: str | None = Field(default=None, alias="as")
     provider: str | None = None
 
@@ -181,6 +182,7 @@ class ProvidedCapability(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     capability: str
+    protocol: str | None = None
     alias: str | None = Field(default=None, alias="as")
     version: str | None = None
 
@@ -382,7 +384,16 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             label="capability",
             value=requirement.capability,
         )
-        alias = requirement.alias or requirement.capability
+        if requirement.protocol is not None:
+            _validate_catalog_identifier(
+                path=path,
+                label="protocol",
+                value=requirement.protocol,
+            )
+        alias = requirement.alias or _default_capability_alias(
+            requirement.capability,
+            requirement.protocol,
+        )
         _validate_catalog_identifier(
             path=path,
             label="binding alias",
@@ -467,7 +478,16 @@ def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None
             label="capability",
             value=provided.capability,
         )
-        alias = provided.alias or provided.capability
+        if provided.protocol is not None:
+            _validate_catalog_identifier(
+                path=path,
+                label="protocol",
+                value=provided.protocol,
+            )
+        alias = provided.alias or _default_capability_alias(
+            provided.capability,
+            provided.protocol,
+        )
         _validate_catalog_identifier(
             path=path,
             label="provided alias",
@@ -503,6 +523,12 @@ def _config_value_matches_type(value: object, expected_type: str) -> bool:
     if expected_type == "boolean":
         return type(value) is bool
     return False
+
+
+def _default_capability_alias(capability: str, protocol: str | None) -> str:
+    if protocol is None:
+        return capability
+    return f"{capability}-{protocol}"
 
 
 def _validate_catalog_identifier(*, path: Path, label: str, value: str) -> None:
@@ -557,7 +583,11 @@ def _app_summary(
         "requires": [
             {
                 "capability": requirement.capability,
-                "alias": requirement.alias or requirement.capability,
+                "protocol": requirement.protocol,
+                "alias": requirement.alias or _default_capability_alias(
+                    requirement.capability,
+                    requirement.protocol,
+                ),
                 "provider": requirement.provider,
             }
             for requirement in manifest.spec.requires
@@ -594,7 +624,11 @@ def _service_summary(
         "provides": [
             {
                 "capability": provided.capability,
-                "alias": provided.alias,
+                "protocol": provided.protocol,
+                "alias": provided.alias or _default_capability_alias(
+                    provided.capability,
+                    provided.protocol,
+                ),
                 "version": provided.version,
                 "bindingOutputTargets": output_targets,
             }

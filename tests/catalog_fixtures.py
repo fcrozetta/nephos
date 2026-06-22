@@ -1,9 +1,17 @@
 from pathlib import Path
 
 
-def write_app(root: Path, name: str = "paperless") -> Path:
+def write_app(
+    root: Path,
+    name: str = "paperless",
+    capability: str = "postgres",
+    protocol: str | None = None,
+    alias: str | None = "database",
+) -> Path:
     path = root / "apps" / name / "app.yaml"
     path.parent.mkdir(parents=True)
+    protocol_yaml = f"\n      protocol: {protocol}" if protocol is not None else ""
+    alias_yaml = f"\n      as: {alias}" if alias is not None else ""
     path.write_text(
         f"""
 apiVersion: nephos.pro/v1alpha1
@@ -15,8 +23,7 @@ metadata:
   version: "1.0.0"
 spec:
   requires:
-    - capability: postgres
-      as: database
+    - capability: {capability}{protocol_yaml}{alias_yaml}
   routes:
     - name: web
       visibility: local
@@ -41,10 +48,15 @@ def write_service(
     root: Path,
     name: str = "postgres",
     capability: str = "postgres",
+    protocol: str | None = None,
+    alias: str | None = "__capability__",
     version: str = "16",
 ) -> Path:
     path = root / "services" / name / "service.yaml"
     path.parent.mkdir(parents=True)
+    protocol_yaml = f"\n      protocol: {protocol}" if protocol is not None else ""
+    provided_alias = capability if alias == "__capability__" else alias
+    alias_yaml = f"\n      as: {provided_alias}" if provided_alias is not None else ""
     path.write_text(
         f"""
 apiVersion: nephos.pro/v1alpha1
@@ -54,8 +66,7 @@ metadata:
   displayName: PostgreSQL
 spec:
   provides:
-    - capability: {capability}
-      as: {capability}
+    - capability: {capability}{protocol_yaml}{alias_yaml}
       version: "{version}"
   bindings:
     outputs:

@@ -7,6 +7,8 @@ from typer.testing import CliRunner
 from nephos_api.cli import app
 from nephos_api.dev_reference import ReferenceSmokeResult
 
+_MIGRATION_ROWS = [("0000_initial",), ("0001_add_binding_protocol",)]
+
 
 def test_cli_db_migrate_creates_database(tmp_path: Path) -> None:
     db_path = tmp_path / "state" / "nephos.db"
@@ -22,7 +24,7 @@ def test_cli_db_migrate_creates_database(tmp_path: Path) -> None:
     assert db_path.exists()
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT version FROM schema_migrations").fetchall()
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
 
 
 def test_cli_init_applies_migrations_and_creates_internal_domain(
@@ -51,7 +53,7 @@ def test_cli_init_applies_migrations_and_creates_internal_domain(
         reconciliation_count = connection.execute(
             "SELECT count(*) FROM reconciliation_requests"
         ).fetchone()[0]
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
     assert domains == [("internal", "nephos.local", 1)]
     assert reconciliation_count == 0
 
@@ -171,7 +173,7 @@ def test_cli_db_reset_force_recreates_database(tmp_path: Path) -> None:
     assert reset.exit_code == 0
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT version FROM schema_migrations").fetchall()
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
 
 
 def test_cli_serve_starts_worker_enabled_app(monkeypatch, tmp_path: Path) -> None:
@@ -222,7 +224,7 @@ def test_cli_serve_applies_migrations_before_starting_app(
     assert result.exit_code == 0
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT version FROM schema_migrations").fetchall()
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
 
 
 def test_cli_dev_smoke_runs_nephos_owned_reference_flow(

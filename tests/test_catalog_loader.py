@@ -33,7 +33,12 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
             "source": "default",
             "manifestDigest": apps[0]["manifestDigest"],
             "requires": [
-                {"capability": "postgres", "alias": "database", "provider": None}
+                {
+                    "capability": "postgres",
+                    "protocol": None,
+                    "alias": "database",
+                    "provider": None,
+                }
             ],
             "routes": [
                 {
@@ -57,11 +62,48 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
             "provides": [
                 {
                     "capability": "postgres",
+                    "protocol": None,
                     "alias": "postgres",
                     "version": "16",
                     "bindingOutputTargets": ["app-secret"],
                 }
             ],
+        }
+    ]
+
+
+def test_catalog_loader_exposes_protocol_and_defaults_alias_from_capability_protocol(
+    tmp_path: Path,
+) -> None:
+    default_root = tmp_path / "default"
+    write_app(default_root, capability="sql", protocol="postgres", alias=None)
+    write_service(
+        default_root,
+        capability="sql",
+        protocol="postgres",
+        alias=None,
+    )
+
+    loader = CatalogLoader((default_root,))
+
+    app = loader.get_app("paperless")
+    service = loader.get_service("postgres")
+
+    assert app["requires"] == [
+        {
+            "capability": "sql",
+            "protocol": "postgres",
+            "alias": "sql-postgres",
+            "provider": None,
+        }
+    ]
+    assert service["provides"] == [
+        {
+            "capability": "sql",
+            "protocol": "postgres",
+            "alias": "sql-postgres",
+            "version": "16",
+            "bindingOutputTargets": ["app-secret"],
         }
     ]
 
@@ -232,6 +274,94 @@ spec:
 
     with pytest.raises(CatalogValidationError, match="duplicate binding alias"):
         loader.list_apps()
+
+
+def test_catalog_loader_allows_same_capability_with_distinct_protocol_aliases(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "graph-app" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: graph-app
+spec:
+  requires:
+    - capability: opencypher
+      protocol: bolt
+    - capability: opencypher
+      protocol: n4j
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: graph-app
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    assert loader.get_app("graph-app")["requires"] == [
+        {
+            "capability": "opencypher",
+            "protocol": "bolt",
+            "alias": "opencypher-bolt",
+            "provider": None,
+        },
+        {
+            "capability": "opencypher",
+            "protocol": "n4j",
+            "alias": "opencypher-n4j",
+            "provider": None,
+        },
+    ]
+
+
+def test_catalog_loader_allows_same_provided_capability_with_distinct_protocol_aliases(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "services" / "arcadedb" / "service.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: arcadedb
+spec:
+  provides:
+    - capability: opencypher
+      protocol: bolt
+    - capability: opencypher
+      protocol: n4j
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: arcadedb
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    assert loader.get_service("arcadedb")["provides"] == [
+        {
+            "capability": "opencypher",
+            "protocol": "bolt",
+            "alias": "opencypher-bolt",
+            "version": None,
+            "bindingOutputTargets": [],
+        },
+        {
+            "capability": "opencypher",
+            "protocol": "n4j",
+            "alias": "opencypher-n4j",
+            "version": None,
+            "bindingOutputTargets": [],
+        },
+    ]
 
 
 def test_catalog_loader_rejects_invalid_app_route_name(tmp_path: Path) -> None:

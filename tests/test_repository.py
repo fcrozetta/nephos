@@ -94,7 +94,8 @@ def test_create_app_binding_platform_domain_and_status(tmp_path: Path) -> None:
             app_instance_id=app.id,
             service_instance_id=service.id,
             alias="database",
-            capability="postgres",
+            capability="sql",
+            protocol="postgres",
             output_summary={"redacted": True},
         )
         domain = tx.create_platform_domain(
@@ -121,7 +122,7 @@ def test_create_app_binding_platform_domain_and_status(tmp_path: Path) -> None:
 
     with sqlite3.connect(repo.db_path) as connection:
         binding_row = connection.execute(
-            "SELECT alias, capability, output_summary_json FROM bindings"
+            "SELECT alias, capability, protocol, output_summary_json FROM bindings"
         ).fetchone()
         domain_row = connection.execute(
             "SELECT name, domain, is_default FROM platform_domains"
@@ -129,6 +130,6 @@ def test_create_app_binding_platform_domain_and_status(tmp_path: Path) -> None:
         status_row = connection.execute(
             "SELECT level, reason, observed_generation FROM status_snapshots"
         ).fetchone()
-    assert binding_row == ("database", "postgres", '{"redacted": true}')
+    assert binding_row == ("database", "sql", "postgres", '{"redacted": true}')
     assert domain_row == ("local", "nephos.local", 1)
     assert status_row == ("pending", "install_requested", 1)

@@ -210,6 +210,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
                     service_instance_id=str(service_row["id"]),
                     alias=requirement["alias"],
                     capability=requirement["capability"],
+                    protocol=requirement["protocol"],
                     output_summary={
                         "target": "app-secret",
                         "secretName": f"nephos-bind-{requirement['alias']}",
@@ -389,14 +390,17 @@ def _resolve_binding_providers(
     for requirement in app_catalog_entry["requires"]:
         alias = requirement["alias"]
         capability = requirement["capability"]
-        capable = _capability_provider_rows(
+        protocol = requirement.get("protocol")
+        capable = _matching_provider_rows(
             loader=loader,
             service_rows=service_rows,
             capability=capability,
+            protocol=protocol,
         )
         providers[alias] = _select_binding_provider(
             alias=alias,
             capability=capability,
+            protocol=protocol,
             service_rows=service_rows,
             capable=capable,
             selection=selections.get(alias),
@@ -432,6 +436,7 @@ def _select_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
     selection: BindingSelection | None,
@@ -445,6 +450,7 @@ def _select_binding_provider(
         return _selected_binding_provider(
             alias=alias,
             capability=capability,
+            protocol=protocol,
             service_rows=service_rows,
             capable=capable,
             eligible=eligible,
@@ -453,6 +459,7 @@ def _select_binding_provider(
     return _automatic_binding_provider(
         alias=alias,
         capability=capability,
+        protocol=protocol,
         eligible=eligible,
     )
 
@@ -461,6 +468,7 @@ def _selected_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
@@ -487,6 +495,7 @@ def _selected_binding_provider(
     _reject_ineligible_binding_provider(
         alias=alias,
         capability=capability,
+        protocol=protocol,
         capable=capable,
         eligible=eligible,
         selected=selected,
@@ -495,6 +504,7 @@ def _selected_binding_provider(
     _reject_unavailable_binding_provider(
         alias=alias,
         capability=capability,
+        protocol=protocol,
         selected=selected,
         selection=selection,
     )
@@ -505,6 +515,7 @@ def _reject_ineligible_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
     selected: dict[str, object],
@@ -517,8 +528,11 @@ def _reject_ineligible_binding_provider(
         code="binding_provider_ineligible",
         message="Selected binding provider does not expose the required capability.",
         details={
-            "alias": alias,
-            "capability": capability,
+            **_binding_requirement_details(
+                alias=alias,
+                capability=capability,
+                protocol=protocol,
+            ),
             "serviceInstance": selection.serviceInstance,
             "eligibleProviders": [row["slug"] for row in eligible],
         },
@@ -529,6 +543,7 @@ def _reject_unavailable_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     selected: dict[str, object],
     selection: BindingSelection,
 ) -> None:
@@ -538,8 +553,11 @@ def _reject_unavailable_binding_provider(
             code="binding_provider_unavailable",
             message="Selected binding provider is not available.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "reason": "destroy_already_requested",
                 "serviceInstance": selection.serviceInstance,
             },
@@ -550,8 +568,11 @@ def _reject_unavailable_binding_provider(
             code="binding_provider_unavailable",
             message="Selected binding provider is not available.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "reason": "service_not_running",
                 "lifecycle": selected["lifecycle"],
                 "serviceInstance": selection.serviceInstance,
@@ -563,6 +584,7 @@ def _automatic_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     eligible: list[dict[str, object]],
 ) -> dict[str, object]:
     if not eligible:
@@ -571,8 +593,11 @@ def _automatic_binding_provider(
             code="binding_provider_unavailable",
             message="No eligible Service provider exposes the required capability.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "eligibleProviders": [],
             },
         )
@@ -582,8 +607,11 @@ def _automatic_binding_provider(
             code="binding_provider_selection_required",
             message="Required capability needs explicit provider selection.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "eligibleProviders": [row["slug"] for row in eligible],
             },
         )
@@ -597,11 +625,27 @@ def _binding_provider_is_available(service_row: dict[str, object]) -> bool:
     )
 
 
-def _capability_provider_rows(
+def _binding_requirement_details(
+    *,
+    alias: str,
+    capability: str,
+    protocol: object,
+) -> dict[str, object]:
+    details: dict[str, object] = {
+        "alias": alias,
+        "capability": capability,
+    }
+    if protocol is not None:
+        details["protocol"] = protocol
+    return details
+
+
+def _matching_provider_rows(
     *,
     loader: CatalogLoader,
     service_rows: list[dict[str, object]],
     capability: str,
+    protocol: object,
 ) -> list[dict[str, object]]:
     eligible = []
     for service_row in service_rows:
@@ -616,6 +660,7 @@ def _capability_provider_rows(
         )
         if any(
             provided["capability"] == capability
+            and (protocol is None or provided["protocol"] == protocol)
             for provided in service_catalog["provides"]
         ):
             eligible.append(service_row)
@@ -643,6 +688,7 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
                 "bindingId": dependent["binding_id"],
                 "bindingAlias": dependent["binding_alias"],
                 "capability": dependent["capability"],
+                "protocol": dependent["protocol"],
                 "lifecycle": dependent["app_lifecycle"],
                 "status": compact_status_snapshot(
                     repo,
@@ -754,6 +800,7 @@ def _app_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any]:
                 "id": binding["id"],
                 "alias": binding["alias"],
                 "capability": binding["capability"],
+                "protocol": binding["protocol"],
                 "serviceInstance": {
                     "id": binding["service_instance_id"],
                     "slug": binding["service_instance_slug"],

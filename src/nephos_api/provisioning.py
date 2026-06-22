@@ -28,6 +28,7 @@ class BindingProvisioningContext:
     service_slug: str
     alias: str
     capability: str
+    protocol: str | None = None
 
 
 class BindingProvisioner(Protocol):
@@ -125,7 +126,7 @@ class PostgresAppScopedProvisioner:
         self,
         context: BindingProvisioningContext,
     ) -> dict[str, str] | None:
-        if context.capability != "postgres":
+        if not _is_postgres_binding(context):
             return None
 
         runtime = _postgres_runtime(context.service_slug)
@@ -160,7 +161,7 @@ class PostgresAppScopedProvisioner:
         return _binding_values(credentials, host=runtime.host)
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
-        if context.capability != "postgres":
+        if not _is_postgres_binding(context):
             return
 
         runtime = _postgres_runtime(context.service_slug)
@@ -268,6 +269,14 @@ def _postgres_runtime(service_slug: str) -> _PostgresRuntime:
         host=f"{release}-postgresql.{release}.svc.cluster.local",
         admin_secret_name=f"{release}-postgresql",
         pod_name=f"{release}-postgresql-0",
+    )
+
+
+def _is_postgres_binding(context: BindingProvisioningContext) -> bool:
+    return (
+        context.capability == "postgres" and context.protocol is None
+    ) or (
+        context.capability == "sql" and context.protocol == "postgres"
     )
 
 

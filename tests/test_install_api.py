@@ -57,6 +57,7 @@ def test_install_service_from_catalog_creates_desired_state(tmp_path: Path) -> N
     assert body["resource"]["provides"] == [
         {
             "capability": "postgres",
+            "protocol": None,
             "alias": "postgres",
             "version": "16",
             "bindingOutputTargets": ["app-secret"],
@@ -172,7 +173,16 @@ def test_install_service_returns_invalid_catalog_name_error(tmp_path: Path) -> N
 
 
 def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
     service = client.post(
         "/services",
         json={"catalogRef": {"kind": "Service", "name": "postgres"}},
@@ -190,7 +200,8 @@ def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
     assert body["resource"]["kind"] == "App"
     assert body["resource"]["bindings"][0]["id"].startswith("binding_")
     assert body["resource"]["bindings"][0]["alias"] == "database"
-    assert body["resource"]["bindings"][0]["capability"] == "postgres"
+    assert body["resource"]["bindings"][0]["capability"] == "sql"
+    assert body["resource"]["bindings"][0]["protocol"] == "postgres"
     assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "postgres"
     assert body["reconciliation"]["state"] == "pending"
 
@@ -200,7 +211,8 @@ def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
             "appInstance": "paperless",
             "bindingId": body["resource"]["bindings"][0]["id"],
             "bindingAlias": "database",
-            "capability": "postgres",
+            "capability": "sql",
+            "protocol": "postgres",
             "lifecycle": "running",
             "status": None,
         }
@@ -259,6 +271,130 @@ def test_install_app_uses_explicit_binding_provider_selection(
     assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == (
         "postgres-lab"
     )
+
+
+def test_install_app_matches_binding_provider_by_capability_and_protocol(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    write_service(
+        catalog_root,
+        name="arcadedb",
+        capability="sql",
+        protocol="arcadedb",
+        alias="arcadedb",
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    ).status_code == 202
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={"catalogRef": {"kind": "App", "name": "paperless"}},
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["bindings"][0]["capability"] == "sql"
+    assert body["resource"]["bindings"][0]["protocol"] == "postgres"
+    assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "postgres"
+
+
+def test_install_app_matches_opencypher_bolt_provider(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(
+        catalog_root,
+        capability="opencypher",
+        protocol="bolt",
+        alias=None,
+    )
+    write_service(
+        catalog_root,
+        name="arcadedb",
+        capability="opencypher",
+        protocol="bolt",
+        alias=None,
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={"catalogRef": {"kind": "App", "name": "paperless"}},
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["bindings"][0]["alias"] == "opencypher-bolt"
+    assert body["resource"]["bindings"][0]["capability"] == "opencypher"
+    assert body["resource"]["bindings"][0]["protocol"] == "bolt"
+    assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "arcadedb"
+
+
+def test_install_app_rejects_explicit_provider_with_wrong_protocol(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        name="arcadedb",
+        capability="sql",
+        protocol="arcadedb",
+        alias="arcadedb",
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {
+                    "serviceInstance": "arcadedb",
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "binding_provider_ineligible",
+            "message": (
+                "Selected binding provider does not expose the required "
+                "capability."
+            ),
+            "details": {
+                "alias": "database",
+                "capability": "sql",
+                "protocol": "postgres",
+                "serviceInstance": "arcadedb",
+                "eligibleProviders": [],
+            },
+        }
+    }
 
 
 def test_install_app_returns_unavailable_when_no_eligible_binding_provider(
