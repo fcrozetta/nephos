@@ -278,3 +278,39 @@ Open questions:
 - Canonicalizing the reference catalog examples in this repository remains unapproved.
 - Provider operation lock table shape.
 - Exact redacted Pulumi preview/apply evidence fields.
+
+---
+
+## Next Plan: Alpha Backbone Core Catalog
+
+Goal:
+
+- Build the first usable Nephos alpha backbone: PostgreSQL, Zitadel, SeaweedFS, ArcadeDB, and a local connection smoke for the first real dogfood App path.
+
+Current decisions from Fer:
+
+- Pulumi is the runtime path; do not use Aspire.
+- Helm is acceptable under Pulumi-backed Service providers when it is the easiest way to deploy a Service, but Helm must not define Nephos Service behavior.
+- Zitadel is a Service only. Its login/admin UI is a Service surface, not a separate App.
+- Database capabilities must express the connection/query model and protocol, not broad database categories.
+- PostgreSQL provides `sql/postgres`.
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, `opencypher/n4j`, optional `gremlin/gremlin`, and optional `mongo/mongo` when enabled.
+
+Implementation plans:
+
+- `docs/plans/2026-06-22-alpha-backbone-dispatch.md`
+- `docs/plans/2026-06-22-protocol-aware-capability-matching.md`
+- `docs/plans/2026-06-22-core-service-runtime-providers.md`
+- `docs/plans/2026-06-22-core-service-binding-provisioners.md`
+- `docs/plans/2026-06-22-alpha-local-backbone-smoke.md`
+
+Architecture files likely to change before implementation:
+
+- new ADR: `docs/adr/20260622-alpha-backbone-catalog-and-service-providers.md`
+- `.agents/context/nephos-catalog-loading.md`
+- `.agents/context/nephos-reconciliation.md`
+- `.agents/context/nephos-auth.md`
+- `.agents/context/nephos-phase1.md`
+- `.agents/context/nephos-open-questions.md`
+
+Do not silently modify those architecture files; explain the change and why before editing them.
