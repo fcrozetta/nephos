@@ -16,6 +16,7 @@ MANAGED_BY_LABEL = "app.kubernetes.io/managed-by"
 APP_INSTANCE_LABEL = "nephos.pro/app-instance"
 SERVICE_INSTANCE_LABEL = "nephos.pro/service-instance"
 CAPABILITY_LABEL = "nephos.pro/capability"
+PROTOCOL_LABEL = "nephos.pro/protocol"
 BINDING_ALIAS_LABEL = "nephos.pro/binding-alias"
 ROUTE_LABEL = "nephos.pro/route"
 
@@ -95,6 +96,7 @@ class KubernetesRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> client.V1Secret:
         namespace = namespace_name("app_instance", app_slug)
@@ -105,6 +107,7 @@ class KubernetesRuntime:
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         )
         secret = client.V1Secret(
             metadata=client.V1ObjectMeta(
@@ -127,6 +130,7 @@ class KubernetesRuntime:
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         ):
             raise KubernetesRuntimeSafetyError(
                 f"refusing to replace unowned Secret {namespace}/{name}"
@@ -144,6 +148,7 @@ class KubernetesRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         namespace = namespace_name("app_instance", app_slug)
         namespace_resource = self._read_namespace(namespace)
@@ -165,6 +170,7 @@ class KubernetesRuntime:
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         ):
             raise KubernetesRuntimeSafetyError(
                 f"refusing to delete unowned Secret {namespace}/{name}"
@@ -424,6 +430,7 @@ class KubernetesSecretBindingValueSource:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> dict[str, str] | None:
         namespace = namespace_name("app_instance", app_slug)
         _assert_active_namespace(
@@ -448,6 +455,7 @@ class KubernetesSecretBindingValueSource:
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         ):
             raise KubernetesRuntimeSafetyError(
                 f"refusing to read unowned Secret {namespace}/{name}"
@@ -502,18 +510,23 @@ def binding_secret_labels(
     service_slug: str,
     alias: str,
     capability: str,
+    protocol: str | None = None,
 ) -> dict[str, str]:
     validate_machine_identifier(app_slug)
     validate_machine_identifier(service_slug)
     validate_machine_identifier(alias)
     validate_machine_identifier(capability)
-    return {
+    labels = {
         MANAGED_BY_LABEL: "nephos",
         APP_INSTANCE_LABEL: app_slug,
         SERVICE_INSTANCE_LABEL: service_slug,
         CAPABILITY_LABEL: capability,
         BINDING_ALIAS_LABEL: alias,
     }
+    if protocol is not None:
+        validate_machine_identifier(protocol)
+        labels[PROTOCOL_LABEL] = protocol
+    return labels
 
 
 def app_ingress_labels(*, app_slug: str, route_name: str) -> dict[str, str]:
@@ -578,6 +591,7 @@ def _is_owned_binding_secret(
     service_slug: str,
     alias: str,
     capability: str,
+    protocol: str | None = None,
 ) -> bool:
     if secret.metadata is None:
         return False
@@ -587,6 +601,7 @@ def _is_owned_binding_secret(
         service_slug=service_slug,
         alias=alias,
         capability=capability,
+        protocol=protocol,
     )
     return all(labels.get(key) == value for key, value in expected_labels.items())
 

@@ -21,6 +21,7 @@ class BindingValueSource(Protocol):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> dict[str, str] | None: ...
 
 
@@ -148,6 +149,7 @@ class ProviderRuntimeDeployer:
                 service_slug=str(binding["service_instance_slug"]),
                 alias=str(binding["alias"]),
                 capability=str(binding["capability"]),
+                protocol=_optional_str(binding["protocol"]),
             )
         if values is None or source.field not in values:
             raise RuntimeBlockedError(
@@ -225,3 +227,9 @@ def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     ):
         return None
     return values
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)

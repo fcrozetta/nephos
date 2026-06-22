@@ -163,7 +163,7 @@ def test_kubernetes_psql_runner_raises_on_nonzero_exec_marker(monkeypatch) -> No
             returncode=None,
         )
 
-    monkeypatch.setattr("nephos_api.provisioning.stream.stream", fake_stream)
+    monkeypatch.setattr("nephos_api.provisioners.postgres.stream.stream", fake_stream)
 
     with pytest.raises(RuntimeError, match="psql: error"):
         KubernetesPsqlRunner().run_psql(
@@ -190,7 +190,7 @@ def test_kubernetes_psql_runner_raises_when_exec_marker_is_missing(
             returncode=None,
         )
 
-    monkeypatch.setattr("nephos_api.provisioning.stream.stream", fake_stream)
+    monkeypatch.setattr("nephos_api.provisioners.postgres.stream.stream", fake_stream)
 
     with pytest.raises(RuntimeError, match="missing exec exit marker"):
         KubernetesPsqlRunner().run_psql(
@@ -210,7 +210,7 @@ def test_kubernetes_psql_runner_accepts_zero_exec_marker(monkeypatch) -> None:
             returncode=None,
         )
 
-    monkeypatch.setattr("nephos_api.provisioning.stream.stream", fake_stream)
+    monkeypatch.setattr("nephos_api.provisioners.postgres.stream.stream", fake_stream)
 
     KubernetesPsqlRunner().run_psql(
         core_v1_api=FakeCoreV1Api(),
@@ -251,7 +251,8 @@ def test_postgres_provisioner_creates_credentials_and_returns_outputs() -> None:
         "app.kubernetes.io/managed-by": "nephos",
         "nephos.pro/app-instance": "paperless",
         "nephos.pro/service-instance": "postgres",
-        "nephos.pro/capability": "postgres",
+        "nephos.pro/capability": "sql",
+        "nephos.pro/protocol": "postgres",
         "nephos.pro/binding-alias": "database",
     }
     assert created.string_data == {
@@ -276,7 +277,8 @@ def test_postgres_provisioner_reuses_existing_owned_credential_secret() -> None:
             "app.kubernetes.io/managed-by": "nephos",
             "nephos.pro/app-instance": "paperless",
             "nephos.pro/service-instance": "postgres",
-            "nephos.pro/capability": "postgres",
+            "nephos.pro/capability": "sql",
+            "nephos.pro/protocol": "postgres",
             "nephos.pro/binding-alias": "database",
         },
         data={
@@ -322,6 +324,62 @@ def test_postgres_provisioner_returns_none_for_unsupported_capability() -> None:
     assert values is None
     assert core.created_secrets == []
     assert runner.calls == []
+
+
+def test_postgres_provisioner_returns_none_for_sql_with_non_postgres_protocol() -> None:
+    core = FakeCoreV1Api()
+    runner = FakePsqlRunner()
+    provisioner = PostgresAppScopedProvisioner(
+        core_v1_api=core,
+        psql_runner=runner,
+        password_factory=lambda: "unused",
+    )
+
+    values = provisioner.provision_binding(
+        BindingProvisioningContext(
+            binding_id="binding_01",
+            app_slug="paperless",
+            service_slug="arcadedb",
+            alias="database",
+            capability="sql",
+            protocol="arcadedb",
+        )
+    )
+
+    assert values is None
+    assert core.created_secrets == []
+    assert runner.calls == []
+
+
+def test_postgres_provisioner_preserves_legacy_postgres_rows() -> None:
+    core = FakeCoreV1Api()
+    runner = FakePsqlRunner()
+    provisioner = PostgresAppScopedProvisioner(
+        core_v1_api=core,
+        psql_runner=runner,
+        password_factory=lambda: "pg-secret",
+    )
+
+    values = provisioner.provision_binding(
+        BindingProvisioningContext(
+            binding_id="binding_01",
+            app_slug="paperless",
+            service_slug="postgres",
+            alias="database",
+            capability="postgres",
+        )
+    )
+
+    assert values is not None
+    created = core.created_secrets[0]
+    assert created.metadata is not None
+    assert created.metadata.labels == {
+        "app.kubernetes.io/managed-by": "nephos",
+        "nephos.pro/app-instance": "paperless",
+        "nephos.pro/service-instance": "postgres",
+        "nephos.pro/capability": "postgres",
+        "nephos.pro/binding-alias": "database",
+    }
 
 
 def test_postgres_provisioner_refuses_unowned_existing_credential_secret() -> None:
@@ -373,7 +431,8 @@ def test_postgres_provisioner_deprovisions_database_user_and_secret() -> None:
             "app.kubernetes.io/managed-by": "nephos",
             "nephos.pro/app-instance": "paperless",
             "nephos.pro/service-instance": "postgres",
-            "nephos.pro/capability": "postgres",
+            "nephos.pro/capability": "sql",
+            "nephos.pro/protocol": "postgres",
             "nephos.pro/binding-alias": "database",
         },
         data={
@@ -420,7 +479,8 @@ def _context() -> BindingProvisioningContext:
         app_slug="paperless",
         service_slug="postgres",
         alias="database",
-        capability="postgres",
+        capability="sql",
+        protocol="postgres",
     )
 
 

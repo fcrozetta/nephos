@@ -43,6 +43,7 @@ class FakeBindingValueSource:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> dict[str, str] | None:
         return self.values.get(alias)
 

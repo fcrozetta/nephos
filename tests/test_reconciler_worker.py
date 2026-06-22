@@ -33,6 +33,7 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> None:
         self.binding_secrets.append(
@@ -52,6 +53,7 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         self.deleted_binding_secrets.append(
             {

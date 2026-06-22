@@ -165,6 +165,7 @@ class _LazyRuntimeAdapter:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> object:
         return self._get().ensure_binding_secret(
@@ -172,6 +173,7 @@ class _LazyRuntimeAdapter:
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
             values=values,
         )
 
@@ -182,12 +184,14 @@ class _LazyRuntimeAdapter:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         return self._get().delete_binding_secret_if_owned(
             app_slug=app_slug,
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         )
 
     def scale_workloads(
@@ -356,10 +360,23 @@ def _pulumi_base_dir(settings: Settings) -> Path:
 def default_postgres_provisioner_factory(settings: Settings) -> BindingProvisioner:
     from kubernetes import client
 
-    from nephos_api.provisioning import PostgresAppScopedProvisioner
+    from nephos_api.provisioning import (
+        ArcadeDBAppScopedProvisioner,
+        CompositeBindingProvisioner,
+        PostgresAppScopedProvisioner,
+        SeaweedFSS3Provisioner,
+        ZitadelAppScopedProvisioner,
+    )
 
     load_kubernetes_config(settings)
-    return PostgresAppScopedProvisioner(core_v1_api=client.CoreV1Api())
+    return CompositeBindingProvisioner(
+        [
+            PostgresAppScopedProvisioner(core_v1_api=client.CoreV1Api()),
+            ZitadelAppScopedProvisioner(),
+            SeaweedFSS3Provisioner(),
+            ArcadeDBAppScopedProvisioner(),
+        ]
+    )
 
 
 app = create_app()

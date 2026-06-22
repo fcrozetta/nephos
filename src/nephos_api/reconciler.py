@@ -30,6 +30,7 @@ class RuntimeAdapter(Protocol):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> object: ...
 
@@ -40,6 +41,7 @@ class RuntimeAdapter(Protocol):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool: ...
 
     def scale_workloads(
@@ -579,6 +581,7 @@ class Reconciler:
                 service_slug=context.service_slug,
                 alias=context.alias,
                 capability=context.capability,
+                protocol=context.protocol,
             )
         return bindings
 
@@ -693,6 +696,7 @@ class Reconciler:
             service_slug=str(binding["service_instance_slug"]),
             alias=str(binding["alias"]),
             capability=str(binding["capability"]),
+            protocol=_optional_str(binding["protocol"]),
             values=values,
         )
         message = "Binding Secret is present and owned by Nephos."
@@ -702,6 +706,8 @@ class Reconciler:
                 output_summary=_redacted_binding_output_summary(
                     app_slug=str(binding["app_instance_slug"]),
                     alias=str(binding["alias"]),
+                    capability=str(binding["capability"]),
+                    protocol=_optional_str(binding["protocol"]),
                     values=values,
                 ),
             )
@@ -902,12 +908,18 @@ def _redacted_binding_output_summary(
     *,
     app_slug: str,
     alias: str,
+    capability: str,
+    protocol: str | None,
     values: dict[str, str],
 ) -> dict[str, object]:
-    return {
+    summary: dict[str, object] = {
         "target": "app-secret",
         "secretName": f"nephos-bind-{alias}",
         "namespace": f"app-{app_slug}",
         "keys": sorted(values),
         "redacted": True,
     }
+    if protocol is not None:
+        summary["capability"] = capability
+        summary["protocol"] = protocol
+    return summary

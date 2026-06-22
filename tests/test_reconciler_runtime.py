@@ -36,17 +36,19 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> None:
-        self.binding_secrets.append(
-            {
-                "app_slug": app_slug,
-                "service_slug": service_slug,
-                "alias": alias,
-                "capability": capability,
-                "values": values,
-            }
-        )
+        record = {
+            "app_slug": app_slug,
+            "service_slug": service_slug,
+            "alias": alias,
+            "capability": capability,
+            "values": values,
+        }
+        if protocol is not None:
+            record["protocol"] = protocol
+        self.binding_secrets.append(record)
 
     def delete_binding_secret_if_owned(
         self,
@@ -55,15 +57,17 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
-        self.deleted_binding_secrets.append(
-            {
-                "app_slug": app_slug,
-                "service_slug": service_slug,
-                "alias": alias,
-                "capability": capability,
-            }
-        )
+        record = {
+            "app_slug": app_slug,
+            "service_slug": service_slug,
+            "alias": alias,
+            "capability": capability,
+        }
+        if protocol is not None:
+            record["protocol"] = protocol
+        self.deleted_binding_secrets.append(record)
         return True
 
     def scale_workloads(
@@ -108,6 +112,7 @@ class FailingRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> None:
         raise RuntimeError(f"boom for binding {alias}")
@@ -119,6 +124,7 @@ class FailingRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         raise RuntimeError(f"boom for binding {alias}")
 
@@ -220,6 +226,7 @@ class RecordingRuntime(FakeRuntime):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         self.events.append(f"delete-binding-secret:{alias}")
         return super().delete_binding_secret_if_owned(
@@ -227,6 +234,7 @@ class RecordingRuntime(FakeRuntime):
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         )
 
     def delete_namespace_if_owned(self, resource_type: str, slug: str) -> bool:
@@ -1724,6 +1732,93 @@ def test_binding_reconcile_uses_provisioner_without_persisting_secret_values(
         '"namespace": "app-paperless", "redacted": true, '
         '"secretName": "nephos-bind-database", "target": "app-secret"}'
     )
+    _assert_reconciled_binding_status(repo, request.id, binding.id)
+
+
+def test_binding_reconcile_persists_protocol_in_redacted_summary(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    values = {
+        "issuerUrl": "https://zitadel.example",
+        "clientId": "client-1",
+        "clientSecret": "secret-client",
+        "redirectUris": '["https://paperless.example/callback"]',
+    }
+    provisioner = FakeProvisioner(values)
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path="catalog/services/zitadel/service.yaml",
+            manifest_digest="sha256:zitadel",
+        )
+        app = tx.create_app_instance(
+            slug="paperless",
+            catalog_name="paperless",
+            catalog_source_id="default",
+            catalog_source_path=str(_write_routeless_app(tmp_path)),
+            manifest_digest="sha256:paperless",
+        )
+        binding = tx.create_binding(
+            app_instance_id=app.id,
+            service_instance_id=service.id,
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+            output_summary={
+                "target": "app-secret",
+                "secretName": "nephos-bind-auth",
+                "namespace": "app-paperless",
+                "keys": ["redacted"],
+                "redacted": True,
+            },
+        )
+        request = tx.create_reconciliation_request(
+            target_type="binding",
+            target_id=binding.id,
+            target_generation=binding.generation,
+            action="reconcile",
+            target_snapshot={"id": binding.id, "alias": binding.alias},
+        )
+
+    assert Reconciler(repo, runtime=runtime, provisioner=provisioner).run_once() == 1
+
+    assert provisioner.contexts == [
+        BindingProvisioningContext(
+            binding_id=binding.id,
+            app_slug="paperless",
+            service_slug="zitadel",
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+        )
+    ]
+    assert runtime.binding_secrets == [
+        {
+            "app_slug": "paperless",
+            "service_slug": "zitadel",
+            "alias": "auth",
+            "capability": "oidc",
+            "protocol": "oidc",
+            "values": values,
+        }
+    ]
+    row = repo.get_binding_row(binding.id)
+    assert row is not None
+    summary = json.loads(str(row["output_summary_json"]))
+    assert summary == {
+        "target": "app-secret",
+        "secretName": "nephos-bind-auth",
+        "namespace": "app-paperless",
+        "capability": "oidc",
+        "protocol": "oidc",
+        "keys": ["clientId", "clientSecret", "issuerUrl", "redirectUris"],
+        "redacted": True,
+    }
+    assert "secret-client" not in str(row["output_summary_json"])
     _assert_reconciled_binding_status(repo, request.id, binding.id)
 
 
