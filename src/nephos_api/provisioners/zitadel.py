@@ -1,4 +1,6 @@
+import ast
 import json
+import os
 import re
 import select
 import shutil
@@ -12,7 +14,6 @@ from typing import Protocol
 from nephos_api.providers.pulumi import (
     _ensure_pulumi_cli,
     _ensure_pulumi_local_backend_passphrase,
-    _pulumi_workspace_env_vars,
 )
 from nephos_api.provisioners.base import BindingProvisioningContext
 from nephos_api.runtime_errors import RuntimeBlockedError
@@ -74,7 +75,7 @@ class ZitadelOidcBindingSpec:
 
     @property
     def backend_url(self) -> str:
-        return f"file://{self.state_dir}"
+        return f"file://{self.state_dir.resolve()}"
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,7 @@ class ZitadelServiceAccountBindingSpec:
 
     @property
     def backend_url(self) -> str:
-        return f"file://{self.state_dir}"
+        return f"file://{self.state_dir.resolve()}"
 
 
 class ZitadelPulumiRunner(Protocol):
@@ -157,7 +158,7 @@ class KubernetesPulumiZitadelProvisioningClient:
                 work_dir=self._config.work_dir,
                 state_dir=self._config.state_dir,
                 issuer_url=_issuer_url(context),
-                domain=endpoint.host,
+                domain=_provisioning_domain(context),
                 port=endpoint.port,
                 insecure=True,
                 jwt_profile_json=_bootstrap_machine_key_json(
@@ -343,7 +344,7 @@ def _create_or_select_zitadel_stack(spec, *, program):
         program=program,
         opts=auto.LocalWorkspaceOptions(
             work_dir=str(spec.work_dir),
-            env_vars=_pulumi_workspace_env_vars(spec),
+            env_vars=_zitadel_pulumi_workspace_env_vars(spec),
             project_settings=auto.ProjectSettings(
                 name=spec.project_name,
                 runtime="python",
@@ -351,6 +352,19 @@ def _create_or_select_zitadel_stack(spec, *, program):
             ),
         ),
     )
+
+
+def _zitadel_pulumi_workspace_env_vars(
+    spec: ZitadelOidcBindingSpec | ZitadelServiceAccountBindingSpec,
+) -> dict[str, str]:
+    env_vars = {"PULUMI_BACKEND_URL": spec.backend_url}
+    passphrase = os.environ.get("PULUMI_CONFIG_PASSPHRASE")
+    if passphrase:
+        env_vars["PULUMI_CONFIG_PASSPHRASE"] = passphrase
+    passphrase_file = os.environ.get("PULUMI_CONFIG_PASSPHRASE_FILE")
+    if passphrase_file:
+        env_vars["PULUMI_CONFIG_PASSPHRASE_FILE"] = passphrase_file
+    return env_vars
 
 
 def _oidc_pulumi_program(spec: ZitadelOidcBindingSpec) -> None:
@@ -469,20 +483,23 @@ def _bootstrap_machine_key_json(
         stdout=True,
         tty=False,
     )
-    key_json = str(response).strip()
+    key_text = str(response).strip()
     try:
-        parsed = json.loads(key_json)
-    except json.JSONDecodeError as exc:
-        raise RuntimeBlockedError(
-            reason="binding_provisioner_unavailable",
-            message="Zitadel bootstrap machine key is not readable yet.",
-        ) from exc
+        parsed = json.loads(key_text)
+    except json.JSONDecodeError:
+        try:
+            parsed = ast.literal_eval(key_text)
+        except (SyntaxError, ValueError) as exc:
+            raise RuntimeBlockedError(
+                reason="binding_provisioner_unavailable",
+                message="Zitadel bootstrap machine key is not readable yet.",
+            ) from exc
     if not isinstance(parsed, dict):
         raise RuntimeBlockedError(
             reason="binding_provisioner_unavailable",
             message="Zitadel bootstrap machine key did not contain a JSON object.",
         )
-    return key_json
+    return json.dumps(parsed)
 
 
 def _assert_service_namespace_owned(
@@ -504,7 +521,6 @@ def _assert_service_namespace_owned(
     labels = getattr(metadata, "labels", None) or {}
     expected = {
         "app.kubernetes.io/managed-by": "nephos",
-        "nephos.pro/resource-type": "service_instance",
         "nephos.pro/service-instance": context.service_slug,
     }
     if namespace_resource is None or not all(
@@ -516,8 +532,12 @@ def _assert_service_namespace_owned(
         )
 
 
+def _provisioning_domain(context: BindingProvisioningContext) -> str:
+    return str(_config_value(context, "external-host", "externalHost"))
+
+
 def _issuer_url(context: BindingProvisioningContext) -> str:
-    host = str(_config_value(context, "external-host", "externalHost"))
+    host = _provisioning_domain(context)
     port = int(
         str(_config_value(context, "external-port", "externalPort", default=443))
     )

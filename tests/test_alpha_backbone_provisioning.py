@@ -354,7 +354,7 @@ def test_kubernetes_zitadel_client_uses_service_config_and_internal_forward(
         "kubeconfig": None,
         "kube_context": "docker-desktop",
     }
-    assert runner.oidc_specs[0].domain == "127.0.0.1"
+    assert runner.oidc_specs[0].domain == "login.example.test"
     assert runner.oidc_specs[0].port == 23456
     assert runner.oidc_specs[0].insecure is True
     assert runner.oidc_specs[0].jwt_profile_json == '{"key":"bootstrap"}'
