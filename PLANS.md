@@ -128,6 +128,8 @@ Current understanding:
 
 Files likely to change:
 
+- `docs/maintainers.md`
+- `README.md`
 - `PLANS.md`
 - `pyproject.toml`
 - `uv.lock`
@@ -204,6 +206,11 @@ Proposed steps:
    - Consolidate duplicated App/Service desired-state repository insert/update helpers in `repository.py`.
    - Split binding provider resolution in `api/resources.py` into smaller explicit validation/selection helpers.
    - Do not touch reconciler/runtime/provider architecture in this batch.
+10. Documentation audience split and comment convention:
+   - Keep `README.md` useful for users evaluating or trying Nephos.
+   - Move maintainer workflow, verification, architecture links, and comment conventions into Markdown files under `docs/`.
+   - Use Better Comments syntax for non-obvious code invariants and API contract warnings.
+   - Avoid turning maintainer internals into README content.
 
 Current verification:
 

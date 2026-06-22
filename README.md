@@ -1,51 +1,77 @@
 # Nephos
 
-**Composable self-hosted infrastructure, managed as platform intent.**
+**Run composable self-hosted Apps and shared Services as platform intent.**
 
-Nephos is a local-first control plane for running Apps and shared Services on a
-Kubernetes cluster you own. It gives self-hosted infrastructure a higher-level
-API so installs are not a pile of one-off YAML, Helm values, secrets, and
-`kubectl` commands.
-
-With Nephos, Apps ask for capabilities. Services provide them. Nephos keeps the
-desired platform state, reconciles runtime resources, and preserves lifecycle
-semantics above raw Kubernetes objects.
+Nephos is an early local-first control plane for self-hosted infrastructure. It
+lets Apps ask for capabilities such as PostgreSQL, object storage, search, or
+auth, then lets Services provide those capabilities without every App owning its
+own secret wiring, lifecycle rules, and Kubernetes YAML.
 
 > [!WARNING]
-> Nephos is early and not production-ready. This repository currently contains
-> the API 0.0.1 backend/control-plane slice.
+> Nephos is not production-ready. This repository currently contains the
+> `nephos-api` 0.0.1 backend/control-plane slice.
 
-## Contents
+## What you can do today
 
-- [QuickStart](#quickstart)
-- [Why Nephos](#why-nephos)
-- [How It Works](#how-it-works)
-- [Advanced: Why Reconciliation Exists](#advanced-why-reconciliation-exists)
-- [What 0.0.1 Gives You](#what-001-gives-you)
-- [Runtime Proof](#runtime-proof)
-- [Maintainer Docs](#maintainer-docs)
+- Start the Nephos API and browse its OpenAPI docs.
+- Keep desired platform state in a local SQLite database.
+- Load App and Service catalogs from local catalog roots.
+- Install Apps and Services through the API as desired state.
+- Let the reconciler converge supported provider-backed resources into a
+  Kubernetes cluster you choose.
+- Run the bundled runtime smoke proof for the reference PostgreSQL Service and
+  reference web App.
 
-## QuickStart
+## Core ideas
+
+| Term | Meaning |
+| --- | --- |
+| **App** | A user-facing workload or product, such as a dashboard or personal cloud app. |
+| **Service** | Shared platform infrastructure, such as PostgreSQL, Redis, S3, auth, or search. |
+| **Capability** | What an App needs and a Service provides, such as `postgres` or `redis`. |
+| **Binding** | The connection between an App requirement and the Service instance that satisfies it. |
+| **Lifecycle** | User intent such as `start`, `stop`, `remove`, or `destroy`, preserved above raw Kubernetes objects. |
+
+Nephos records what you want first. A reconciler then works toward that desired
+state in the selected Kubernetes cluster.
+
+```mermaid
+flowchart LR
+  user["You request a change"]
+  api["Nephos API"]
+  db[("SQLite desired state")]
+  worker["Reconciler"]
+  providers["Providers"]
+  kube["Your Kubernetes cluster"]
+
+  user --> api
+  api --> db
+  db --> worker
+  worker --> providers
+  providers --> kube
+  worker --> db
+```
+
+## Quick start
+
+### 1. Configure local settings
 
 ```bash
 cp .env.example .env
-# Edit NEPHOS_API_KUBE_CONTEXT if your Kubernetes context is not docker-desktop.
-
-uv run nephos-api init
-uv run nephos-api serve
 ```
 
-Then open the API docs:
+Edit `.env` if your Kubernetes context is not `docker-desktop`:
 
-```text
-http://127.0.0.1:8000/docs
+```dotenv
+NEPHOS_API_DB_PATH=/private/tmp/nephos-manual/nephos.db
+NEPHOS_API_KUBE_CONTEXT=docker-desktop
+NEPHOS_API_INTERNAL_DOMAIN=nephos.localhost
+# Optional when your selected cluster has multiple IngressClasses or no default.
+# NEPHOS_API_INGRESS_CLASS=nginx
+PULUMI_CONFIG_PASSPHRASE=local-dev
 ```
 
-That starts the Nephos API and its reconciler. It does not install Apps,
-install Services, or mutate Kubernetes until you ask Nephos to install
-something.
-
-For local browser routes without editing `/etc/hosts`, keep this in `.env`:
+For local browser routes without editing `/etc/hosts`, keep:
 
 ```dotenv
 NEPHOS_API_INTERNAL_DOMAIN=nephos.localhost
@@ -53,121 +79,128 @@ NEPHOS_API_INTERNAL_DOMAIN=nephos.localhost
 
 Your selected Kubernetes cluster still needs a reachable ingress controller.
 
-## Why Nephos
+### 2. Initialize local Nephos state
 
-Self-hosting gets ugly when every application owns its own database decisions,
-secret wiring, lifecycle rules, ingress assumptions, and uninstall behavior.
-Nephos moves those concerns into one platform control plane.
-
-Nephos is built around a simple model:
-
-- Apps are user-facing workloads.
-- Services are shared platform capabilities.
-- Capabilities describe what Apps need, such as `postgres`, `redis`, `s3`, or
-  `search`.
-- Bindings connect Apps to Services without hardcoding the concrete
-  infrastructure into every App.
-- Lifecycle actions preserve intent: stop, start, remove, destroy, and
-  reconcile are platform operations, not raw Kubernetes deletes.
-
-## How It Works
-
-```mermaid
-flowchart TD
-  catalog["App and Service catalogs"]
-  api["Nephos API"]
-  db[("SQLite desired state")]
-  queue["Reconciliation requests"]
-  worker["Reconciler"]
-  providers["Python provider layer\nPulumi + Kubernetes API"]
-  kube["Selected Kubernetes context"]
-
-  catalog --> api
-  api --> db
-  db --> queue
-  queue --> worker
-  worker --> providers
-  providers --> kube
-  worker --> db
+```bash
+uv run nephos-api init
 ```
 
-> [!IMPORTANT]
-> SQLite is the source of truth for Nephos desired state. Kubernetes and Pulumi
-> are provider/runtime state reconciled from that intent.
+This applies database migrations and creates the default internal platform
+domain. It does **not** install Apps, install Services, or mutate Kubernetes.
 
-Nephos targets the Kubernetes context you select. The goal is not to expose raw
-Kubernetes as the user experience; Kubernetes remains the runtime substrate.
+### 3. Start the API
 
-## Advanced: Why Reconciliation Exists
-
-When you ask Nephos to install or change something, the first job is to record
-what you want. The reconciler is the part that turns that saved intent into
-running infrastructure.
-
-```mermaid
-flowchart TD
-  request["You request a change"]
-  intent["Nephos records desired state"]
-  reconcile["Reconciler works toward that state"]
-  runtime["Kubernetes runtime changes"]
-  status["Nephos reports current status"]
-
-  request --> intent
-  intent --> reconcile
-  reconcile --> runtime
-  runtime --> status
-  status --> reconcile
+```bash
+uv run nephos-api serve
 ```
 
-That separation matters because real infrastructure is not instant:
+Open the interactive API docs:
 
-- a cluster can be slow, busy, or temporarily unavailable
-- an App may need a Service, a binding Secret, and an Ingress before it is
-  usable
-- stopping an App should preserve data instead of deleting everything
-- destroying something should be explicit and traceable
-- Nephos should remember what you wanted even if the runtime is not ready yet
+```text
+http://127.0.0.1:8000/docs
+```
 
-For the user, reconciliation is what makes Nephos a control plane instead of a
-command wrapper. You describe the platform state you want; Nephos keeps working
-toward it, records progress, and exposes status back through the API.
+Check the API from a terminal:
 
-## What 0.0.1 Gives You
+```bash
+curl -sS http://127.0.0.1:8000/version
+curl -sS http://127.0.0.1:8000/healthz
+```
 
-- FastAPI backend and `nephos-api` CLI.
-- SQLite desired-state database and migrations.
-- Catalog loading and validation for Apps and Services.
-- API resources for Apps, Services, Bindings, Platform Domains, Catalog, and
-  lifecycle actions.
-- Serialized reconciliation worker.
-- Python provider layer using Pulumi and the Kubernetes API under the hood.
-- PostgreSQL Service provisioning and App binding materialization.
-- Ingress generation with explicit or auto-detected `IngressClass`.
-- Local development route support through `nephos.localhost`.
+Expected responses:
 
-## Runtime Proof
+```json
+{"name":"nephos-api","version":"0.0.1"}
+{"status":"ok"}
+```
+
+## Runtime smoke proof
+
+If your `.env` points to a safe local Kubernetes cluster, run:
 
 ```bash
 uv run nephos-api dev smoke
 ```
 
-The smoke command proves the end-to-end path: Nephos writes desired state,
-reconciles a reference Service and App, provisions an app-scoped binding,
-checks route convergence, exercises lifecycle, and cleans up Nephos-owned
-runtime resources.
+The smoke command creates temporary reference catalog entries, installs a
+PostgreSQL Service and a reference web App through Nephos desired state,
+reconciles them through the provider layer, verifies binding and route behavior,
+exercises lifecycle actions, and cleans up Nephos-owned runtime resources.
 
-## Maintainer Docs
+Expected final shape:
 
-<details>
-<summary>Operational and implementation references</summary>
+```text
+Reference smoke test passed: app=<slug> service=<slug> url=http://<slug>.nephos.localhost
+```
 
-- Manual testing:
-  [docs/testing/api-0-0-1-manual.md](docs/testing/api-0-0-1-manual.md)
-- Current implementation plan:
-  [PLANS.md](PLANS.md)
-- Architecture context:
-  [.agents/context/](.agents/context/)
-- Architecture decision records:
-  [docs/adr/](docs/adr/)
+## Using the API
 
-</details>
+With the server running, common read endpoints are:
+
+| Purpose | Endpoint |
+| --- | --- |
+| Health | `GET /healthz` |
+| Version | `GET /version` |
+| Catalog Apps | `GET /catalog/apps` |
+| Catalog Services | `GET /catalog/services` |
+| Installed Apps | `GET /apps` |
+| Installed Services | `GET /services` |
+| Bindings | `GET /bindings` |
+| Platform domains | `GET /platform/config/domains` |
+
+Install requests record desired state and return `202 Accepted`. Reconciliation
+then works toward the requested state. The examples below assume your configured
+catalog roots include `postgres` and `reference-web`; the bundled smoke command
+creates its own temporary reference catalog for the proof flow.
+
+Example Service install request:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/services \
+  -H 'content-type: application/json' \
+  -d '{
+    "catalogRef": {"kind": "Service", "name": "postgres"},
+    "instanceName": "postgres"
+  }'
+```
+
+Example App install request with an explicit binding provider:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/apps \
+  -H 'content-type: application/json' \
+  -d '{
+    "catalogRef": {"kind": "App", "name": "reference-web"},
+    "instanceName": "reference-web",
+    "bindings": {
+      "postgres": {"serviceInstance": "postgres"}
+    }
+  }'
+```
+
+## Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `NEPHOS_API_DB_PATH` | SQLite desired-state database path. Defaults to `.nephos/state/nephos.db`. |
+| `NEPHOS_API_CATALOG_ROOTS` | Extra catalog roots, separated by your OS path separator. |
+| `NEPHOS_API_KUBECONFIG` | Optional kubeconfig path. Uses the default kubeconfig when unset. |
+| `NEPHOS_API_KUBE_CONTEXT` | Kubernetes context Nephos should target. |
+| `NEPHOS_API_INTERNAL_DOMAIN` | Default internal App route suffix. Use `nephos.localhost` for local browser testing. |
+| `NEPHOS_API_INGRESS_CLASS` | Optional IngressClass override when auto-detection is ambiguous. |
+| `NEPHOS_API_RUN_KUBERNETES_TESTS` | Set to `1` only when running opt-in Kubernetes integration tests. |
+| `PULUMI_CONFIG_PASSPHRASE` | Local Pulumi backend passphrase needed by provider-backed runtime smoke flows. |
+
+## Current limitations
+
+- Nephos 0.0.1 is an API/backend slice, not the final user-facing CLI product.
+- Cluster lifecycle is external; this repository does not create, start, stop,
+  or destroy your Kubernetes cluster.
+- Catalog and provider support is still narrow. A `202 Accepted` response means
+  desired state was recorded, not that every runtime provider is implemented.
+- Use a disposable local cluster and temporary database while experimenting.
+
+## Maintainers and contributors
+
+The README is intentionally user-focused. Maintainer workflow, verification,
+architecture context, and ADR links live in [docs/maintainers.md](docs/maintainers.md).
