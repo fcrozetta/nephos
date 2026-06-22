@@ -18,7 +18,35 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: Alpha Backbone Service Config Plumbing
+## Current Plan Addendum: Zitadel Service Provisioning
+
+Goal:
+
+- Make the Nephos Zitadel Service fully usable for dogfood Apps by adding
+  Service-owned bootstrap automation credentials and app-scoped provisioning for
+  `oidc/oidc` and `service-account/jwt` bindings.
+
+Plan file:
+
+- `docs/plans/2026-06-22-zitadel-service-provisioning.md`
+
+Non-goals:
+
+- Do not make Zitadel the Nephos control-plane login in this slice.
+- Do not model Chiron or any specific dogfood App here.
+- Do not expose secrets in API/status/database summaries.
+- Do not depend on debug Cloudflare/host port-forwards for provisioning.
+
+Validation commands:
+
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Alpha Backbone Service Config Plumbing
 
 Goal:
 
