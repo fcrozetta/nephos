@@ -22,6 +22,12 @@ def run_reference_smoke(*args: Any, **kwargs: Any) -> Any:
     return _run_reference_smoke(*args, **kwargs)
 
 
+def run_backbone_smoke(*args: Any, **kwargs: Any) -> Any:
+    from nephos_api.dev_backbone import run_backbone_smoke as _run_backbone_smoke
+
+    return _run_backbone_smoke(*args, **kwargs)
+
+
 @app.command("init")
 def init(
     internal_domain: str | None = typer.Option(
@@ -112,6 +118,38 @@ def dev_smoke(
         f"app={result.app_slug} service={result.service_slug} "
         f"url={result.canonical_url}"
     )
+
+
+@dev_app.command("backbone-smoke")
+def dev_backbone_smoke(
+    timeout_seconds: int = typer.Option(600, "--timeout-seconds", min=1),
+) -> None:
+    settings = load_settings()
+    context = settings.kube_context or "current context"
+    typer.echo(f"Running alpha backbone smoke against {context}")
+    result = run_backbone_smoke(
+        settings=settings,
+        timeout_seconds=timeout_seconds,
+        progress=lambda message: typer.echo(f"- {message}"),
+    )
+    if result.status == "passed":
+        typer.echo(
+            "Alpha backbone smoke passed: "
+            f"app={result.app_slug} services={','.join(result.service_slugs)}"
+        )
+        return
+    if result.status == "skipped":
+        typer.echo(
+            "Alpha backbone smoke skipped: "
+            f"{result.blocker_code}: {result.message}"
+        )
+        return
+    typer.echo(
+        "Alpha backbone smoke blocked: "
+        f"{result.blocker_code}: {result.message}",
+        err=True,
+    )
+    raise typer.Exit(2)
 
 
 def main() -> None:
