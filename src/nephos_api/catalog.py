@@ -74,6 +74,7 @@ class RouteTarget(BaseModel):
     @field_validator("port", mode="before")
     @classmethod
     def reject_boolean_port(cls, value: Any) -> Any:
+        # ! YAML booleans parse as bool, and bool is an int subclass in Python.
         if type(value) is bool:
             raise ValueError("route target port must be a string name or integer")
         return value
@@ -494,6 +495,7 @@ def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None
 
 
 def _config_value_matches_type(value: object, expected_type: str) -> bool:
+    # ! Keep exact checks here; isinstance(True, int) is True.
     if expected_type in {"string", "enum"}:
         return isinstance(value, str)
     if expected_type == "integer":

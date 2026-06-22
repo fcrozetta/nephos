@@ -69,29 +69,12 @@ def get_service(service_instance: str, request: Request) -> dict[str, Any]:
 
 @router.post("/services", status_code=status.HTTP_202_ACCEPTED)
 def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]:
-    if payload.catalogRef.kind != "Service":
-        raise NephosError(
-            status_code=400,
-            code="catalog_kind_mismatch",
-            message="Service install requires a Service catalog reference.",
-            details={"kind": payload.catalogRef.kind},
-        )
+    _require_catalog_kind(payload.catalogRef.kind, expected="Service")
 
-    _validate_catalog_name(payload.catalogRef.name)
-    loader = _loader(request)
-    catalog_entry = _catalog_or_404(
-        lambda: loader.get_service(
-            payload.catalogRef.name,
-            source=payload.catalogRef.source,
-        )
-    )
-    slug = payload.instanceName or catalog_entry["name"]
-    _validate_runtime_namespace_slug("service_instance", slug)
-    source_path = _catalog_source_path(
+    catalog_entry, slug, source_path = _install_catalog_entry(
+        payload,
         request,
         kind="Service",
-        name=catalog_entry["name"],
-        source=catalog_entry["source"],
     )
     repo = _repo(request)
 
@@ -194,29 +177,12 @@ def get_app(app_instance: str, request: Request) -> dict[str, Any]:
 
 @router.post("/apps", status_code=status.HTTP_202_ACCEPTED)
 def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
-    if payload.catalogRef.kind != "App":
-        raise NephosError(
-            status_code=400,
-            code="catalog_kind_mismatch",
-            message="App install requires an App catalog reference.",
-            details={"kind": payload.catalogRef.kind},
-        )
+    _require_catalog_kind(payload.catalogRef.kind, expected="App")
 
-    _validate_catalog_name(payload.catalogRef.name)
-    loader = _loader(request)
-    catalog_entry = _catalog_or_404(
-        lambda: loader.get_app(
-            payload.catalogRef.name,
-            source=payload.catalogRef.source,
-        )
-    )
-    slug = payload.instanceName or catalog_entry["name"]
-    _validate_runtime_namespace_slug("app_instance", slug)
-    source_path = _catalog_source_path(
+    catalog_entry, slug, source_path = _install_catalog_entry(
+        payload,
         request,
         kind="App",
-        name=catalog_entry["name"],
-        source=catalog_entry["source"],
     )
     _validate_app_config(_load_app_manifest(source_path), payload.config)
     providers = _resolve_binding_providers(
@@ -326,6 +292,52 @@ def app_action(
     }
 
 
+def _require_catalog_kind(
+    actual: Literal["App", "Service"],
+    *,
+    expected: Literal["App", "Service"],
+) -> None:
+    if actual == expected:
+        return
+    article = "an" if expected == "App" else "a"
+    raise NephosError(
+        status_code=400,
+        code="catalog_kind_mismatch",
+        message=f"{expected} install requires {article} {expected} catalog reference.",
+        details={"kind": actual},
+    )
+
+
+def _install_catalog_entry(
+    payload: InstallRequest,
+    request: Request,
+    *,
+    kind: Literal["App", "Service"],
+) -> tuple[dict[str, Any], str, Path]:
+    # * Shared install preflight: resolve catalog identity before mutating state.
+    _validate_catalog_name(payload.catalogRef.name)
+    loader = _loader(request)
+    get_entry = loader.get_app if kind == "App" else loader.get_service
+    catalog_entry = _catalog_or_404(
+        lambda: get_entry(
+            payload.catalogRef.name,
+            source=payload.catalogRef.source,
+        )
+    )
+    slug = payload.instanceName or str(catalog_entry["name"])
+    resource_type: ResourceType = (
+        "app_instance" if kind == "App" else "service_instance"
+    )
+    _validate_runtime_namespace_slug(resource_type, slug)
+    source_path = _catalog_source_path(
+        request,
+        kind=kind,
+        name=str(catalog_entry["name"]),
+        source=str(catalog_entry["source"]),
+    )
+    return catalog_entry, slug, source_path
+
+
 def _validate_runtime_namespace_slug(resource_type: ResourceType, slug: str) -> None:
     try:
         namespace_name(resource_type, slug)
@@ -370,6 +382,7 @@ def _resolve_binding_providers(
     loader = _loader(request)
     service_rows = repo.list_service_rows()
     requirements = _requirements_by_alias(app_catalog_entry)
+    # ! Error precedence is part of the API contract; keep this before selection.
     _reject_unknown_binding_aliases(selections, requirements)
 
     providers: dict[str, dict[str, object]] = {}
@@ -712,6 +725,7 @@ def _validate_app_config(
 
 
 def _config_value_matches_type(value: object, expected_type: str) -> bool:
+    # ! Keep exact checks here; isinstance(True, int) is True.
     if expected_type in {"string", "enum"}:
         return isinstance(value, str)
     if expected_type == "integer":
