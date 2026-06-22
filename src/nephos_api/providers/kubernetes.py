@@ -349,6 +349,27 @@ def _zitadel_service(
         "databasePassword",
         "nephos-local-zitadel-db",
     )
+    bootstrap_machine_username = _string_value(
+        spec.values,
+        "bootstrapMachineUsername",
+        "nephos-provisioner",
+    )
+    bootstrap_machine_name = _string_value(
+        spec.values,
+        "bootstrapMachineName",
+        "Nephos Provisioner",
+    )
+    bootstrap_machine_key_path = _string_value(
+        spec.values,
+        "bootstrapMachineKeyPath",
+        "/var/lib/zitadel-bootstrap/nephos-provisioner-key.json",
+    )
+    bootstrap_machine_key_expiration = _string_value(
+        spec.values,
+        "bootstrapMachineKeyExpiration",
+        "2036-01-01T00:00:00Z",
+    )
+    bootstrap_mount_path = bootstrap_machine_key_path.rsplit("/", 1)[0]
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -419,6 +440,38 @@ def _zitadel_service(
                                 {
                                     "name": "ZITADEL_TLS_ENABLED",
                                     "value": "false",
+                                },
+                                {
+                                    "name": "ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH",
+                                    "value": bootstrap_machine_key_path,
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_"
+                                        "MACHINE_USERNAME"
+                                    ),
+                                    "value": bootstrap_machine_username,
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_"
+                                        "MACHINE_NAME"
+                                    ),
+                                    "value": bootstrap_machine_name,
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_"
+                                        "MACHINEKEY_TYPE"
+                                    ),
+                                    "value": "1",
+                                },
+                                {
+                                    "name": (
+                                        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_"
+                                        "MACHINEKEY_EXPIRATIONDATE"
+                                    ),
+                                    "value": bootstrap_machine_key_expiration,
                                 },
                                 {
                                     "name": "ZITADEL_MASTERKEY",
@@ -568,6 +621,12 @@ def _zitadel_service(
                                     "value": "disable",
                                 },
                             ],
+                            "volumeMounts": [
+                                {
+                                    "name": "bootstrap",
+                                    "mountPath": bootstrap_mount_path,
+                                }
+                            ],
                         },
                         {
                             "name": "postgres",
@@ -611,7 +670,15 @@ def _zitadel_service(
                     ]
                 },
             },
-            "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
+            "volumeClaimTemplates": [
+                _volume_claim_template(spec, labels),
+                _named_volume_claim_template(
+                    name="bootstrap",
+                    storage_size="64Mi",
+                    labels=labels,
+                    storage_class_name=spec.values.get("storageClassName"),
+                ),
+            ],
         },
         opts=opts,
     )
@@ -855,9 +922,24 @@ def _volume_claim_template(
 ) -> dict[str, object]:
     storage_size = _string_value(spec.values, "storageSize", "1Gi")
     storage_class_name = spec.values.get("storageClassName")
+    return _named_volume_claim_template(
+        name="data",
+        storage_size=storage_size,
+        labels=labels,
+        storage_class_name=storage_class_name,
+    )
+
+
+def _named_volume_claim_template(
+    *,
+    name: str,
+    storage_size: str,
+    labels: Mapping[str, str],
+    storage_class_name: object,
+) -> dict[str, object]:
     return {
         "metadata": {
-            "name": "data",
+            "name": name,
             "labels": dict(labels),
         },
         "spec": {

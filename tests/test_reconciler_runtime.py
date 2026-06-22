@@ -1738,6 +1738,8 @@ def test_binding_reconcile_uses_provisioner_without_persisting_secret_values(
 def test_binding_reconcile_persists_protocol_in_redacted_summary(
     tmp_path: Path,
 ) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = write_app(catalog_root)
     repo = _repo(tmp_path)
     runtime = FakeRuntime()
     values = {
@@ -1748,6 +1750,11 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
     }
     provisioner = FakeProvisioner(values)
     with repo.transaction() as tx:
+        domain = tx.create_platform_domain(
+            name="local",
+            domain="nephos.local",
+            is_default=True,
+        )
         service = tx.create_service_instance(
             slug="zitadel",
             catalog_name="zitadel",
@@ -1759,7 +1766,7 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
             slug="paperless",
             catalog_name="paperless",
             catalog_source_id="default",
-            catalog_source_path=str(_write_routeless_app(tmp_path)),
+            catalog_source_path=str(manifest_path),
             manifest_digest="sha256:paperless",
         )
         binding = tx.create_binding(
@@ -1794,6 +1801,17 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
             alias="auth",
             capability="oidc",
             protocol="oidc",
+            app_routes=(
+                {"name": "web", "visibility": "local", "target": {"port": "http"}},
+            ),
+            platform_domains=(
+                {
+                    "id": domain.id,
+                    "name": "local",
+                    "domain": "nephos.local",
+                    "default": True,
+                },
+            ),
         )
     ]
     assert runtime.binding_secrets == [

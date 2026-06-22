@@ -197,6 +197,10 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             "externalHost": "login.nephos.localhost",
             "externalPort": 443,
             "externalSecure": True,
+            "bootstrapMachineUsername": "nephos-bot",
+            "bootstrapMachineName": "Nephos Bot",
+            "bootstrapMachineKeyPath": "/var/lib/zitadel-bootstrap/bot.json",
+            "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
             "storageSize": "4Gi",
         },
     )
@@ -210,7 +214,16 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     containers = stateful_pod_spec["containers"]
     container = next(item for item in containers if item["name"] == "zitadel")
     postgres = next(item for item in containers if item["name"] == "postgres")
-    pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
+    data_pvc = next(
+        item
+        for item in stateful_set["spec"]["volumeClaimTemplates"]
+        if item["metadata"]["name"] == "data"
+    )
+    bootstrap_pvc = next(
+        item
+        for item in stateful_set["spec"]["volumeClaimTemplates"]
+        if item["metadata"]["name"] == "bootstrap"
+    )
     env = {item["name"]: item for item in container["env"]}
     assert secret["string_data"] == {
         "admin-username": "root@zitadel.localhost",
@@ -224,6 +237,22 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     assert env["ZITADEL_EXTERNALPORT"]["value"] == "443"
     assert env["ZITADEL_EXTERNALSECURE"]["value"] == "true"
     assert env["ZITADEL_TLS_ENABLED"]["value"] == "false"
+    assert env["ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH"]["value"] == (
+        "/var/lib/zitadel-bootstrap/bot.json"
+    )
+    assert env["ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME"]["value"] == (
+        "nephos-bot"
+    )
+    assert env["ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME"]["value"] == (
+        "Nephos Bot"
+    )
+    assert env["ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE"]["value"] == "1"
+    assert env[
+        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE"
+    ]["value"] == "2037-01-01T00:00:00Z"
+    assert container["volumeMounts"] == [
+        {"name": "bootstrap", "mountPath": "/var/lib/zitadel-bootstrap"}
+    ]
     assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == "127.0.0.1"
     assert env["ZITADEL_DATABASE_POSTGRES_DATABASE"]["value"] == "zitadel"
     assert env["ZITADEL_DATABASE_POSTGRES_USER_USERNAME"]["value"] == "zitadel"
@@ -256,7 +285,8 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             }
         },
     } in postgres["env"]
-    assert pvc["spec"]["resources"]["requests"]["storage"] == "4Gi"
+    assert data_pvc["spec"]["resources"]["requests"]["storage"] == "4Gi"
+    assert bootstrap_pvc["spec"]["resources"]["requests"]["storage"] == "64Mi"
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 8080, "targetPort": "http"}
     ]

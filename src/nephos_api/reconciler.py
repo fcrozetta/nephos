@@ -677,6 +677,10 @@ class Reconciler:
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
                     protocol=_optional_str(binding["protocol"]),
+                    app_routes=tuple(
+                        self._app_routes(str(binding["app_instance_slug"]))
+                    ),
+                    platform_domains=tuple(self._platform_domains_for_ingress()),
                 )
             )
         if values is None:

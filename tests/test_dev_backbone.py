@@ -79,6 +79,10 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         "admin-password",
         "master-key",
         "database-password",
+        "bootstrap-machine-username",
+        "bootstrap-machine-name",
+        "bootstrap-machine-key-path",
+        "bootstrap-machine-key-expiration",
         "storage-size",
     }
     assert _runtime_mapping_pairs(manifests["zitadel"]) == {
@@ -90,6 +94,13 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         ("admin-password", "adminPassword"),
         ("master-key", "masterKey"),
         ("database-password", "databasePassword"),
+        ("bootstrap-machine-username", "bootstrapMachineUsername"),
+        ("bootstrap-machine-name", "bootstrapMachineName"),
+        ("bootstrap-machine-key-path", "bootstrapMachineKeyPath"),
+        (
+            "bootstrap-machine-key-expiration",
+            "bootstrapMachineKeyExpiration",
+        ),
         ("storage-size", "storageSize"),
     }
     assert _config_option_names(manifests["seaweedfs"]) == {

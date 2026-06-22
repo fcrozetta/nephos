@@ -14,6 +14,8 @@ from nephos_api.provisioners.seaweedfs import (
     SeaweedFSS3Provisioner,
 )
 from nephos_api.provisioners.zitadel import (
+    PulumiZitadelProvisionerConfig,
+    PulumiZitadelProvisioningClient,
     ZitadelAppScopedProvisioner,
     ZitadelProvisioningClient,
 )
@@ -27,6 +29,8 @@ __all__ = [
     "KubernetesPsqlRunner",
     "PostgresAppScopedProvisioner",
     "PostgresPsqlRunner",
+    "PulumiZitadelProvisionerConfig",
+    "PulumiZitadelProvisioningClient",
     "SeaweedFSProvisioningClient",
     "SeaweedFSS3Provisioner",
     "ZitadelAppScopedProvisioner",

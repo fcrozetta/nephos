@@ -140,6 +140,26 @@ def write_alpha_backbone_catalog(root: Path) -> None:
                 "type": "string",
                 "default": "nephos-local-zitadel-db",
             },
+            {
+                "name": "bootstrap-machine-username",
+                "type": "string",
+                "default": "nephos-provisioner",
+            },
+            {
+                "name": "bootstrap-machine-name",
+                "type": "string",
+                "default": "Nephos Provisioner",
+            },
+            {
+                "name": "bootstrap-machine-key-path",
+                "type": "string",
+                "default": "/var/lib/zitadel-bootstrap/nephos-provisioner-key.json",
+            },
+            {
+                "name": "bootstrap-machine-key-expiration",
+                "type": "string",
+                "default": "2036-01-01T00:00:00Z",
+            },
             {"name": "storage-size", "type": "string", "default": "1Gi"},
         ],
         runtime_mappings=[
@@ -151,6 +171,13 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             ("admin-password", "adminPassword"),
             ("master-key", "masterKey"),
             ("database-password", "databasePassword"),
+            ("bootstrap-machine-username", "bootstrapMachineUsername"),
+            ("bootstrap-machine-name", "bootstrapMachineName"),
+            ("bootstrap-machine-key-path", "bootstrapMachineKeyPath"),
+            (
+                "bootstrap-machine-key-expiration",
+                "bootstrapMachineKeyExpiration",
+            ),
             ("storage-size", "storageSize"),
         ],
     )

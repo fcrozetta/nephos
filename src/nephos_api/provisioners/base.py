@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -10,6 +11,8 @@ class BindingProvisioningContext:
     alias: str
     capability: str
     protocol: str | None = None
+    app_routes: tuple[Mapping[str, object], ...] = ()
+    platform_domains: tuple[Mapping[str, object], ...] = ()
 
 
 class BindingProvisioner(Protocol):

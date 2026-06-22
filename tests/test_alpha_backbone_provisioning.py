@@ -4,6 +4,8 @@ from nephos_api.provisioning import (
     ArcadeDBAppScopedProvisioner,
     BindingProvisioningContext,
     CompositeBindingProvisioner,
+    PulumiZitadelProvisionerConfig,
+    PulumiZitadelProvisioningClient,
     SeaweedFSS3Provisioner,
     ZitadelAppScopedProvisioner,
 )
@@ -44,6 +46,28 @@ class FakeZitadelClient:
 
     def delete_service_account(self, context: BindingProvisioningContext) -> None:
         pass
+
+
+class FakePulumiZitadelRunner:
+    def __init__(self) -> None:
+        self.oidc_specs = []
+        self.service_account_specs = []
+        self.destroyed_oidc_specs = []
+        self.destroyed_service_account_specs = []
+
+    def up_oidc(self, spec):
+        self.oidc_specs.append(spec)
+        return {"clientId": "client-id", "clientSecret": "client-secret"}
+
+    def up_service_account(self, spec):
+        self.service_account_specs.append(spec)
+        return {"serviceAccountId": "machine-id", "keyJson": '{"key":"json"}'}
+
+    def destroy_oidc(self, spec) -> None:
+        self.destroyed_oidc_specs.append(spec)
+
+    def destroy_service_account(self, spec) -> None:
+        self.destroyed_service_account_specs.append(spec)
 
 
 class FakeSeaweedFSClient:
@@ -147,6 +171,116 @@ def test_zitadel_fake_client_outputs_oidc_and_service_account_material() -> None
         "keyJson": '{"privateKey":"secret"}',
         "audience": "paperless",
     }
+
+
+def test_pulumi_zitadel_client_derives_oidc_outputs_from_app_route(
+    tmp_path,
+) -> None:
+    runner = FakePulumiZitadelRunner()
+    client = PulumiZitadelProvisioningClient(
+        config=PulumiZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+            issuer_url="https://zitadel.example",
+            domain="127.0.0.1",
+            port=18080,
+            insecure=True,
+            jwt_profile_json='{"key":"bootstrap"}',
+        ),
+        runner=runner,
+    )
+    context = _context(
+        service_slug="zitadel",
+        alias="auth",
+        capability="oidc",
+        protocol="oidc",
+        app_routes=(
+            {"name": "web", "visibility": "local", "target": {"port": "http"}},
+        ),
+        platform_domains=(
+            {"name": "local", "domain": "nephos.local", "default": True},
+        ),
+    )
+
+    values = client.ensure_oidc_client(context)
+
+    assert values == {
+        "issuerUrl": "https://zitadel.example",
+        "clientId": "client-id",
+        "clientSecret": "client-secret",
+        "redirectUris": '["http://paperless.nephos.local/oauth/callback"]',
+        "postLogoutRedirectUris": '["http://paperless.nephos.local/"]',
+        "authorizationUrl": "https://zitadel.example/oauth/v2/authorize",
+        "tokenUrl": "https://zitadel.example/oauth/v2/token",
+        "jwksUrl": "https://zitadel.example/oauth/v2/keys",
+    }
+    assert len(runner.oidc_specs) == 1
+    spec = runner.oidc_specs[0]
+    assert spec.stack_name == "zitadel-oidc-binding_auth"
+    assert spec.redirect_uris == ("http://paperless.nephos.local/oauth/callback",)
+    assert spec.post_logout_redirect_uris == ("http://paperless.nephos.local/",)
+
+
+def test_pulumi_zitadel_client_blocks_oidc_without_route_metadata(tmp_path) -> None:
+    client = PulumiZitadelProvisioningClient(
+        config=PulumiZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+            issuer_url="https://zitadel.example",
+            domain="127.0.0.1",
+            port=18080,
+            insecure=True,
+            jwt_profile_json='{"key":"bootstrap"}',
+        ),
+        runner=FakePulumiZitadelRunner(),
+    )
+
+    with pytest.raises(RuntimeBlockedError) as exc_info:
+        client.ensure_oidc_client(
+            _context(
+                service_slug="zitadel",
+                alias="auth",
+                capability="oidc",
+                protocol="oidc",
+            )
+        )
+
+    assert exc_info.value.reason == "binding_provisioner_unavailable"
+    assert "requires at least one App route" in str(exc_info.value)
+
+
+def test_pulumi_zitadel_client_outputs_service_account_material(tmp_path) -> None:
+    runner = FakePulumiZitadelRunner()
+    client = PulumiZitadelProvisioningClient(
+        config=PulumiZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+            issuer_url="https://zitadel.example",
+            domain="127.0.0.1",
+            port=18080,
+            insecure=True,
+            jwt_profile_json='{"key":"bootstrap"}',
+        ),
+        runner=runner,
+    )
+
+    values = client.ensure_service_account(
+        _context(
+            service_slug="zitadel",
+            alias="machine",
+            capability="service-account",
+            protocol="jwt",
+        )
+    )
+
+    assert values == {
+        "issuerUrl": "https://zitadel.example",
+        "serviceAccountId": "machine-id",
+        "keyJson": '{"key":"json"}',
+        "audience": "https://zitadel.example",
+    }
+    assert len(runner.service_account_specs) == 1
+    assert runner.service_account_specs[0].stack_name == "zitadel-jwt-binding_machine"
 
 
 def test_live_external_provisioners_block_when_client_is_not_configured() -> None:
@@ -262,6 +396,8 @@ def _context(
     alias: str,
     capability: str,
     protocol: str,
+    app_routes=(),
+    platform_domains=(),
 ) -> BindingProvisioningContext:
     return BindingProvisioningContext(
         binding_id=f"binding_{alias}",
@@ -270,4 +406,6 @@ def _context(
         alias=alias,
         capability=capability,
         protocol=protocol,
+        app_routes=app_routes,
+        platform_domains=platform_domains,
     )
