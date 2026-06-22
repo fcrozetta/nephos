@@ -1,5 +1,36 @@
 # Nephos Open Questions
 
+## Alpha Backbone Binding Output Details
+
+Question:
+
+What exact binding output fields, Secret key names, status evidence, and Service
+surface route fields should the non-PostgreSQL alpha backbone Services use?
+
+Accepted direction:
+
+- alpha backbone Service order is PostgreSQL, Zitadel, SeaweedFS, ArcadeDB, then the first dogfood App
+- Pulumi is the runtime path
+- Aspire is out of scope
+- Helm may be used underneath Pulumi-backed Service providers when it is the easiest Service install path
+- Helm charts do not define Nephos Service behavior
+- binding provider matching is `capability + protocol`
+- PostgreSQL provides `sql/postgres`
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, `opencypher/n4j`, optional `gremlin/gremlin`, and optional `mongo/mongo` when enabled
+- SeaweedFS provides `object-storage/s3`
+- Zitadel provides `oidc/oidc` and `service-account/jwt`
+- Zitadel login/admin UI are Service surfaces/routes, not a separate App
+
+Need to decide:
+
+- exact OIDC client binding output fields and Secret key names
+- exact Zitadel service-account/JWT binding output fields and Secret key names
+- exact SeaweedFS S3 binding output fields and Secret key names
+- exact ArcadeDB binding output fields and Secret key names per protocol
+- default enablement policy for optional ArcadeDB `gremlin/gremlin` and `mongo/mongo`
+- Service-surface route shape for Zitadel login/admin UI
+- whether generic Service surfaces need a shared response shape before the first implementation
+
 ## Namespace Details
 
 Question:

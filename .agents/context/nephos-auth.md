@@ -14,6 +14,19 @@ No roles or RBAC are required in Phase 1.
 
 The Web UI is deferred for Phase 1.
 
+Zitadel is an alpha backbone Service, not Nephos control-plane login.
+
+Zitadel provides identity capabilities to Apps through protocol-aware bindings:
+
+- `oidc/oidc`
+- `service-account/jwt`
+
+Zitadel login/admin UI are Service surfaces/routes. They are not a separate App.
+
+Adding Zitadel to the alpha backbone does not change the Phase 1 Nephos API/CLI
+auth model: the CLI remains a trusted local client, and Nephos itself still has
+no Phase 1 login/RBAC requirement.
+
 ## Future Direction
 
 When the Web UI is introduced, it should require local-owner auth.
@@ -41,3 +54,6 @@ Phase 1 does not include:
 - SSO
 - enterprise IAM
 - hosted/SaaS identity
+
+These non-goals describe Nephos control-plane auth. They do not forbid a Zitadel
+Service from provisioning app-facing OIDC clients or service-account material.

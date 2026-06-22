@@ -289,6 +289,7 @@ Goal:
 
 Current decisions from Fer:
 
+- Accepted ADR: `docs/adr/20260622-alpha-backbone-catalog-and-service-providers.md`.
 - Pulumi is the runtime path; do not use Aspire.
 - Helm is acceptable under Pulumi-backed Service providers when it is the easiest way to deploy a Service, but Helm must not define Nephos Service behavior.
 - Zitadel is a Service only. Its login/admin UI is a Service surface, not a separate App.

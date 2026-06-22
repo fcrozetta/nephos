@@ -95,10 +95,14 @@ App catalog summaries include:
 App catalog `requires` entries use:
 
 - `capability`
+- `protocol`
 - `alias`
 - optional `provider`
 
 If the manifest omits the binding alias, `alias` is defaulted from the capability.
+
+For protocol-aware requirements, `capability + protocol` is the binding match
+key. The alias remains the App-local binding name.
 
 App catalog `routes` entries use:
 
@@ -113,9 +117,25 @@ Service catalog summaries include:
 Service catalog `provides` entries use:
 
 - `capability`
+- `protocol`
 - optional `alias`
 - optional `version`
 - `bindingOutputTargets`
+
+For protocol-aware provisions, `capability + protocol` is the Service eligibility
+key. Capability alone is not enough for alpha backbone database bindings.
+
+Accepted alpha backbone Service provisions:
+
+- PostgreSQL provides `sql/postgres`.
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, and `opencypher/n4j`.
+- ArcadeDB may provide `gremlin/gremlin` and `mongo/mongo` when those protocols
+  are enabled.
+- SeaweedFS provides `object-storage/s3`.
+- Zitadel provides `oidc/oidc` and `service-account/jwt`.
+
+Do not model Zitadel login/admin UI as an App catalog entry. They are Zitadel
+Service surfaces/routes.
 
 Do not return raw manifest blobs by default.
 
