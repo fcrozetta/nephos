@@ -369,6 +369,8 @@ def _zitadel_service(
         "bootstrapMachineKeyExpiration",
         "2036-01-01T00:00:00Z",
     )
+    ingress_enabled = _bool_value(spec.values, "ingressEnabled", False)
+    ingress_class_name = _optional_string_value(spec.values, "ingressClassName")
     bootstrap_mount_path = bootstrap_machine_key_path.rsplit("/", 1)[0]
     k8s.core.v1.Secret(
         name,
@@ -399,6 +401,18 @@ def _zitadel_service(
         },
         opts=opts,
     )
+    if ingress_enabled:
+        _service_ingress(
+            name=name,
+            namespace=spec.namespace,
+            labels=labels,
+            host=external_host,
+            service_name=name,
+            service_port=8080,
+            ingress_class_name=ingress_class_name,
+            k8s=k8s,
+            opts=opts,
+        )
     k8s.apps.v1.StatefulSet(
         name,
         metadata={
@@ -689,6 +703,53 @@ def _zitadel_service(
     )
 
 
+def _service_ingress(
+    *,
+    name: str,
+    namespace: str,
+    labels: Mapping[str, str],
+    host: str,
+    service_name: str,
+    service_port: int,
+    ingress_class_name: str | None,
+    k8s,
+    opts,
+) -> None:
+    spec: dict[str, object] = {
+        "rules": [
+            {
+                "host": host,
+                "http": {
+                    "paths": [
+                        {
+                            "path": "/",
+                            "pathType": "Prefix",
+                            "backend": {
+                                "service": {
+                                    "name": service_name,
+                                    "port": {"number": service_port},
+                                }
+                            },
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+    if ingress_class_name is not None:
+        spec["ingressClassName"] = ingress_class_name
+    k8s.networking.v1.Ingress(
+        name,
+        metadata={
+            "name": name,
+            "namespace": namespace,
+            "labels": dict(labels),
+        },
+        spec=spec,
+        opts=opts,
+    )
+
+
 def _seaweedfs_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -880,6 +941,16 @@ def _string_value(
     default: str,
 ) -> str:
     value = values.get(name, default)
+    return str(value)
+
+
+def _optional_string_value(
+    values: Mapping[str, object],
+    name: str,
+) -> str | None:
+    value = values.get(name)
+    if value is None or value == "":
+        return None
     return str(value)
 
 

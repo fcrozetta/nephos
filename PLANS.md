@@ -52,6 +52,7 @@ Validation commands:
 - `git diff --check`
 - live production-readiness smoke command to define after blocking decisions; must not require debug Cloudflare/host port-forward
 - `provisioning-transport=auto` uses the issuer endpoint for non-local hosts and bounded port-forward for `.localhost` dev hosts
+- Zitadel `ingress-enabled` publishes a Service-owned Ingress for the canonical issuer host
 
 ---
 

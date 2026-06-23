@@ -120,6 +120,8 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             },
             {"name": "external-port", "type": "integer", "default": 8080},
             {"name": "external-secure", "type": "boolean", "default": False},
+            {"name": "ingress-enabled", "type": "boolean", "default": False},
+            {"name": "ingress-class-name", "type": "string", "default": ""},
             {
                 "name": "admin-username",
                 "type": "string",
@@ -172,6 +174,8 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             ("external-host", "externalHost"),
             ("external-port", "externalPort"),
             ("external-secure", "externalSecure"),
+            ("ingress-enabled", "ingressEnabled"),
+            ("ingress-class-name", "ingressClassName"),
             ("admin-username", "adminUsername"),
             ("admin-password", "adminPassword"),
             ("master-key", "masterKey"),
