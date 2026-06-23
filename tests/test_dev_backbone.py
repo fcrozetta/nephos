@@ -24,13 +24,22 @@ def test_alpha_backbone_catalog_generator_writes_protocol_aware_entries(
 
     loader = CatalogLoader((catalog_root,))
     services = {service["name"]: service for service in loader.list_services()}
-    assert set(services) == {"arcadedb", "postgres", "seaweedfs", "zitadel"}
+    assert set(services) == {
+        "arcadedb",
+        "cloudflared",
+        "postgres",
+        "seaweedfs",
+        "zitadel",
+    }
     assert _provided_pairs(services["postgres"]) == {("sql", "postgres")}
     assert _provided_pairs(services["zitadel"]) == {
         ("oidc", "oidc"),
         ("service-account", "jwt"),
     }
     assert _provided_pairs(services["seaweedfs"]) == {("object-storage", "s3")}
+    assert _provided_pairs(services["cloudflared"]) == {
+        ("external-routing", "cloudflare-tunnel")
+    }
     assert _provided_pairs(services["arcadedb"]) == {
         ("sql", "arcadedb"),
         ("opencypher", "bolt"),
@@ -60,7 +69,13 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         service_name: yaml.safe_load(
             (catalog_root / "services" / service_name / "service.yaml").read_text()
         )
-        for service_name in ("postgres", "zitadel", "seaweedfs", "arcadedb")
+        for service_name in (
+            "postgres",
+            "zitadel",
+            "seaweedfs",
+            "arcadedb",
+            "cloudflared",
+        )
     }
     assert _config_option_names(manifests["postgres"]) == {
         "storage-size",
@@ -134,6 +149,26 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         ("enable-gremlin", "enableGremlin"),
         ("enable-mongo", "enableMongo"),
     }
+    assert _config_option_names(manifests["cloudflared"]) == {
+        "image",
+        "tunnel-name",
+        "credentials-secret-name",
+        "credentials-secret-key",
+        "hostname",
+        "origin-service-url",
+        "origin-host-header",
+    }
+    assert _runtime_mapping_pairs(manifests["cloudflared"]) == {
+        ("image", "image"),
+        ("tunnel-name", "tunnelName"),
+        ("credentials-secret-name", "credentialsSecretName"),
+        ("credentials-secret-key", "credentialsSecretKey"),
+        ("hostname", "hostname"),
+        ("origin-service-url", "originServiceUrl"),
+        ("origin-host-header", "originHostHeader"),
+    }
+    assert manifests["cloudflared"]["spec"].get("bindings") is None
+    assert manifests["cloudflared"]["spec"]["provisioning"] == {"mode": "none"}
 
 
 def test_backbone_smoke_returns_skip_blocker_without_live_config(

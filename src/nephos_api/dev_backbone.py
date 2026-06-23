@@ -250,7 +250,47 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             ("enable-mongo", "enableMongo"),
         ],
     )
-
+    _write_service(
+        root,
+        name="cloudflared",
+        display_name="Cloudflare Tunnel",
+        provider_name="cloudflared",
+        provides=[("external-routing", "cloudflare-tunnel", "cloudflare-tunnel")],
+        config_options=[
+            {
+                "name": "image",
+                "type": "string",
+                "default": "cloudflare/cloudflared:2026.6.1",
+            },
+            {"name": "tunnel-name", "type": "string", "default": "nephos"},
+            {"name": "credentials-secret-name", "type": "string"},
+            {
+                "name": "credentials-secret-key",
+                "type": "string",
+                "default": "credentials.json",
+            },
+            {"name": "hostname", "type": "string"},
+            {
+                "name": "origin-service-url",
+                "type": "string",
+                "default": (
+                    "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+                ),
+            },
+            {"name": "origin-host-header", "type": "string", "default": ""},
+        ],
+        runtime_mappings=[
+            ("image", "image"),
+            ("tunnel-name", "tunnelName"),
+            ("credentials-secret-name", "credentialsSecretName"),
+            ("credentials-secret-key", "credentialsSecretKey"),
+            ("hostname", "hostname"),
+            ("origin-service-url", "originServiceUrl"),
+            ("origin-host-header", "originHostHeader"),
+        ],
+        provisioning_mode="none",
+        binding_outputs=False,
+    )
 
 def _run_non_live_backbone_flow(
     *,
@@ -472,9 +512,41 @@ def _write_service(
     provides: list[tuple[str, str, str]],
     config_options: list[dict[str, object]],
     runtime_mappings: list[tuple[str, str]],
+    provisioning_mode: str = "app-scoped-resource",
+    binding_outputs: bool = True,
 ) -> None:
     path = root / "services" / name / "service.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
+    spec = {
+        "provides": [
+            {
+                "capability": capability,
+                "protocol": protocol,
+                "as": alias,
+            }
+            for capability, protocol, alias in provides
+        ],
+        "config": {"options": config_options},
+        "provisioning": {"mode": provisioning_mode},
+        "operations": [],
+        "runtime": {
+            "type": "provider",
+            "provider": {"name": provider_name},
+            "values": {
+                "mappings": [
+                    {
+                        "from": {"kind": "config", "name": source},
+                        "to": {"helmValue": target},
+                    }
+                    for source, target in runtime_mappings
+                ]
+            },
+        },
+    }
+    if binding_outputs:
+        spec["bindings"] = {
+            "outputs": [{"name": "connection", "target": "app-secret"}]
+        }
     manifest = {
         "apiVersion": "nephos.pro/v1alpha1",
         "kind": "Service",
@@ -482,35 +554,7 @@ def _write_service(
             "name": name,
             "displayName": display_name,
         },
-        "spec": {
-            "provides": [
-                {
-                    "capability": capability,
-                    "protocol": protocol,
-                    "as": alias,
-                }
-                for capability, protocol, alias in provides
-            ],
-            "bindings": {
-                "outputs": [{"name": "connection", "target": "app-secret"}]
-            },
-            "config": {"options": config_options},
-            "provisioning": {"mode": "app-scoped-resource"},
-            "operations": [],
-            "runtime": {
-                "type": "provider",
-                "provider": {"name": provider_name},
-                "values": {
-                    "mappings": [
-                        {
-                            "from": {"kind": "config", "name": source},
-                            "to": {"helmValue": target},
-                        }
-                        for source, target in runtime_mappings
-                    ]
-                },
-            },
-        },
+        "spec": spec,
     }
     path.write_text(
         yaml.safe_dump(manifest, sort_keys=False).strip()

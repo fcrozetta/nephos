@@ -316,6 +316,118 @@ def _postgres_service(
     )
 
 
+def _cloudflared_service(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    name = f"{spec.runtime_name}-cloudflared"
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    image = _string_value(spec.values, "image", "cloudflare/cloudflared:2026.6.1")
+    tunnel_name = _required_string_value(spec.values, "tunnelName")
+    credentials_secret_name = _required_string_value(
+        spec.values,
+        "credentialsSecretName",
+    )
+    credentials_secret_key = _string_value(
+        spec.values,
+        "credentialsSecretKey",
+        "credentials.json",
+    )
+    hostname = _required_string_value(spec.values, "hostname")
+    origin_service_url = _required_string_value(spec.values, "originServiceUrl")
+    origin_host_header = _optional_string_value(spec.values, "originHostHeader")
+    config = _cloudflared_config(
+        tunnel_name=tunnel_name,
+        hostname=hostname,
+        origin_service_url=origin_service_url,
+        origin_host_header=origin_host_header,
+    )
+    k8s.core.v1.ConfigMap(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        data={"config.yml": config},
+        opts=opts,
+    )
+    k8s.apps.v1.Deployment(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "cloudflared",
+                            "image": image,
+                            "args": [
+                                "tunnel",
+                                "--config",
+                                "/etc/cloudflared/config/config.yml",
+                                "run",
+                            ],
+                            "ports": [
+                                {"name": "metrics", "containerPort": 2000}
+                            ],
+                            "readinessProbe": {
+                                "httpGet": {"path": "/ready", "port": 2000},
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 10,
+                            },
+                            "livenessProbe": {
+                                "httpGet": {"path": "/ready", "port": 2000},
+                                "initialDelaySeconds": 15,
+                                "periodSeconds": 20,
+                            },
+                            "volumeMounts": [
+                                {
+                                    "name": "config",
+                                    "mountPath": "/etc/cloudflared/config",
+                                    "readOnly": True,
+                                },
+                                {
+                                    "name": "credentials",
+                                    "mountPath": "/etc/cloudflared/credentials.json",
+                                    "subPath": "credentials.json",
+                                    "readOnly": True,
+                                },
+                            ],
+                        }
+                    ],
+                    "volumes": [
+                        {"name": "config", "configMap": {"name": name}},
+                        {
+                            "name": "credentials",
+                            "secret": {
+                                "secretName": credentials_secret_name,
+                                "items": [
+                                    {
+                                        "key": credentials_secret_key,
+                                        "path": "credentials.json",
+                                    }
+                                ],
+                            },
+                        },
+                    ],
+                },
+            },
+        },
+        opts=opts,
+    )
+
+
 def _zitadel_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -954,6 +1066,46 @@ def _optional_string_value(
     return str(value)
 
 
+def _required_string_value(
+    values: Mapping[str, object],
+    name: str,
+) -> str:
+    value = _optional_string_value(values, name)
+    if value is None:
+        raise RuntimeBlockedError(
+            reason="runtime_config_missing",
+            message=f"Runtime config value {name} is required.",
+        )
+    return value
+
+
+def _cloudflared_config(
+    *,
+    tunnel_name: str,
+    hostname: str,
+    origin_service_url: str,
+    origin_host_header: str | None,
+) -> str:
+    lines = [
+        f"tunnel: {tunnel_name}",
+        "credentials-file: /etc/cloudflared/credentials.json",
+        "metrics: 0.0.0.0:2000",
+        "no-autoupdate: true",
+        "ingress:",
+        f"  - hostname: {hostname}",
+        f"    service: {origin_service_url}",
+    ]
+    if origin_host_header is not None:
+        lines.extend(
+            [
+                "    originRequest:",
+                f"      httpHostHeader: {origin_host_header}",
+            ]
+        )
+    lines.append("  - service: http_status:404")
+    return "\n".join(lines) + "\n"
+
+
 def _int_value(
     values: Mapping[str, object],
     name: str,
@@ -1041,6 +1193,7 @@ def _labels(spec: PulumiKubernetesWorkloadSpec) -> dict[str, str]:
 _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "reference-app": _reference_app,
     "postgres-service": _postgres_service,
+    "cloudflared-service": _cloudflared_service,
     "zitadel-service": _zitadel_service,
     "seaweedfs-service": _seaweedfs_service,
     "arcadedb-service": _arcadedb_service,

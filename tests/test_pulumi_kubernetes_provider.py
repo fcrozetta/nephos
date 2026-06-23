@@ -6,6 +6,7 @@ from nephos_api.providers.kubernetes import (
     PulumiKubernetesProviderConfig,
     PulumiKubernetesWorkloadSpec,
     _arcadedb_service,
+    _cloudflared_service,
     _postgres_service,
     _pulumi_program,
     _seaweedfs_service,
@@ -185,6 +186,92 @@ def test_postgres_service_uses_persistent_volume_claim_template() -> None:
                 "resources": {"requests": {"storage": "1Gi"}},
             },
         }
+    ]
+
+
+def test_cloudflared_service_uses_secret_reference_and_configured_route() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-cloudflared",
+        work_dir=Path("/tmp/workspaces/svc-cloudflared"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-cloudflared",
+        namespace="svc-cloudflared",
+        workload="cloudflared-service",
+        values={
+            "image": "cloudflare/cloudflared:2026.6.1",
+            "tunnelName": "nephos",
+            "credentialsSecretName": "nephos-cloudflared-credentials",
+            "credentialsSecretKey": "credentials.json",
+            "hostname": "auth.fcrozetta.app",
+            "originServiceUrl": (
+                "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+            ),
+            "originHostHeader": "auth.fcrozetta.app",
+        },
+    )
+
+    _cloudflared_service(spec, k8s=k8s, opts=None)
+
+    config_map = k8s.config_map.calls[0]
+    deployment = k8s.deployment.calls[0]
+    pod_spec = deployment["spec"]["template"]["spec"]
+    container = pod_spec["containers"][0]
+    assert k8s.secret.calls == []
+    assert config_map["data"] == {
+        "config.yml": (
+            "tunnel: nephos\n"
+            "credentials-file: /etc/cloudflared/credentials.json\n"
+            "metrics: 0.0.0.0:2000\n"
+            "no-autoupdate: true\n"
+            "ingress:\n"
+            "  - hostname: auth.fcrozetta.app\n"
+            "    service: "
+            "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local\n"
+            "    originRequest:\n"
+            "      httpHostHeader: auth.fcrozetta.app\n"
+            "  - service: http_status:404\n"
+        )
+    }
+    assert container["image"] == "cloudflare/cloudflared:2026.6.1"
+    assert container["args"] == [
+        "tunnel",
+        "--config",
+        "/etc/cloudflared/config/config.yml",
+        "run",
+    ]
+    assert container["volumeMounts"] == [
+        {
+            "name": "config",
+            "mountPath": "/etc/cloudflared/config",
+            "readOnly": True,
+        },
+        {
+            "name": "credentials",
+            "mountPath": "/etc/cloudflared/credentials.json",
+            "subPath": "credentials.json",
+            "readOnly": True,
+        },
+    ]
+    assert container["readinessProbe"] == {
+        "httpGet": {"path": "/ready", "port": 2000},
+        "initialDelaySeconds": 5,
+        "periodSeconds": 10,
+    }
+    assert pod_spec["volumes"] == [
+        {"name": "config", "configMap": {"name": "svc-cloudflared-cloudflared"}},
+        {
+            "name": "credentials",
+            "secret": {
+                "secretName": "nephos-cloudflared-credentials",
+                "items": [
+                    {"key": "credentials.json", "path": "credentials.json"}
+                ],
+            },
+        },
     ]
 
 

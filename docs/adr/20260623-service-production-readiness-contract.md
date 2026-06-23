@@ -106,6 +106,8 @@ In other words, Nephos should not create a second logical Zitadel issuer for man
 - Define a production-safe Zitadel management/provisioning transport that preserves the canonical issuer hostname without depending on debug tunnel/host port-forward.
 - Initial implementation adds `provisioning-transport` with `auto`, `issuer-endpoint`, and `port-forward` behavior: non-local hosts use the issuer endpoint; `.localhost` dev hosts use bounded port-forward.
 - Zitadel runtime supports a Service-owned Ingress via `ingress-enabled` and `ingress-class-name` so the canonical issuer host can route through cluster ingress instead of the debug host port-forward.
+- Add a Nephos-managed `cloudflared` Service so Cloudflare Tunnel runtime can run inside the selected Kubernetes context and route public hostnames to Nephos-owned ingress/service paths without depending on a local host process.
+- The first Cloudflared Service slice must reference an existing Kubernetes Secret for tunnel credentials; it must not store Cloudflare tokens, credentials JSON, certs, or account credentials in SQLite Service config.
 - Keep backup support as `deferred`/`unsupported` status until a future backup ADR or implementation slice.
 
 ## Links

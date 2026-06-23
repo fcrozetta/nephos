@@ -18,7 +18,34 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: Zitadel Production Readiness
+## Current Plan Addendum: Cloudflared Service
+
+Goal:
+
+- Add a Nephos-managed `cloudflared` Service so Cloudflare Tunnel runtime is reconciled by Nephos instead of depending on a local host process or the `nomad` debug route.
+
+Plan file:
+
+- `docs/plans/2026-06-23-cloudflared-service.md`
+
+Non-goals:
+
+- Do not create, delete, or update Cloudflare DNS records or tunnel routes in this slice.
+- Do not store Cloudflare tunnel tokens, credentials JSON, certs, API tokens, or account credentials in Nephos SQLite Service config.
+- Do not touch Forgejo or `git.fcrozetta.app` routing.
+
+Validation commands:
+
+- `uv run ruff check src/nephos_api/dev_backbone.py src/nephos_api/providers/kubernetes.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py`
+- `uv run pytest tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Zitadel Production Readiness
 
 Goal:
 
