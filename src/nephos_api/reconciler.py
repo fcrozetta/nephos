@@ -285,6 +285,16 @@ class Reconciler:
                 request_id=str(request["id"]),
                 state="succeeded",
             )
+            evidence: list[dict[str, object]] = [
+                {
+                    "source": "nephos-api",
+                    "subject": str(request["id"]),
+                    "reason": reason,
+                    "message": message,
+                }
+            ]
+            if target_type == "service_instance" and reason == "runtime_deployed":
+                evidence.append(_service_production_readiness_evidence(slug))
             tx.upsert_status_snapshot(
                 resource_type=target_type,
                 resource_id=str(request["target_id"]),
@@ -293,14 +303,7 @@ class Reconciler:
                 reconciliation="succeeded",
                 reason=reason,
                 message=message,
-                evidence=[
-                    {
-                        "source": "nephos-api",
-                        "subject": str(request["id"]),
-                        "reason": reason,
-                        "message": message,
-                    }
-                ],
+                evidence=evidence,
                 observed_generation=int(request["target_generation"]),
             )
         return True
@@ -879,6 +882,87 @@ class Reconciler:
         if row is None:
             return None
         return str(row["lifecycle"])
+
+
+def _service_production_readiness_evidence(slug: str) -> dict[str, object]:
+    checks: list[dict[str, object]] = [
+        {
+            "name": "runtime",
+            "status": "ready",
+            "message": "Runtime deployment reconciled successfully.",
+        },
+        {
+            "name": "secrets",
+            "status": "accepted-for-now",
+            "storage": "kubernetes-secrets",
+            "message": (
+                "Phase 1 stores Service and binding secrets in Kubernetes Secrets."
+            ),
+        },
+        {
+            "name": "backup",
+            "status": "deferred",
+            "message": "Backup implementation is explicitly deferred for this slice.",
+        },
+        {
+            "name": "maintenance",
+            "status": "deferred",
+            "message": (
+                "Maintenance actions beyond lifecycle reconcile are future work."
+            ),
+        },
+    ]
+    if slug == "zitadel":
+        checks.extend(
+            [
+                {
+                    "name": "exposure",
+                    "status": "planned",
+                    "public": True,
+                    "private": True,
+                    "message": (
+                        "Production exposure should support public HTTPS and "
+                        "private access."
+                    ),
+                },
+                {
+                    "name": "tls",
+                    "status": "external",
+                    "termination": "external",
+                    "message": "TLS termination remains external to Nephos for now.",
+                },
+                {
+                    "name": "database-topology",
+                    "status": "accepted-for-now",
+                    "topology": "embedded-postgres-sidecar",
+                    "message": (
+                        "Embedded Postgres sidecar is accepted for now and must "
+                        "remain replaceable by the shared PostgreSQL Service later."
+                    ),
+                },
+                {
+                    "name": "provisioning",
+                    "status": "needs-production-transport",
+                    "issuerHostPolicy": "same-host-private-path",
+                    "message": (
+                        "Provisioning must preserve the canonical issuer hostname "
+                        "while using a production/private network path, not the "
+                        "debug tunnel or host port-forward."
+                    ),
+                },
+            ]
+        )
+    return {
+        "source": "nephos-api",
+        "subject": slug,
+        "reason": "production_readiness",
+        "message": "Service production-readiness dimensions evaluated.",
+        "data": {
+            "contractVersion": "2026-06-23",
+            "checks": checks,
+        },
+    }
+
 
 
 def _target_slug(request: dict[str, object]) -> str:

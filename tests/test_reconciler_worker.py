@@ -217,6 +217,57 @@ def test_api_lifespan_worker_uses_deployer_factory_for_service_install(
     assert deployer.deployed == [("service_instance", "postgres")]
 
 
+def test_service_runtime_status_includes_production_readiness_evidence(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    runtime = FakeRuntime()
+    deployer = FakeDeployer()
+    write_service(catalog_root, name="zitadel", capability="oidc", protocol="oidc")
+    migrate_database(db_path=db_path)
+    app = create_app(
+        settings=Settings(
+            db_path=db_path,
+            catalog_roots=(catalog_root,),
+            kubeconfig=None,
+            kube_context=None,
+        ),
+        start_reconciler=True,
+        runtime_factory=lambda _settings: runtime,
+        deployer_factory=lambda _settings, _repository: deployer,
+        reconciler_interval_seconds=0.01,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "zitadel"}},
+        )
+        assert response.status_code == 202
+
+        _eventually(
+            lambda: _service_status_reason(client, "zitadel") == "runtime_deployed"
+        )
+        status = client.get("/services/zitadel").json()["status"]
+
+    readiness = next(
+        item for item in status["evidence"] if item["reason"] == "production_readiness"
+    )
+    assert readiness["source"] == "nephos-api"
+    assert readiness["subject"] == "zitadel"
+    checks = {check["name"]: check for check in readiness["data"]["checks"]}
+    assert checks["runtime"]["status"] == "ready"
+    assert checks["secrets"]["storage"] == "kubernetes-secrets"
+    assert checks["backup"]["status"] == "deferred"
+    assert checks["exposure"]["public"] is True
+    assert checks["exposure"]["private"] is True
+    assert checks["tls"]["termination"] == "external"
+    assert checks["database-topology"]["topology"] == "embedded-postgres-sidecar"
+    assert checks["provisioning"]["issuerHostPolicy"] == "same-host-private-path"
+
+
+
 def test_api_lifespan_worker_reconciles_app_flow_until_provisioning_output_block(
     tmp_path: Path,
 ) -> None:
@@ -439,8 +490,8 @@ def _eventually(check: Callable[[], bool]) -> None:
     assert check()
 
 
-def _service_status_reason(client: TestClient) -> str | None:
-    status = client.get("/services/postgres").json()["status"]
+def _service_status_reason(client: TestClient, slug: str = "postgres") -> str | None:
+    status = client.get(f"/services/{slug}").json()["status"]
     return status["reason"] if status else None
 
 

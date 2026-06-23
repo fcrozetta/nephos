@@ -18,7 +18,43 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: Zitadel Service Provisioning
+## Current Plan Addendum: Zitadel Production Readiness
+
+Goal:
+
+- Make the Nephos `zitadel` Service production-ready as a shared identity Service for Apps, including reliable runtime, provisioning, secrets, backup/restore, health/status, and operational lifecycle.
+
+Plan file:
+
+- `docs/plans/2026-06-23-zitadel-production-readiness.md`
+
+Non-goals:
+
+- Do not depend on debug Cloudflare/host port-forwards for production provisioning.
+- Do not silently choose production topology decisions for issuer exposure, TLS, secrets, backup, database topology, or management endpoint.
+- Do not expose raw passwords, client secrets, machine keys, JWT private keys, Pulumi stack outputs, or connection strings in API/status/log summaries.
+
+Captured decisions:
+
+- production issuer exposure supports both public HTTPS and private access
+- management/provisioning should use the same canonical issuer hostname with a separate internal network path, not a separate Zitadel issuer identity
+- TLS termination remains external to Nephos for now
+- Kubernetes Secrets are acceptable for this slice; external secret manager integration is later
+- backup implementation is skipped for now, with hooks/status/future work only
+- embedded Postgres sidecar is acceptable for now, but should remain replaceable by shared PostgreSQL Service later
+- establish a generic production-readiness contract for core Services and implement Zitadel first
+
+Validation commands:
+
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+- live production-readiness smoke command to define after blocking decisions; must not require debug Cloudflare/host port-forward
+
+---
+
+## Previous Plan Addendum: Zitadel Service Provisioning
 
 Goal:
 
