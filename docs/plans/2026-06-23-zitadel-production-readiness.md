@@ -121,6 +121,8 @@
 
 **Validation:**
 - live smoke provisions and destroys both `oidc/oidc` and `service-account/jwt` against the main `zitadel` Service without debug tunnel/host port-forward dependency.
+- `provisioning-transport=auto` uses the issuer endpoint for non-local hosts and bounded port-forward for `.localhost` dev hosts.
+- invalid `provisioning-transport` values fail closed.
 
 ### Slice 4: Backup/restore hooks
 

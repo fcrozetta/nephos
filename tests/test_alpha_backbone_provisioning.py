@@ -297,7 +297,7 @@ def test_pulumi_zitadel_client_outputs_service_account_material(tmp_path) -> Non
     assert runner.service_account_specs[0].stack_name == "zitadel-jwt-binding_machine"
 
 
-def test_kubernetes_zitadel_client_uses_service_config_and_internal_forward(
+def test_kubernetes_zitadel_client_uses_issuer_endpoint_for_nonlocal_host(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -346,18 +346,111 @@ def test_kubernetes_zitadel_client_uses_service_config_and_internal_forward(
 
     assert values["issuerUrl"] == "https://login.example.test:8443"
     assert values["clientId"] == "client-id"
+    assert forwards == []
+    assert runner.oidc_specs[0].domain == "login.example.test"
+    assert runner.oidc_specs[0].port == 8443
+    assert runner.oidc_specs[0].insecure is False
+    assert runner.oidc_specs[0].jwt_profile_json == '{"key":"bootstrap"}'
+
+
+def test_kubernetes_zitadel_client_uses_internal_forward_for_localhost_host(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    runner = FakePulumiZitadelRunner()
+    forwards = []
+
+    def fake_forward(**kwargs):
+        forward = FakeForward(**kwargs)
+        forwards.append(forward)
+        return forward
+
+    monkeypatch.setattr(zitadel_module, "_KubectlPortForward", fake_forward)
+    monkeypatch.setattr(
+        zitadel_module,
+        "_bootstrap_machine_key_json",
+        lambda core_v1_api, *, context: '{"key":"bootstrap"}',
+    )
+    client = KubernetesPulumiZitadelProvisioningClient(
+        core_v1_api=object(),
+        config=KubernetesZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+            kube_context="docker-desktop",
+        ),
+        runner=runner,
+    )
+
+    client.ensure_oidc_client(
+        _context(
+            service_slug="zitadel-smoke",
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+            service_config={
+                "external-host": "zitadel-smoke.nephos.localhost",
+                "external-port": 8080,
+                "external-secure": False,
+            },
+            app_routes=(
+                {"name": "web", "visibility": "local", "target": {"port": "http"}},
+            ),
+            platform_domains=(
+                {"name": "local", "domain": "nephos.localhost", "default": True},
+            ),
+        )
+    )
+
     assert forwards[0].kwargs == {
-        "namespace": "svc-zitadel",
-        "service_name": "svc-zitadel-zitadel",
+        "namespace": "svc-zitadel-smoke",
+        "service_name": "svc-zitadel-smoke-zitadel",
         "remote_port": 8080,
         "host": "127.0.0.1",
         "kubeconfig": None,
         "kube_context": "docker-desktop",
     }
-    assert runner.oidc_specs[0].domain == "login.example.test"
+    assert runner.oidc_specs[0].domain == "zitadel-smoke.nephos.localhost"
     assert runner.oidc_specs[0].port == 23456
     assert runner.oidc_specs[0].insecure is True
-    assert runner.oidc_specs[0].jwt_profile_json == '{"key":"bootstrap"}'
+
+
+def test_kubernetes_zitadel_client_rejects_invalid_provisioning_transport(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        zitadel_module,
+        "_bootstrap_machine_key_json",
+        lambda core_v1_api, *, context: '{"key":"bootstrap"}',
+    )
+    client = KubernetesPulumiZitadelProvisioningClient(
+        core_v1_api=object(),
+        config=KubernetesZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+        ),
+        runner=FakePulumiZitadelRunner(),
+    )
+
+    with pytest.raises(RuntimeBlockedError, match="provisioning-transport"):
+        client.ensure_oidc_client(
+            _context(
+                service_slug="zitadel",
+                alias="auth",
+                capability="oidc",
+                protocol="oidc",
+                service_config={
+                    "external-host": "login.example.test",
+                    "provisioning-transport": "debug-tunnel",
+                },
+                app_routes=(
+                    {"name": "web", "visibility": "local", "target": {"port": "http"}},
+                ),
+                platform_domains=(
+                    {"name": "local", "domain": "nephos.local", "default": True},
+                ),
+            )
+        )
 
 
 def test_live_external_provisioners_block_when_client_is_not_configured() -> None:

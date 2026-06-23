@@ -160,6 +160,11 @@ def write_alpha_backbone_catalog(root: Path) -> None:
                 "type": "string",
                 "default": "2036-01-01T00:00:00Z",
             },
+            {
+                "name": "provisioning-transport",
+                "type": "string",
+                "default": "auto",
+            },
             {"name": "storage-size", "type": "string", "default": "1Gi"},
         ],
         runtime_mappings=[

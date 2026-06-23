@@ -129,23 +129,23 @@ class KubernetesPulumiZitadelProvisioningClient:
         self,
         context: BindingProvisioningContext,
     ) -> dict[str, str]:
-        with self._local_forward(context) as endpoint:
+        with self._provisioning_endpoint(context) as endpoint:
             return self._pulumi_client(context, endpoint).ensure_oidc_client(context)
 
     def ensure_service_account(
         self,
         context: BindingProvisioningContext,
     ) -> dict[str, str]:
-        with self._local_forward(context) as endpoint:
+        with self._provisioning_endpoint(context) as endpoint:
             client = self._pulumi_client(context, endpoint)
             return client.ensure_service_account(context)
 
     def delete_oidc_client(self, context: BindingProvisioningContext) -> None:
-        with self._local_forward(context) as endpoint:
+        with self._provisioning_endpoint(context) as endpoint:
             self._pulumi_client(context, endpoint).delete_oidc_client(context)
 
     def delete_service_account(self, context: BindingProvisioningContext) -> None:
-        with self._local_forward(context) as endpoint:
+        with self._provisioning_endpoint(context) as endpoint:
             self._pulumi_client(context, endpoint).delete_service_account(context)
 
     def _pulumi_client(
@@ -158,9 +158,9 @@ class KubernetesPulumiZitadelProvisioningClient:
                 work_dir=self._config.work_dir,
                 state_dir=self._config.state_dir,
                 issuer_url=_issuer_url(context),
-                domain=_provisioning_domain(context),
+                domain=endpoint.domain or _provisioning_domain(context),
                 port=endpoint.port,
-                insecure=True,
+                insecure=endpoint.insecure,
                 jwt_profile_json=_bootstrap_machine_key_json(
                     self._core_v1_api,
                     context=context,
@@ -168,6 +168,21 @@ class KubernetesPulumiZitadelProvisioningClient:
                 project_name=self._config.project_name,
             ),
             runner=self._runner,
+        )
+
+    def _provisioning_endpoint(
+        self,
+        context: BindingProvisioningContext,
+    ) -> "_ProvisioningEndpointContext":
+        if _should_use_internal_forward(context):
+            return self._local_forward(context)
+        return _StaticProvisioningEndpoint(
+            _ForwardEndpoint(
+                host=_provisioning_domain(context),
+                port=_provisioning_port(context),
+                insecure=not _provisioning_secure(context),
+                domain=_provisioning_domain(context),
+            )
         )
 
     def _local_forward(
@@ -536,17 +551,52 @@ def _provisioning_domain(context: BindingProvisioningContext) -> str:
     return str(_config_value(context, "external-host", "externalHost"))
 
 
-def _issuer_url(context: BindingProvisioningContext) -> str:
-    host = _provisioning_domain(context)
-    port = int(
+def _provisioning_port(context: BindingProvisioningContext) -> int:
+    return int(
         str(_config_value(context, "external-port", "externalPort", default=443))
     )
-    secure = _bool_config_value(
+
+
+def _provisioning_secure(context: BindingProvisioningContext) -> bool:
+    return _bool_config_value(
         context,
         "external-secure",
         "externalSecure",
         default=True,
     )
+
+
+def _should_use_internal_forward(context: BindingProvisioningContext) -> bool:
+    domain = _provisioning_domain(context).lower()
+    transport = str(
+        _config_value(
+            context,
+            "provisioning-transport",
+            "provisioningTransport",
+            default="auto",
+        )
+    ).lower()
+    if transport == "issuer-endpoint":
+        return False
+    if transport == "port-forward":
+        return True
+    if transport != "auto":
+        raise RuntimeBlockedError(
+            reason="binding_provisioner_unavailable",
+            message=(
+                "Zitadel provisioning-transport must be one of auto, "
+                "issuer-endpoint, or port-forward."
+            ),
+        )
+    return domain in {"localhost", "127.0.0.1", "::1"} or domain.endswith(
+        ".localhost"
+    )
+
+
+def _issuer_url(context: BindingProvisioningContext) -> str:
+    host = _provisioning_domain(context)
+    port = _provisioning_port(context)
+    secure = _provisioning_secure(context)
     scheme = "https" if secure else "http"
     default_port = 443 if secure else 80
     suffix = "" if port == default_port else f":{port}"
@@ -586,10 +636,29 @@ def _bool_config_value(
     return str(value).lower() in {"1", "true", "yes", "on"}
 
 
+class _ProvisioningEndpointContext(Protocol):
+    def __enter__(self) -> "_ForwardEndpoint": ...
+
+    def __exit__(self, exc_type, exc, traceback) -> None: ...
+
+
 @dataclass(frozen=True)
 class _ForwardEndpoint:
     host: str
     port: int
+    insecure: bool = True
+    domain: str | None = None
+
+
+class _StaticProvisioningEndpoint:
+    def __init__(self, endpoint: _ForwardEndpoint) -> None:
+        self._endpoint = endpoint
+
+    def __enter__(self) -> _ForwardEndpoint:
+        return self._endpoint
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
 
 
 class _KubectlPortForward:

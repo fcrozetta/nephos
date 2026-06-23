@@ -83,6 +83,7 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         "bootstrap-machine-name",
         "bootstrap-machine-key-path",
         "bootstrap-machine-key-expiration",
+        "provisioning-transport",
         "storage-size",
     }
     assert _runtime_mapping_pairs(manifests["zitadel"]) == {
