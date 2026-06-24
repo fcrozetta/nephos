@@ -189,6 +189,55 @@ def test_postgres_service_uses_persistent_volume_claim_template() -> None:
     ]
 
 
+def test_postgres_service_can_bootstrap_zitadel_database() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-postgres",
+        work_dir=Path("/tmp/workspaces/svc-postgres"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-postgres",
+        namespace="svc-postgres",
+        workload="postgres-service",
+        values={
+            "image": "postgres:16-alpine",
+            "adminPassword": "admin-secret",
+            "zitadelDatabase": "zitadel",
+            "zitadelUsername": "zitadel",
+            "zitadelPassword": "zitadel-secret",
+            "storageSize": "8Gi",
+        },
+    )
+
+    _postgres_service(spec, k8s=k8s, opts=None)
+
+    secret = k8s.secret.calls[0]
+    config_map = k8s.config_map.calls[0]
+    stateful_set = k8s.stateful_set.calls[0]
+    container = stateful_set["spec"]["template"]["spec"]["containers"][0]
+    pod_spec = stateful_set["spec"]["template"]["spec"]
+    assert secret["string_data"] == {
+        "postgres-password": "admin-secret",
+        "zitadel-password": "zitadel-secret",
+    }
+    assert "CREATE ROLE \"zitadel\"" in config_map["data"]["010-nephos-zitadel.sql"]
+    assert "CREATE DATABASE \"zitadel\" OWNER \"zitadel\"" in config_map["data"][
+        "010-nephos-zitadel.sql"
+    ]
+    assert container["image"] == "postgres:16-alpine"
+    assert {
+        "name": "initdb",
+        "configMap": {"name": "svc-postgres-postgresql-initdb"},
+    } in pod_spec["volumes"]
+    assert {
+        "name": "initdb",
+        "mountPath": "/docker-entrypoint-initdb.d",
+        "readOnly": True,
+    } in container["volumeMounts"]
+
+
 def test_cloudflared_service_uses_secret_reference_and_configured_route() -> None:
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
@@ -332,6 +381,7 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
         "admin-password": "local-secret",
         "master-key": "0123456789abcdef0123456789abcdef",
         "database-password": "db-secret",
+        "database-admin-password": "db-secret",
     }
     assert container["image"] == "ghcr.io/zitadel/zitadel:v2.58.0"
     assert container["args"] == ["start-from-init", "--masterkeyFromEnv"]
@@ -423,6 +473,55 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
                 },
             }
         ],
+    }
+
+
+def test_zitadel_service_can_use_external_postgres() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-zitadel",
+        work_dir=Path("/tmp/workspaces/svc-zitadel"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-zitadel",
+        namespace="svc-zitadel",
+        workload="zitadel-service",
+        values={
+            "embeddedPostgres": False,
+            "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
+            "databasePort": 5432,
+            "databaseName": "zitadel",
+            "databaseUsername": "zitadel",
+            "databasePassword": "zitadel-secret",
+            "databaseAdminUsername": "postgres",
+            "databaseAdminPassword": "postgres-secret",
+            "databaseSslMode": "disable",
+        },
+    )
+
+    _zitadel_service(spec, k8s=k8s, opts=None)
+
+    stateful_set = k8s.stateful_set.calls[0]
+    containers = stateful_set["spec"]["template"]["spec"]["containers"]
+    container = next(item for item in containers if item["name"] == "zitadel")
+    env = {item["name"]: item for item in container["env"]}
+    assert {item["name"] for item in containers} == {"zitadel"}
+    volume_claim_names = [
+        item["metadata"]["name"]
+        for item in stateful_set["spec"]["volumeClaimTemplates"]
+    ]
+    assert volume_claim_names == ["bootstrap"]
+    assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == (
+        "svc-postgres-postgresql.svc-postgres.svc.cluster.local"
+    )
+    assert env["ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME"]["value"] == "postgres"
+    assert env["ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD"]["valueFrom"] == {
+        "secretKeyRef": {
+            "name": "svc-zitadel-zitadel",
+            "key": "database-admin-password",
+        }
     }
 
 

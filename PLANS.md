@@ -18,7 +18,45 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: Cloudflared Service
+## Current Plan Addendum: Local Tailscale Core Services
+
+Goal:
+
+- Make the minimum local, no-Cloudflare Nephos core-service slice useful when the host machine is reachable over Tailscale: a configurable PostgreSQL Service, a Zitadel Service that can use that PostgreSQL Service instead of an embedded sidecar, and protocol-aware ArcadeDB catalog entries.
+
+Registry target:
+
+- `nephos/core-registry` (`/Users/fcrozetta/projects/core-registry`) owns these first-party platform Service catalog entries.
+- `nephos/mythos-registry` is for Mythos apps/services and should not receive core database/auth entries.
+- `nephos/community-registry` is for community catalog entries and should not receive first-party PRD backbone entries.
+
+Non-goals:
+
+- Do not add Cloudflare Tunnel/DNS/TLS management in this slice.
+- Do not create or modify a full external secret manager or backup controller.
+- Do not make Service-to-Service capability bindings a new public schema yet; use explicit Service config for the minimal local path.
+- Do not make Nephos manage the selected Kubernetes cluster lifecycle.
+
+Proposed steps:
+
+1. Add provider support for configurable PostgreSQL image/password/storage and a minimal first-run Zitadel database/user bootstrap on the PostgreSQL Service.
+2. Add Zitadel provider support for external PostgreSQL config and omit its embedded Postgres sidecar when configured.
+3. Update core registry manifests for protocol-aware capabilities and local Tailscale/no-Cloudflare defaults.
+4. Validate catalog loading, provider workload shape, and standard gates.
+
+Validation commands:
+
+- `uv run pytest tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
+- `uv run ruff check src/nephos_api/dev_backbone.py src/nephos_api/providers/kubernetes.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py`
+- `(cd /Users/fcrozetta/projects/core-registry && NEPHOS_SRC=/Users/fcrozetta/projects/nephos/src python3 scripts/validate_catalog.py)`
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Cloudflared Service
 
 Goal:
 

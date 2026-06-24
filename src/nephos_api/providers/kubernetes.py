@@ -205,8 +205,15 @@ def _postgres_service(
     name = f"{spec.runtime_name}-postgresql"
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
-    storage_size = str(spec.values.get("storageSize", "1Gi"))
-    storage_class_name = spec.values.get("storageClassName")
+    image = _string_value(spec.values, "image", "postgres:16-alpine")
+    admin_password = _string_value(
+        spec.values,
+        "adminPassword",
+        "nephos-local-postgres",
+    )
+    zitadel_database = _string_value(spec.values, "zitadelDatabase", "zitadel")
+    zitadel_username = _string_value(spec.values, "zitadelUsername", "zitadel")
+    zitadel_password = _optional_string_value(spec.values, "zitadelPassword")
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -215,9 +222,33 @@ def _postgres_service(
             "labels": labels,
         },
         type="Opaque",
-        string_data={"postgres-password": "nephos-local-postgres"},
+        string_data={
+            "postgres-password": admin_password,
+            **(
+                {"zitadel-password": zitadel_password}
+                if zitadel_password is not None
+                else {}
+            ),
+        },
         opts=opts,
     )
+    if zitadel_password is not None:
+        k8s.core.v1.ConfigMap(
+            f"{name}-initdb",
+            metadata={
+                "name": f"{name}-initdb",
+                "namespace": spec.namespace,
+                "labels": labels,
+            },
+            data={
+                "010-nephos-zitadel.sql": _postgres_zitadel_init_sql(
+                    database=zitadel_database,
+                    username=zitadel_username,
+                    password=zitadel_password,
+                )
+            },
+            opts=opts,
+        )
     k8s.core.v1.Service(
         name,
         metadata={
@@ -237,6 +268,23 @@ def _postgres_service(
         },
         opts=opts,
     )
+    volume_mounts: list[dict[str, object]] = [
+        {
+            "name": "data",
+            "mountPath": "/var/lib/postgresql/data",
+        }
+    ]
+    if zitadel_password is not None:
+        volume_mounts.append(
+            {
+                "name": "initdb",
+                "mountPath": "/docker-entrypoint-initdb.d",
+                "readOnly": True,
+            }
+        )
+    pod_volumes = []
+    if zitadel_password is not None:
+        pod_volumes.append({"name": "initdb", "configMap": {"name": f"{name}-initdb"}})
     k8s.apps.v1.StatefulSet(
         name,
         metadata={
@@ -251,10 +299,11 @@ def _postgres_service(
             "template": {
                 "metadata": {"labels": {**labels, **selector}},
                 "spec": {
+                    **({"volumes": pod_volumes} if pod_volumes else {}),
                     "containers": [
                         {
                             "name": "postgresql",
-                            "image": "postgres:16-alpine",
+                            "image": image,
                             "ports": [
                                 {"name": "postgresql", "containerPort": 5432}
                             ],
@@ -284,36 +333,50 @@ def _postgres_service(
                                 "initialDelaySeconds": 5,
                                 "periodSeconds": 2,
                             },
-                            "volumeMounts": [
-                                {
-                                    "name": "data",
-                                    "mountPath": "/var/lib/postgresql/data",
-                                }
-                            ],
+                            "volumeMounts": volume_mounts,
                         }
                     ],
                 },
             },
-            "volumeClaimTemplates": [
-                {
-                    "metadata": {
-                        "name": "data",
-                        "labels": labels,
-                    },
-                    "spec": {
-                        "accessModes": ["ReadWriteOnce"],
-                        "resources": {"requests": {"storage": storage_size}},
-                        **(
-                            {"storageClassName": str(storage_class_name)}
-                            if storage_class_name is not None
-                            else {}
-                        ),
-                    },
-                }
-            ],
+            "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
         },
         opts=opts,
     )
+
+
+def _postgres_zitadel_init_sql(
+    *,
+    database: str,
+    username: str,
+    password: str,
+) -> str:
+    quoted_database = _postgres_identifier(database)
+    quoted_username = _postgres_identifier(username)
+    escaped_database = database.replace("'", "''")
+    escaped_username = username.replace("'", "''")
+    escaped_password = password.replace("'", "''")
+    return (
+        "DO $$\n"
+        "BEGIN\n"
+        "  IF NOT EXISTS ("
+        f"SELECT FROM pg_roles WHERE rolname = '{escaped_username}'"
+        ") THEN\n"
+        f"    CREATE ROLE {quoted_username} LOGIN PASSWORD '{escaped_password}';\n"
+        "  ELSE\n"
+        f"    ALTER ROLE {quoted_username} WITH LOGIN PASSWORD '{escaped_password}';\n"
+        "  END IF;\n"
+        "END\n"
+        "$$;\n"
+        f"SELECT 'CREATE DATABASE {quoted_database} OWNER {quoted_username}'\n"
+        "WHERE NOT EXISTS ("
+        f"SELECT FROM pg_database WHERE datname = '{escaped_database}'"
+        ")\\gexec\n"
+        f"GRANT ALL PRIVILEGES ON DATABASE {quoted_database} TO {quoted_username};\n"
+    )
+
+
+def _postgres_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
 
 
 def _cloudflared_service(
@@ -461,6 +524,22 @@ def _zitadel_service(
         "databasePassword",
         "nephos-local-zitadel-db",
     )
+    database_host = _string_value(spec.values, "databaseHost", "127.0.0.1")
+    database_port = _int_value(spec.values, "databasePort", 5432)
+    database_name = _string_value(spec.values, "databaseName", "zitadel")
+    database_username = _string_value(spec.values, "databaseUsername", "zitadel")
+    database_admin_username = _string_value(
+        spec.values,
+        "databaseAdminUsername",
+        database_username,
+    )
+    database_admin_password = _string_value(
+        spec.values,
+        "databaseAdminPassword",
+        database_password,
+    )
+    database_ssl_mode = _string_value(spec.values, "databaseSslMode", "disable")
+    embedded_postgres = _bool_value(spec.values, "embeddedPostgres", True)
     bootstrap_machine_username = _string_value(
         spec.values,
         "bootstrapMachineUsername",
@@ -497,6 +576,7 @@ def _zitadel_service(
             "admin-password": admin_password,
             "master-key": master_key,
             "database-password": database_password,
+            "database-admin-password": database_admin_password,
         },
         opts=opts,
     )
@@ -702,19 +782,19 @@ def _zitadel_service(
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_HOST",
-                                    "value": "127.0.0.1",
+                                    "value": database_host,
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_PORT",
-                                    "value": "5432",
+                                    "value": str(database_port),
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_DATABASE",
-                                    "value": "zitadel",
+                                    "value": database_name,
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_USER_USERNAME",
-                                    "value": "zitadel",
+                                    "value": database_username,
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_USER_PASSWORD",
@@ -727,24 +807,24 @@ def _zitadel_service(
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE",
-                                    "value": "disable",
+                                    "value": database_ssl_mode,
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME",
-                                    "value": "zitadel",
+                                    "value": database_admin_username,
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD",
                                     "valueFrom": {
                                         "secretKeyRef": {
                                             "name": name,
-                                            "key": "database-password",
+                                            "key": "database-admin-password",
                                         }
                                     },
                                 },
                                 {
                                     "name": "ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE",
-                                    "value": "disable",
+                                    "value": database_ssl_mode,
                                 },
                             ],
                             "volumeMounts": [
@@ -754,60 +834,69 @@ def _zitadel_service(
                                 }
                             ],
                         },
-                        {
-                            "name": "postgres",
-                            "image": "postgres:16-alpine",
-                            "ports": [
+                        *(
+                            [
                                 {
-                                    "name": "postgresql",
-                                    "containerPort": 5432,
-                                }
-                            ],
-                            "env": [
-                                {
-                                    "name": "POSTGRES_DB",
-                                    "value": "zitadel",
-                                },
-                                {
-                                    "name": "POSTGRES_USER",
-                                    "value": "zitadel",
-                                },
-                                {
-                                    "name": "POSTGRES_PASSWORD",
-                                    "valueFrom": {
-                                        "secretKeyRef": {
-                                            "name": name,
-                                            "key": "database-password",
+                                    "name": "postgres",
+                                    "image": "postgres:16-alpine",
+                                    "ports": [
+                                        {
+                                            "name": "postgresql",
+                                            "containerPort": 5432,
                                         }
-                                    },
-                                },
-                                {
-                                    "name": "PGDATA",
-                                    "value": "/var/lib/postgresql/data/pgdata",
-                                },
-                            ],
-                            "volumeMounts": [
-                                {
-                                    "name": "data",
-                                    "mountPath": "/var/lib/postgresql/data",
-                                },
-                                {
-                                    "name": "bootstrap",
-                                    "mountPath": bootstrap_mount_path,
-                                    "readOnly": True,
-                                },
-                            ],
-                        }
+                                    ],
+                                    "env": [
+                                        {
+                                            "name": "POSTGRES_DB",
+                                            "value": database_name,
+                                        },
+                                        {
+                                            "name": "POSTGRES_USER",
+                                            "value": database_username,
+                                        },
+                                        {
+                                            "name": "POSTGRES_PASSWORD",
+                                            "valueFrom": {
+                                                "secretKeyRef": {
+                                                    "name": name,
+                                                    "key": "database-password",
+                                                }
+                                            },
+                                        },
+                                        {
+                                            "name": "PGDATA",
+                                            "value": "/var/lib/postgresql/data/pgdata",
+                                        },
+                                    ],
+                                    "volumeMounts": [
+                                        {
+                                            "name": "data",
+                                            "mountPath": "/var/lib/postgresql/data",
+                                        },
+                                        {
+                                            "name": "bootstrap",
+                                            "mountPath": bootstrap_mount_path,
+                                            "readOnly": True,
+                                        },
+                                    ],
+                                }
+                            ]
+                            if embedded_postgres
+                            else []
+                        ),
                     ]
                 },
             },
             "volumeClaimTemplates": [
-                _volume_claim_template(spec, labels),
+                *([_volume_claim_template(spec, labels)] if embedded_postgres else []),
                 _named_volume_claim_template(
                     name="bootstrap",
                     storage_size="64Mi",
                     labels=labels,
-                    storage_class_name=spec.values.get("storageClassName"),
+                    storage_class_name=_optional_string_value(
+                        spec.values,
+                        "storageClassName",
+                    ),
                 ),
             ],
         },
@@ -1149,7 +1238,7 @@ def _volume_claim_template(
     labels: Mapping[str, str],
 ) -> dict[str, object]:
     storage_size = _string_value(spec.values, "storageSize", "1Gi")
-    storage_class_name = spec.values.get("storageClassName")
+    storage_class_name = _optional_string_value(spec.values, "storageClassName")
     return _named_volume_claim_template(
         name="data",
         storage_size=storage_size,
