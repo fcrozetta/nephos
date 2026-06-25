@@ -292,7 +292,11 @@ def default_provider_deployer_factory(
             "reference-web": PulumiKubernetesProvider(
                 config=kubernetes_config,
                 workload="reference-app",
-            )
+            ),
+            "todo-list-demo": PulumiKubernetesProvider(
+                config=kubernetes_config,
+                workload="reference-app",
+            ),
         },
     )
     service_provider = RuntimeProviderRouter(
