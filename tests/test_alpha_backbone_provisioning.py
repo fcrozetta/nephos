@@ -414,7 +414,9 @@ def test_kubernetes_zitadel_client_uses_internal_forward_for_localhost_host(
     assert runner.oidc_specs[0].insecure is True
 
 
-def test_bootstrap_machine_key_is_read_from_zitadel_container(monkeypatch) -> None:
+def test_bootstrap_machine_key_uses_bootstrap_reader_container(
+    monkeypatch,
+) -> None:
     import importlib
 
     kubernetes_stream = importlib.import_module("kubernetes.stream")
@@ -464,7 +466,7 @@ def test_bootstrap_machine_key_is_read_from_zitadel_container(monkeypatch) -> No
     assert key_json == '{"key": "bootstrap"}'
     assert captured["pod_name"] == "svc-zitadel-zitadel-0"
     assert captured["namespace"] == "svc-zitadel"
-    assert captured["container"] == "zitadel"
+    assert captured["container"] == "bootstrap-reader"
     assert captured["command"] == [
         "sh",
         "-lc",

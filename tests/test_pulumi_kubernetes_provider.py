@@ -364,6 +364,9 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     stateful_pod_spec = stateful_set["spec"]["template"]["spec"]
     containers = stateful_pod_spec["containers"]
     container = next(item for item in containers if item["name"] == "zitadel")
+    bootstrap_reader = next(
+        item for item in containers if item["name"] == "bootstrap-reader"
+    )
     postgres = next(item for item in containers if item["name"] == "postgres")
     data_pvc = next(
         item
@@ -404,6 +407,19 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     ]["value"] == "2037-01-01T00:00:00Z"
     assert container["volumeMounts"] == [
         {"name": "bootstrap", "mountPath": "/var/lib/zitadel-bootstrap"}
+    ]
+    assert bootstrap_reader["image"] == "busybox:1.36.1"
+    assert bootstrap_reader["command"] == [
+        "sh",
+        "-c",
+        "while true; do sleep 3600; done",
+    ]
+    assert bootstrap_reader["volumeMounts"] == [
+        {
+            "name": "bootstrap",
+            "mountPath": "/var/lib/zitadel-bootstrap",
+            "readOnly": True,
+        }
     ]
     assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == "127.0.0.1"
     assert env["ZITADEL_DATABASE_POSTGRES_DATABASE"]["value"] == "zitadel"
@@ -506,13 +522,24 @@ def test_zitadel_service_can_use_external_postgres() -> None:
     stateful_set = k8s.stateful_set.calls[0]
     containers = stateful_set["spec"]["template"]["spec"]["containers"]
     container = next(item for item in containers if item["name"] == "zitadel")
+    bootstrap_reader = next(
+        item for item in containers if item["name"] == "bootstrap-reader"
+    )
     env = {item["name"]: item for item in container["env"]}
-    assert {item["name"] for item in containers} == {"zitadel"}
+    assert {item["name"] for item in containers} == {"zitadel", "bootstrap-reader"}
     volume_claim_names = [
         item["metadata"]["name"]
         for item in stateful_set["spec"]["volumeClaimTemplates"]
     ]
     assert volume_claim_names == ["bootstrap"]
+    assert bootstrap_reader["image"] == "busybox:1.36.1"
+    assert bootstrap_reader["volumeMounts"] == [
+        {
+            "name": "bootstrap",
+            "mountPath": "/var/lib/zitadel-bootstrap",
+            "readOnly": True,
+        }
+    ]
     assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == (
         "svc-postgres-postgresql.svc-postgres.svc.cluster.local"
     )

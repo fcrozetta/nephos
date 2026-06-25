@@ -563,6 +563,11 @@ def _zitadel_service(
     ingress_enabled = _bool_value(spec.values, "ingressEnabled", False)
     ingress_class_name = _optional_string_value(spec.values, "ingressClassName")
     bootstrap_mount_path = bootstrap_machine_key_path.rsplit("/", 1)[0]
+    bootstrap_reader_image = _string_value(
+        spec.values,
+        "bootstrapReaderImage",
+        "busybox:1.36.1",
+    )
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -831,6 +836,22 @@ def _zitadel_service(
                                 {
                                     "name": "bootstrap",
                                     "mountPath": bootstrap_mount_path,
+                                }
+                            ],
+                        },
+                        {
+                            "name": "bootstrap-reader",
+                            "image": bootstrap_reader_image,
+                            "command": [
+                                "sh",
+                                "-c",
+                                "while true; do sleep 3600; done",
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": "bootstrap",
+                                    "mountPath": bootstrap_mount_path,
+                                    "readOnly": True,
                                 }
                             ],
                         },

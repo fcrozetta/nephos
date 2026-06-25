@@ -492,7 +492,7 @@ def _bootstrap_machine_key_json(
         pod_name,
         namespace,
         command=["sh", "-lc", f"cat {shlex_quote(key_path)}"],
-        container="zitadel",
+        container="bootstrap-reader",
         stderr=True,
         stdin=False,
         stdout=True,
