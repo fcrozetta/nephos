@@ -414,6 +414,126 @@ def test_kubernetes_zitadel_client_uses_internal_forward_for_localhost_host(
     assert runner.oidc_specs[0].insecure is True
 
 
+def test_bootstrap_machine_key_is_read_from_zitadel_container(monkeypatch) -> None:
+    import importlib
+
+    kubernetes_stream = importlib.import_module("kubernetes.stream")
+
+    captured = {}
+
+    class FakeMetadata:
+        labels = {
+            "app.kubernetes.io/managed-by": "nephos",
+            "nephos.pro/service-instance": "zitadel",
+        }
+
+    class FakeNamespace:
+        metadata = FakeMetadata()
+
+    class FakeCoreV1Api:
+        def read_namespace(self, name: str):
+            assert name == "svc-zitadel"
+            return FakeNamespace()
+
+        def connect_get_namespaced_pod_exec(self):
+            raise AssertionError("stream.stream should wrap this method")
+
+    def fake_stream(method, pod_name, namespace, **kwargs):
+        captured.update(
+            {
+                "method": method,
+                "pod_name": pod_name,
+                "namespace": namespace,
+                **kwargs,
+            }
+        )
+        return '{"key":"bootstrap"}'
+
+    monkeypatch.setattr(kubernetes_stream, "stream", fake_stream)
+
+    key_json = zitadel_module._bootstrap_machine_key_json(
+        FakeCoreV1Api(),
+        context=_context(
+            service_slug="zitadel",
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+        ),
+    )
+
+    assert key_json == '{"key": "bootstrap"}'
+    assert captured["pod_name"] == "svc-zitadel-zitadel-0"
+    assert captured["namespace"] == "svc-zitadel"
+    assert captured["container"] == "zitadel"
+    assert captured["command"] == [
+        "sh",
+        "-lc",
+        "cat /var/lib/zitadel-bootstrap/nephos-provisioner-key.json",
+    ]
+
+
+def test_kubectl_port_forward_is_terminated_when_readiness_fails(monkeypatch) -> None:
+    class FakeProcess:
+        stdout = None
+
+        def __init__(self) -> None:
+            self.terminated = False
+            self.killed = False
+            self.waits = []
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+        def wait(self, timeout=None) -> int:
+            self.waits.append(timeout)
+            return 0
+
+        def kill(self) -> None:
+            self.killed = True
+
+    process = FakeProcess()
+
+    monkeypatch.setattr(
+        zitadel_module.shutil,
+        "which",
+        lambda command: "/usr/bin/kubectl",
+    )
+    monkeypatch.setattr(zitadel_module, "_free_local_port", lambda host: 19000)
+    monkeypatch.setattr(
+        zitadel_module.subprocess,
+        "Popen",
+        lambda *args, **kwargs: process,
+    )
+
+    def fail_ready(self) -> None:
+        raise RuntimeBlockedError(
+            reason="binding_provisioner_unavailable",
+            message="Timed out waiting for Zitadel internal port-forward.",
+        )
+
+    monkeypatch.setattr(
+        zitadel_module._KubectlPortForward,
+        "_wait_ready",
+        fail_ready,
+    )
+    forward = zitadel_module._KubectlPortForward(
+        namespace="svc-zitadel",
+        service_name="svc-zitadel-zitadel",
+        remote_port=8080,
+        host="127.0.0.1",
+        kubeconfig=None,
+        kube_context=None,
+    )
+
+    with pytest.raises(RuntimeBlockedError, match="port-forward"):
+        forward.__enter__()
+
+    assert process.terminated is True
+    assert process.killed is False
+    assert process.waits == [5]
+    assert forward._process is None
+
+
 def test_kubernetes_zitadel_client_rejects_invalid_provisioning_transport(
     tmp_path,
     monkeypatch,

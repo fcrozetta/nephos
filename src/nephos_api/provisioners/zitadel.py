@@ -492,7 +492,7 @@ def _bootstrap_machine_key_json(
         pod_name,
         namespace,
         command=["sh", "-lc", f"cat {shlex_quote(key_path)}"],
-        container="postgres",
+        container="zitadel",
         stderr=True,
         stdin=False,
         stdout=True,
@@ -712,18 +712,24 @@ class _KubectlPortForward:
             stderr=subprocess.STDOUT,
             text=True,
         )
-        self._wait_ready()
+        try:
+            self._wait_ready()
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return _ForwardEndpoint(host=self._host, port=self._local_port)
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         if self._process is None:
             return
-        self._process.terminate()
+        process = self._process
+        self._process = None
+        process.terminate()
         try:
-            self._process.wait(timeout=5)
+            process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            self._process.kill()
-            self._process.wait(timeout=5)
+            process.kill()
+            process.wait(timeout=5)
 
     def _wait_ready(self) -> None:
         assert self._process is not None
