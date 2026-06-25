@@ -26,7 +26,7 @@ Goal:
 
 Registry target:
 
-- `nephos/core-registry` (`/Users/fcrozetta/projects/core-registry`) owns these first-party platform Service catalog entries.
+- `nephos/core-registry` owns these first-party platform Service catalog entries.
 - `nephos/mythos-registry` is for Mythos apps/services and should not receive core database/auth entries.
 - `nephos/community-registry` is for community catalog entries and should not receive first-party PRD backbone entries.
 
@@ -48,7 +48,7 @@ Validation commands:
 
 - `uv run pytest tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
 - `uv run ruff check src/nephos_api/dev_backbone.py src/nephos_api/providers/kubernetes.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py`
-- `(cd /Users/fcrozetta/projects/core-registry && NEPHOS_SRC=/Users/fcrozetta/projects/nephos/src python3 scripts/validate_catalog.py)`
+- `(cd <core-registry> && NEPHOS_SRC=<nephos-src> python3 scripts/validate_catalog.py)`
 - `uv lock --check`
 - `uv run ruff check .`
 - `uv run pytest -q`
