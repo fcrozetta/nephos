@@ -21,6 +21,7 @@ from nephos_api.catalog import (
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
 from nephos_api.kubernetes_runtime import ResourceType, namespace_name
+from nephos_api.manifest_config import effective_manifest_config
 from nephos_api.repository import DesiredStateRepository
 
 router = APIRouter(tags=["resources"])
@@ -77,7 +78,9 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
         request,
         kind="Service",
     )
-    _validate_service_config(_load_service_manifest(source_path), payload.config)
+    manifest = _load_service_manifest(source_path)
+    _validate_service_config(manifest, payload.config)
+    effective_config = effective_manifest_config(manifest, payload.config)
     repo = _repo(request)
 
     try:
@@ -89,7 +92,7 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
                 catalog_source_id=catalog_entry["source"],
                 catalog_source_path=str(source_path),
                 manifest_digest=catalog_entry["manifestDigest"],
-                config=payload.config,
+                config=effective_config,
             )
             reconciliation = tx.create_reconciliation_request(
                 target_type="service_instance",
@@ -186,7 +189,9 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
         request,
         kind="App",
     )
-    _validate_app_config(_load_app_manifest(source_path), payload.config)
+    manifest = _load_app_manifest(source_path)
+    _validate_app_config(manifest, payload.config)
+    effective_config = effective_manifest_config(manifest, payload.config)
     providers = _resolve_binding_providers(
         request,
         catalog_entry,
@@ -203,7 +208,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
                 catalog_source_id=catalog_entry["source"],
                 catalog_source_path=str(source_path),
                 manifest_digest=catalog_entry["manifestDigest"],
-                config=payload.config,
+                config=effective_config,
             )
             for requirement in catalog_entry["requires"]:
                 service_row = providers[requirement["alias"]]
@@ -662,7 +667,7 @@ def _matching_provider_rows(
         )
         if any(
             provided["capability"] == capability
-            and (protocol is None or provided["protocol"] == protocol)
+            and provided["protocol"] == protocol
             for provided in service_catalog["provides"]
         ):
             eligible.append(service_row)
@@ -690,7 +695,11 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
                 "bindingId": dependent["binding_id"],
                 "bindingAlias": dependent["binding_alias"],
                 "capability": dependent["capability"],
-                "protocol": dependent["protocol"],
+                **(
+                    {"protocol": dependent["protocol"]}
+                    if dependent["protocol"] is not None
+                    else {}
+                ),
                 "lifecycle": dependent["app_lifecycle"],
                 "status": compact_status_snapshot(
                     repo,
@@ -951,6 +960,7 @@ def _dependency_blocked(dependents: list[dict[str, object]]) -> NephosError:
                     "bindingId": dependent["binding_id"],
                     "bindingAlias": dependent["binding_alias"],
                     "capability": dependent["capability"],
+                    "protocol": dependent["protocol"],
                 }
                 for dependent in dependents
             ],

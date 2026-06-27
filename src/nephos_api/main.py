@@ -281,6 +281,7 @@ def default_provider_deployer_factory(
     from kubernetes import client
 
     from nephos_api.kubernetes_runtime import KubernetesSecretBindingValueSource
+    from nephos_api.provisioning import PostgresAppScopedProvisioner
 
     load_kubernetes_config(settings)
     core_v1_api = client.CoreV1Api()
@@ -290,10 +291,6 @@ def default_provider_deployer_factory(
         helm_provider=PulumiHelmProvider(config=pulumi_config),
         provider_runtimes={
             "reference-web": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="reference-app",
-            ),
-            "todo-list-demo": PulumiKubernetesProvider(
                 config=kubernetes_config,
                 workload="reference-app",
             ),
@@ -310,14 +307,6 @@ def default_provider_deployer_factory(
                 config=kubernetes_config,
                 workload="zitadel-service",
             ),
-            "seaweedfs": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="seaweedfs-service",
-            ),
-            "arcadedb": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="arcadedb-service",
-            ),
             "cloudflared": PulumiKubernetesProvider(
                 config=kubernetes_config,
                 workload="cloudflared-service",
@@ -329,6 +318,9 @@ def default_provider_deployer_factory(
         app_provider=app_provider,
         service_provider=service_provider,
         binding_value_source=KubernetesSecretBindingValueSource(core_v1_api),
+        service_dependency_provisioner=PostgresAppScopedProvisioner(
+            core_v1_api=core_v1_api
+        ),
     )
 
 
@@ -369,12 +361,10 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
     from kubernetes import client
 
     from nephos_api.provisioning import (
-        ArcadeDBAppScopedProvisioner,
         CompositeBindingProvisioner,
         KubernetesPulumiZitadelProvisioningClient,
         KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
-        SeaweedFSS3Provisioner,
         ZitadelAppScopedProvisioner,
     )
 
@@ -394,8 +384,6 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
         [
             PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
             ZitadelAppScopedProvisioner(client=zitadel_client),
-            SeaweedFSS3Provisioner(),
-            ArcadeDBAppScopedProvisioner(),
         ]
     )
 

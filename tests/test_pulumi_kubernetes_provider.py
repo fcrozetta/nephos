@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any, cast
 
 from nephos_api.providers import ProviderContext
 from nephos_api.providers.kubernetes import (
@@ -151,6 +152,7 @@ def test_pulumi_kubernetes_program_blocks_unknown_workload() -> None:
         raise AssertionError("expected unknown workload to block")
 
 
+
 def test_postgres_service_uses_persistent_volume_claim_template() -> None:
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
@@ -163,11 +165,13 @@ def test_postgres_service_uses_persistent_volume_claim_template() -> None:
         runtime_name="svc-postgres",
         namespace="svc-postgres",
         workload="postgres-service",
-        values={},
+        values={"adminPassword": "admin-secret"},
     )
 
     _postgres_service(spec, k8s=k8s, opts=None)
 
+    service = cast(dict[str, Any], k8s.service.calls[0])
+    assert service["metadata"]["annotations"] == {"pulumi.com/skipAwait": "true"}
     stateful_set_spec = k8s.stateful_set.calls[0]["spec"]
     pod_spec = stateful_set_spec["template"]["spec"]
     assert "volumes" not in pod_spec
@@ -214,22 +218,27 @@ def test_postgres_service_can_bootstrap_zitadel_database() -> None:
     _postgres_service(spec, k8s=k8s, opts=None)
 
     secret = k8s.secret.calls[0]
-    config_map = k8s.config_map.calls[0]
     stateful_set = k8s.stateful_set.calls[0]
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     pod_spec = stateful_set["spec"]["template"]["spec"]
-    assert secret["string_data"] == {
-        "postgres-password": "admin-secret",
-        "zitadel-password": "zitadel-secret",
-    }
-    assert "CREATE ROLE \"zitadel\"" in config_map["data"]["010-nephos-zitadel.sql"]
-    assert "CREATE DATABASE \"zitadel\" OWNER \"zitadel\"" in config_map["data"][
-        "010-nephos-zitadel.sql"
-    ]
+    init_sql = secret["string_data"]["010-nephos-zitadel.sql"]
+    assert secret["string_data"]["postgres-password"] == "admin-secret"
+    assert secret["string_data"]["zitadel-password"] == "zitadel-secret"
+    assert "CREATE ROLE \"zitadel\"" in init_sql
+    assert "CREATE DATABASE \"zitadel\" OWNER \"zitadel\"" in init_sql
+    assert k8s.config_map.calls == []
     assert container["image"] == "postgres:16-alpine"
     assert {
         "name": "initdb",
-        "configMap": {"name": "svc-postgres-postgresql-initdb"},
+        "secret": {
+            "secretName": "svc-postgres-postgresql",
+            "items": [
+                {
+                    "key": "010-nephos-zitadel.sql",
+                    "path": "010-nephos-zitadel.sql",
+                }
+            ],
+        },
     } in pod_spec["volumes"]
     assert {
         "name": "initdb",
@@ -341,7 +350,12 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             "adminUsername": "root@zitadel.localhost",
             "adminPassword": "local-secret",
             "masterKey": "0123456789abcdef0123456789abcdef",
+            "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
+            "databasePort": 5432,
+            "databaseName": "zitadel",
+            "databaseUsername": "zitadel",
             "databasePassword": "db-secret",
+            "databaseSslMode": "disable",
             "externalHost": "login.nephos.localhost",
             "externalPort": 443,
             "externalSecure": True,
@@ -366,12 +380,6 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     container = next(item for item in containers if item["name"] == "zitadel")
     bootstrap_reader = next(
         item for item in containers if item["name"] == "bootstrap-reader"
-    )
-    postgres = next(item for item in containers if item["name"] == "postgres")
-    data_pvc = next(
-        item
-        for item in stateful_set["spec"]["volumeClaimTemplates"]
-        if item["metadata"]["name"] == "data"
     )
     bootstrap_pvc = next(
         item
@@ -421,7 +429,9 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             "readOnly": True,
         }
     ]
-    assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == "127.0.0.1"
+    assert env["ZITADEL_DATABASE_POSTGRES_HOST"]["value"] == (
+        "svc-postgres-postgresql.svc-postgres.svc.cluster.local"
+    )
     assert env["ZITADEL_DATABASE_POSTGRES_DATABASE"]["value"] == "zitadel"
     assert env["ZITADEL_DATABASE_POSTGRES_USER_USERNAME"]["value"] == "zitadel"
     assert env["ZITADEL_DEFAULTINSTANCE_ORG_HUMAN_USERNAME"]["valueFrom"] == {
@@ -443,22 +453,7 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     assert env["ZITADEL_MASTERKEY"]["valueFrom"] == {
         "secretKeyRef": {"name": "svc-zitadel-zitadel", "key": "master-key"}
     }
-    assert postgres["image"] == "postgres:16-alpine"
-    assert {
-        "name": "POSTGRES_PASSWORD",
-        "valueFrom": {
-            "secretKeyRef": {
-                "name": "svc-zitadel-zitadel",
-                "key": "database-password",
-            }
-        },
-    } in postgres["env"]
-    assert {
-        "name": "bootstrap",
-        "mountPath": "/var/lib/zitadel-bootstrap",
-        "readOnly": True,
-    } in postgres["volumeMounts"]
-    assert data_pvc["spec"]["resources"]["requests"]["storage"] == "4Gi"
+    assert [item["name"] for item in containers] == ["zitadel", "bootstrap-reader"]
     assert bootstrap_pvc["spec"]["resources"]["requests"]["storage"] == "64Mi"
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 8080, "targetPort": "http"}
@@ -505,6 +500,9 @@ def test_zitadel_service_can_use_external_postgres() -> None:
         namespace="svc-zitadel",
         workload="zitadel-service",
         values={
+            "adminPassword": "local-secret",
+            "masterKey": "0123456789abcdef0123456789abcdef",
+            "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
             "embeddedPostgres": False,
             "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
             "databasePort": 5432,
@@ -564,7 +562,12 @@ def test_zitadel_service_omits_ingress_by_default() -> None:
         runtime_name="svc-zitadel",
         namespace="svc-zitadel",
         workload="zitadel-service",
-        values={},
+        values={
+            "adminPassword": "local-secret",
+            "masterKey": "0123456789abcdef0123456789abcdef",
+            "databasePassword": "db-secret",
+            "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
+        },
     )
 
     _zitadel_service(spec, k8s=k8s, opts=None)

@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
 import uvicorn
 from typer.testing import CliRunner
 
@@ -8,6 +9,17 @@ from nephos_api.cli import app
 from nephos_api.dev_reference import ReferenceSmokeResult
 
 _MIGRATION_ROWS = [("0000_initial",), ("0001_add_binding_protocol",)]
+
+
+@pytest.fixture(autouse=True)
+def _registry_sync_calls(monkeypatch):
+    calls = []
+
+    def fake_sync(settings) -> None:
+        calls.append(settings)
+
+    monkeypatch.setattr("nephos_api.cli.ensure_managed_catalog_registries", fake_sync)
+    return calls
 
 
 def test_cli_db_migrate_creates_database(tmp_path: Path) -> None:
@@ -29,6 +41,7 @@ def test_cli_db_migrate_creates_database(tmp_path: Path) -> None:
 
 def test_cli_init_applies_migrations_and_creates_internal_domain(
     tmp_path: Path,
+    _registry_sync_calls,
 ) -> None:
     db_path = tmp_path / "state" / "nephos.db"
     runner = CliRunner()
@@ -56,6 +69,8 @@ def test_cli_init_applies_migrations_and_creates_internal_domain(
     assert rows == _MIGRATION_ROWS
     assert domains == [("internal", "nephos.local", 1)]
     assert reconciliation_count == 0
+    assert len(_registry_sync_calls) == 1
+    assert _registry_sync_calls[0].managed_catalog_registries
 
 
 def test_cli_init_accepts_custom_internal_domain(tmp_path: Path) -> None:
@@ -176,7 +191,11 @@ def test_cli_db_reset_force_recreates_database(tmp_path: Path) -> None:
     assert rows == _MIGRATION_ROWS
 
 
-def test_cli_serve_starts_worker_enabled_app(monkeypatch, tmp_path: Path) -> None:
+def test_cli_serve_starts_worker_enabled_app(
+    monkeypatch,
+    tmp_path: Path,
+    _registry_sync_calls,
+) -> None:
     db_path = tmp_path / "state" / "nephos.db"
     runner = CliRunner()
     captured = {}
@@ -200,6 +219,8 @@ def test_cli_serve_starts_worker_enabled_app(monkeypatch, tmp_path: Path) -> Non
     assert captured["target"].state.reconciler_enabled is True
     assert captured["target"].state.deployer_enabled is True
     assert captured["target"].state.provisioner_enabled is True
+    assert len(_registry_sync_calls) == 1
+    assert _registry_sync_calls[0].managed_catalog_registries
 
 
 def test_cli_serve_applies_migrations_before_starting_app(

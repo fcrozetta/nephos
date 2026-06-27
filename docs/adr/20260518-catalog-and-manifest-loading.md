@@ -18,18 +18,19 @@ The loading boundary must avoid turning arbitrary YAML paths into the primary pr
 
 API 0.0.1 supports:
 
-- one repo-shipped catalog root
-- optional configured local filesystem catalog roots
+- one built-in managed first-party registry dependency: `core-registry`
+- optional local catalog root overrides for development experiments
 
-The repo-shipped catalog root is:
+Nephos clones and manages the built-in core registry checkout at:
 
 ```text
-catalog/
+.nephos/registries/core-registry
 ```
 
-Custom catalog roots are backend local configuration for API 0.0.1.
+Custom catalog roots are backend local configuration for API 0.0.1 and replace
+the managed core registry dependency set when configured.
 
-Additional local catalog roots are configured with:
+Catalog root overrides are configured with:
 
 ```text
 NEPHOS_API_CATALOG_ROOTS
@@ -39,8 +40,8 @@ NEPHOS_API_CATALOG_ROOTS
 
 Catalog source ids:
 
-- repo-shipped catalog root: `default`
-- configured local roots: `local-1`, `local-2`, `local-3`, in configured order
+- managed core registry or first override root: `default`
+- additional override roots: `local-1`, `local-2`, `local-3`, in configured order
 
 Source ids are stable only for the current backend configuration and root order.
 
@@ -132,13 +133,14 @@ Installed records store version if present and always store the manifest digest.
 
 ## Considered Options
 
-### Repo-shipped plus configured local roots
+### Managed core registry plus override roots
 
 - Good, because it supports local-first customization without remote catalog complexity.
-- Good, because the repo-shipped catalog can provide a stable reference path.
+- Good, because the built-in core registry gives Nephos a real first-party
+  default without requiring a user-managed checkout.
 - Bad, because custom root management is still backend-local in API 0.0.1.
 
-### Repo-shipped root only
+### Managed core registry only
 
 - Good, because it is simpler.
 - Bad, because it blocks user-created local catalog iteration during early platform shaping.

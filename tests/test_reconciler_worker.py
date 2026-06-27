@@ -1,6 +1,8 @@
+import asyncio
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from catalog_fixtures import write_app, write_service
 from fastapi.testclient import TestClient
@@ -8,6 +10,8 @@ from fastapi.testclient import TestClient
 from nephos_api.config import Settings
 from nephos_api.db import migrate_database
 from nephos_api.main import create_app
+from nephos_api.reconciler import Reconciler
+from nephos_api.reconciler_worker import ReconcilerWorker
 
 
 class FakeRuntime:
@@ -112,6 +116,33 @@ class FakeProvisioner:
 
     def deprovision_binding(self, context):
         self.deprovisioned_contexts.append(context)
+
+
+def test_reconciler_worker_runs_reconciler_off_event_loop(monkeypatch) -> None:
+    calls = []
+
+    class FakeReconciler:
+        def run_once(self) -> int:
+            return 0
+
+    async def fake_to_thread(function):
+        calls.append(function)
+        return function()
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    reconciler = FakeReconciler()
+    worker = ReconcilerWorker(cast(Reconciler, reconciler), interval_seconds=60)
+
+    async def run_worker_once() -> None:
+        task = asyncio.create_task(worker.run())
+        while not calls:
+            await asyncio.sleep(0)
+        await worker.stop()
+        await asyncio.wait_for(task, timeout=1)
+
+    asyncio.run(run_worker_once())
+
+    assert calls == [reconciler.run_once]
 
 
 def test_api_lifespan_worker_reconciles_created_service_request(

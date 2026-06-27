@@ -13,6 +13,7 @@ import yaml
 
 from nephos_api.catalog import AppManifest, RuntimeMapping, ServiceManifest
 from nephos_api.kubernetes_runtime import namespace_name
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -259,7 +260,7 @@ class ManifestHelmDeployer:
         row: dict[str, object],
         manifest: AppManifest | ServiceManifest,
     ) -> dict[str, object]:
-        config = _manifest_config_values(row, manifest)
+        config = manifest_config_values(row, manifest)
         bindings = (
             self._repository.list_bindings_for_app(str(row["id"]))
             if target_type == "app_instance"
@@ -361,25 +362,6 @@ def _chart_from_manifest(manifest: AppManifest | ServiceManifest) -> HelmChartRe
         name=chart.name,
         version=chart.version,
     )
-
-
-def _manifest_config_values(
-    row: dict[str, object],
-    manifest: AppManifest | ServiceManifest,
-) -> dict[str, object]:
-    values: dict[str, object] = {}
-    if isinstance(manifest, AppManifest):
-        values.update(
-            {
-                option.name: option.default
-                for option in manifest.spec.config.options
-                if option.default is not None
-            }
-        )
-    config_json = row.get("config_json")
-    if isinstance(config_json, str):
-        values.update(json.loads(config_json))
-    return values
 
 
 def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:

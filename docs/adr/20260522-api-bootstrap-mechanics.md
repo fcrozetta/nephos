@@ -39,6 +39,8 @@ Do not store backend bootstrap configuration in the Nephos desired-state databas
 Accepted bootstrap environment variables:
 
 - `NEPHOS_API_DB_PATH`
+- `NEPHOS_API_CORE_REGISTRY_URL`
+- `NEPHOS_API_CORE_REGISTRY_PATH`
 - `NEPHOS_API_CATALOG_ROOTS`
 - `NEPHOS_API_KUBECONFIG`
 - `NEPHOS_API_KUBE_CONTEXT`
@@ -114,19 +116,32 @@ Keep SQLite transactions short and explicit.
 
 Do not add app-level write retry logic for API 0.0.1.
 
-Use one repo-shipped catalog root plus optional configured local filesystem roots.
+Use one managed first-party registry as the initial catalog dependency set.
+Nephos clones that registry locally during `init`/`serve` when the checkout is
+missing.
 
-The repo-shipped catalog root is:
+The default managed registry URL is:
 
 ```text
-catalog/
+https://git.fcrozetta.app/nephos/core-registry.git
 ```
 
-Use `NEPHOS_API_CATALOG_ROOTS` as an optional path-list for additional local catalog roots.
+The default managed registry checkout path is:
+
+```text
+.nephos/registries/core-registry
+```
+
+Use `NEPHOS_API_CORE_REGISTRY_URL` and `NEPHOS_API_CORE_REGISTRY_PATH` only as
+backend-local development/test overrides for that managed registry.
+
+Use `NEPHOS_API_CATALOG_ROOTS` as a path-list escape hatch for local catalog
+experiments. When set, it replaces the managed core-registry dependency set.
 
 Parse `NEPHOS_API_CATALOG_ROOTS` with the host platform path-list separator, such as `:` on macOS/Linux.
 
-Configured catalog roots are backend-local configuration for API 0.0.1, not platform desired state.
+Configured catalog roots and managed registry overrides are backend-local
+configuration for API 0.0.1, not platform desired state.
 
 Kubernetes target selection is refined by [Kubernetes Runtime Target and Local Ingress DNS](20260601-kubernetes-runtime-target-and-local-ingress-dns.md).
 
@@ -238,7 +253,9 @@ Migration implementation must apply SQL files in lexical order and record succes
 
 SQLite setup must enable foreign keys, WAL mode, and a 5000 ms busy timeout.
 
-Catalog loading must always include the repo `catalog/` root and may include additional roots from `NEPHOS_API_CATALOG_ROOTS`.
+Catalog loading defaults to the managed core-registry checkout as source
+`default`. `NEPHOS_API_CATALOG_ROOTS` is an escape hatch that replaces that
+managed dependency set when configured.
 
 Catalog source identifier behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 

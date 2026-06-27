@@ -210,6 +210,7 @@ class ServiceSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provides: list[ProvidedCapability] = Field(min_length=1)
+    requires: list[CapabilityRequirement] = Field(default_factory=list)
     bindings: BindingOutputs | None = None
     config: AppConfig = Field(default_factory=AppConfig)
     provisioning: Provisioning
@@ -449,6 +450,33 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
 
 def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None:
     aliases: set[str] = set()
+    requirement_aliases: set[str] = set()
+    for requirement in manifest.spec.requires:
+        _validate_catalog_identifier(
+            path=path,
+            label="capability",
+            value=requirement.capability,
+        )
+        if requirement.protocol is not None:
+            _validate_catalog_identifier(
+                path=path,
+                label="protocol",
+                value=requirement.protocol,
+            )
+        alias = requirement.alias or _default_capability_alias(
+            requirement.capability,
+            requirement.protocol,
+        )
+        _validate_catalog_identifier(
+            path=path,
+            label="required alias",
+            value=alias,
+        )
+        if alias in requirement_aliases:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: duplicate required alias {alias!r}"
+            )
+        requirement_aliases.add(alias)
     for provided in manifest.spec.provides:
         _validate_catalog_identifier(
             path=path,
@@ -640,6 +668,18 @@ def _service_summary(
         "version": manifest.metadata.version,
         "source": source_id,
         "manifestDigest": digest,
+        "requires": [
+            {
+                "capability": requirement.capability,
+                "protocol": requirement.protocol,
+                "alias": requirement.alias or _default_capability_alias(
+                    requirement.capability,
+                    requirement.protocol,
+                ),
+                "provider": requirement.provider,
+            }
+            for requirement in manifest.spec.requires
+        ],
         "provides": [
             {
                 "capability": provided.capability,

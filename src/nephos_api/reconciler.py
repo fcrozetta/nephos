@@ -7,8 +7,9 @@ from typing import Protocol
 
 import yaml
 
-from nephos_api.catalog import AppManifest
+from nephos_api.catalog import AppManifest, ServiceManifest
 from nephos_api.kubernetes_runtime import ResourceType
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
@@ -522,13 +523,13 @@ class Reconciler:
                 reason="service_not_found",
                 message="Service desired state was not found.",
             )
-        config_json = row.get("config_json")
-        if not isinstance(config_json, str):
-            return {}
-        config = json.loads(config_json)
-        if not isinstance(config, dict):
-            return {}
-        return dict(config)
+        source_path = Path(str(row["catalog_source_path"]))
+        if not source_path.exists():
+            return _stored_config(row)
+        manifest = ServiceManifest.model_validate(
+            yaml.safe_load(source_path.read_text())
+        )
+        return manifest_config_values(row, manifest)
 
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
@@ -1003,6 +1004,16 @@ def _optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _stored_config(row: dict[str, object]) -> dict[str, object]:
+    config_json = row.get("config_json")
+    if not isinstance(config_json, str):
+        return {}
+    config = json.loads(config_json)
+    if not isinstance(config, dict):
+        return {}
+    return dict(config)
 
 
 def _binding_output_values(row: dict[str, object]) -> dict[str, str] | None:

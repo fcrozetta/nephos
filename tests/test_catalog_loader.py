@@ -59,6 +59,7 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
             "version": None,
             "source": "default",
             "manifestDigest": services[0]["manifestDigest"],
+            "requires": [],
             "provides": [
                 {
                     "capability": "postgres",

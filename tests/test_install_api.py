@@ -911,6 +911,7 @@ def test_service_stop_with_dependents_requires_force(tmp_path: Path) -> None:
                         "bindingId": binding_id,
                         "bindingAlias": "database",
                         "capability": "postgres",
+                        "protocol": None,
                     }
                 ],
             },

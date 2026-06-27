@@ -7,6 +7,7 @@ import typer
 from nephos_api.config import load_settings
 from nephos_api.db import migrate_database, reset_database
 from nephos_api.domain import InvalidDomainSuffixError
+from nephos_api.registries import RegistrySyncError, ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
 
 app = typer.Typer(no_args_is_help=True)
@@ -50,6 +51,7 @@ def init(
     except InvalidDomainSuffixError as exc:
         typer.echo(f"invalid internal domain: {resolved_internal_domain}", err=True)
         raise typer.Exit(1) from exc
+    _ensure_catalog_registries(settings)
     typer.echo(
         f"Initialized Nephos API state at {settings.db_path} "
         f"with internal domain {configured_domain}"
@@ -89,6 +91,7 @@ def serve(
 
     settings = load_settings()
     migrate_database(db_path=settings.db_path)
+    _ensure_catalog_registries(settings)
     uvicorn.run(
         create_app(
             settings=settings,
@@ -154,6 +157,14 @@ def dev_backbone_smoke(
 
 def main() -> None:
     app()
+
+
+def _ensure_catalog_registries(settings) -> None:
+    try:
+        ensure_managed_catalog_registries(settings)
+    except RegistrySyncError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
 
 
 def _ensure_internal_platform_domain(

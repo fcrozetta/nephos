@@ -19,7 +19,7 @@ class ReconcilerWorker:
     async def run(self) -> None:
         while not self._stop.is_set():
             try:
-                processed = self._reconciler.run_once()
+                processed = await asyncio.to_thread(self._reconciler.run_once)
             except Exception:
                 await self._wait()
                 continue

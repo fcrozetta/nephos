@@ -15,6 +15,7 @@ from nephos_api.providers.pulumi import (
     _pulumi_release_config,
     _pulumi_workspace_env_vars,
 )
+from nephos_api.provisioners.base import BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -41,6 +42,27 @@ class RecordingPulumiRunner:
 
     def destroy(self, spec: PulumiHelmReleaseSpec) -> None:
         self.destroys.append(spec)
+
+
+class RecordingDependencyProvisioner:
+    def __init__(self) -> None:
+        self.contexts: list[BindingProvisioningContext] = []
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str] | None:
+        self.contexts.append(context)
+        return {
+            "host": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
+            "port": "5432",
+            "database": "nephos_zitadel_database",
+            "username": "nephos_zitadel_database",
+            "password": "pg-secret",
+        }
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        self.contexts.append(context)
 
 
 def test_provider_runtime_deployer_dispatches_services_to_service_provider(
@@ -196,6 +218,63 @@ def test_provider_runtime_deployer_maps_service_config_defaults_and_overrides(
         "storageSize": "8Gi",
         "debug": {"enabled": False},
     }
+
+
+def test_provider_runtime_deployer_provisions_service_dependencies(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    app_provider = RecordingProvider()
+    service_provider = RecordingProvider()
+    provisioner = RecordingDependencyProvisioner()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=app_provider,
+        service_provider=service_provider,
+        service_dependency_provisioner=provisioner,
+    )
+    deployer.deploy(target_type="service_instance", slug="zitadel")
+
+    context = service_provider.deployed[0]
+    assert context.values == {
+        "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
+        "databasePort": "5432",
+        "databaseName": "nephos_zitadel_database",
+        "databaseUsername": "nephos_zitadel_database",
+        "databasePassword": "pg-secret",
+    }
+    assert len(provisioner.contexts) == 1
+    provision_context = provisioner.contexts[0]
+    assert provision_context.app_slug == "zitadel"
+    assert provision_context.service_slug == "postgres"
+    assert provision_context.alias == "database"
+    assert provision_context.capability == "sql"
+    assert provision_context.protocol == "postgres"
 
 
 def test_pulumi_helm_provider_maps_context_to_local_stack_operations(
@@ -527,6 +606,67 @@ spec:
             name: debug-enabled
           to:
             helmValue: debug.enabled
+""".strip()
+    )
+    return path
+
+
+def _write_service_with_dependency_runtime_mappings(root: Path) -> Path:
+    path = root / "services" / "zitadel" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: zitadel
+spec:
+  provides:
+    - capability: oidc
+      protocol: oidc
+      as: oidc
+  requires:
+    - capability: sql
+      protocol: postgres
+      as: database
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: zitadel
+    values:
+      mappings:
+        - from:
+            kind: binding
+            name: database
+            field: host
+          to:
+            helmValue: databaseHost
+        - from:
+            kind: binding
+            name: database
+            field: port
+          to:
+            helmValue: databasePort
+        - from:
+            kind: binding
+            name: database
+            field: database
+          to:
+            helmValue: databaseName
+        - from:
+            kind: binding
+            name: database
+            field: username
+          to:
+            helmValue: databaseUsername
+        - from:
+            kind: binding
+            name: database
+            field: password
+          to:
+            helmValue: databasePassword
 """.strip()
     )
     return path

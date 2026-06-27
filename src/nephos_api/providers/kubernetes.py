@@ -206,14 +206,29 @@ def _postgres_service(
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
     image = _string_value(spec.values, "image", "postgres:16-alpine")
-    admin_password = _string_value(
-        spec.values,
-        "adminPassword",
-        "nephos-local-postgres",
-    )
+    admin_password = _required_string_value(spec.values, "adminPassword")
     zitadel_database = _string_value(spec.values, "zitadelDatabase", "zitadel")
     zitadel_username = _string_value(spec.values, "zitadelUsername", "zitadel")
     zitadel_password = _optional_string_value(spec.values, "zitadelPassword")
+    secret_data = {
+        "postgres-password": admin_password,
+        **(
+            {"zitadel-password": zitadel_password}
+            if zitadel_password is not None
+            else {}
+        ),
+        **(
+            {
+                "010-nephos-zitadel.sql": _postgres_zitadel_init_sql(
+                    database=zitadel_database,
+                    username=zitadel_username,
+                    password=zitadel_password,
+                )
+            }
+            if zitadel_password is not None
+            else {}
+        ),
+    }
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -222,39 +237,16 @@ def _postgres_service(
             "labels": labels,
         },
         type="Opaque",
-        string_data={
-            "postgres-password": admin_password,
-            **(
-                {"zitadel-password": zitadel_password}
-                if zitadel_password is not None
-                else {}
-            ),
-        },
+        string_data=secret_data,
         opts=opts,
     )
-    if zitadel_password is not None:
-        k8s.core.v1.ConfigMap(
-            f"{name}-initdb",
-            metadata={
-                "name": f"{name}-initdb",
-                "namespace": spec.namespace,
-                "labels": labels,
-            },
-            data={
-                "010-nephos-zitadel.sql": _postgres_zitadel_init_sql(
-                    database=zitadel_database,
-                    username=zitadel_username,
-                    password=zitadel_password,
-                )
-            },
-            opts=opts,
-        )
     k8s.core.v1.Service(
         name,
         metadata={
             "name": name,
             "namespace": spec.namespace,
             "labels": labels,
+            "annotations": {"pulumi.com/skipAwait": "true"},
         },
         spec={
             "ports": [
@@ -284,7 +276,20 @@ def _postgres_service(
         )
     pod_volumes = []
     if zitadel_password is not None:
-        pod_volumes.append({"name": "initdb", "configMap": {"name": f"{name}-initdb"}})
+        pod_volumes.append(
+            {
+                "name": "initdb",
+                "secret": {
+                    "secretName": name,
+                    "items": [
+                        {
+                            "key": "010-nephos-zitadel.sql",
+                            "path": "010-nephos-zitadel.sql",
+                        }
+                    ],
+                },
+            }
+        )
     k8s.apps.v1.StatefulSet(
         name,
         metadata={
@@ -513,17 +518,9 @@ def _zitadel_service(
         "adminUsername",
         "root@zitadel.nephos.localhost",
     )
-    admin_password = _string_value(
-        spec.values,
-        "adminPassword",
-        "Nephos-local-zitadel-1!",
-    )
+    admin_password = _required_string_value(spec.values, "adminPassword")
     master_key = _zitadel_master_key(spec.values)
-    database_password = _string_value(
-        spec.values,
-        "databasePassword",
-        "nephos-local-zitadel-db",
-    )
+    database_password = _required_string_value(spec.values, "databasePassword")
     database_host = _string_value(spec.values, "databaseHost", "127.0.0.1")
     database_port = _int_value(spec.values, "databasePort", 5432)
     database_name = _string_value(spec.values, "databaseName", "zitadel")
@@ -539,7 +536,7 @@ def _zitadel_service(
         database_password,
     )
     database_ssl_mode = _string_value(spec.values, "databaseSslMode", "disable")
-    embedded_postgres = _bool_value(spec.values, "embeddedPostgres", True)
+    embedded_postgres = _bool_value(spec.values, "embeddedPostgres", False)
     bootstrap_machine_username = _string_value(
         spec.values,
         "bootstrapMachineUsername",
@@ -555,10 +552,9 @@ def _zitadel_service(
         "bootstrapMachineKeyPath",
         "/var/lib/zitadel-bootstrap/nephos-provisioner-key.json",
     )
-    bootstrap_machine_key_expiration = _string_value(
+    bootstrap_machine_key_expiration = _required_string_value(
         spec.values,
         "bootstrapMachineKeyExpiration",
-        "2036-01-01T00:00:00Z",
     )
     ingress_enabled = _bool_value(spec.values, "ingressEnabled", False)
     ingress_class_name = _optional_string_value(spec.values, "ingressClassName")
@@ -894,11 +890,6 @@ def _zitadel_service(
                                             "name": "data",
                                             "mountPath": "/var/lib/postgresql/data",
                                         },
-                                        {
-                                            "name": "bootstrap",
-                                            "mountPath": bootstrap_mount_path,
-                                            "readOnly": True,
-                                        },
                                     ],
                                 }
                             ]
@@ -982,8 +973,8 @@ def _seaweedfs_service(
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
     image = _string_value(spec.values, "image", "chrislusf/seaweedfs:3.85")
-    access_key = _string_value(spec.values, "s3AccessKey", "nephos-local-seaweedfs")
-    secret_key = _string_value(spec.values, "s3SecretKey", "nephos-local-seaweedfs")
+    access_key = _required_string_value(spec.values, "s3AccessKey")
+    secret_key = _required_string_value(spec.values, "s3SecretKey")
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -1061,11 +1052,7 @@ def _arcadedb_service(
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
     image = _string_value(spec.values, "image", "arcadedata/arcadedb:25.5.1")
-    root_password = _string_value(
-        spec.values,
-        "rootPassword",
-        "nephos-local-arcadedb",
-    )
+    root_password = _required_string_value(spec.values, "rootPassword")
     ports = [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},
@@ -1241,11 +1228,7 @@ def _bool_value(
 
 
 def _zitadel_master_key(values: Mapping[str, object]) -> str:
-    master_key = _string_value(
-        values,
-        "masterKey",
-        "0123456789abcdef0123456789abcdef",
-    )
+    master_key = _required_string_value(values, "masterKey")
     if len(master_key) != 32:
         raise RuntimeBlockedError(
             reason="runtime_config_invalid",

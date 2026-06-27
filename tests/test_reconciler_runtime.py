@@ -1740,6 +1740,7 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
 ) -> None:
     catalog_root = tmp_path / "catalog"
     manifest_path = write_app(catalog_root)
+    service_manifest_path = _write_zitadel_service_with_config_defaults(catalog_root)
     repo = _repo(tmp_path)
     runtime = FakeRuntime()
     values = {
@@ -1759,9 +1760,9 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
             slug="zitadel",
             catalog_name="zitadel",
             catalog_source_id="default",
-            catalog_source_path="catalog/services/zitadel/service.yaml",
+            catalog_source_path=str(service_manifest_path),
             manifest_digest="sha256:zitadel",
-            config={"external-host": "login.example.test"},
+            config={"external-port": 8443},
         )
         app = tx.create_app_instance(
             slug="paperless",
@@ -1802,7 +1803,11 @@ def test_binding_reconcile_persists_protocol_in_redacted_summary(
             alias="auth",
             capability="oidc",
             protocol="oidc",
-            service_config={"external-host": "login.example.test"},
+            service_config={
+                "external-host": "login.default.test",
+                "external-port": 8443,
+                "external-secure": False,
+            },
             app_routes=(
                 {"name": "web", "visibility": "local", "target": {"port": "http"}},
             ),
@@ -2255,6 +2260,42 @@ spec:
       version: "1.0.0"
     values:
       mappings: []
+""".strip()
+    )
+    return path
+
+
+def _write_zitadel_service_with_config_defaults(root: Path) -> Path:
+    path = root / "services" / "zitadel" / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: zitadel
+spec:
+  provides:
+    - capability: oidc
+      protocol: oidc
+      as: oidc
+  config:
+    options:
+      - name: external-host
+        type: string
+        default: login.default.test
+      - name: external-port
+        type: integer
+        default: 443
+      - name: external-secure
+        type: boolean
+        default: false
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: zitadel
 """.strip()
     )
     return path

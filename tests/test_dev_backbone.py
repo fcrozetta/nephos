@@ -24,28 +24,12 @@ def test_alpha_backbone_catalog_generator_writes_protocol_aware_entries(
 
     loader = CatalogLoader((catalog_root,))
     services = {service["name"]: service for service in loader.list_services()}
-    assert set(services) == {
-        "arcadedb",
-        "cloudflared",
-        "postgres",
-        "seaweedfs",
-        "zitadel",
-    }
+    assert set(services) == {"postgres", "zitadel"}
     assert _provided_pairs(services["postgres"]) == {("sql", "postgres")}
     assert _provided_pairs(services["zitadel"]) == {
         ("oidc", "oidc"),
         ("service-account", "jwt"),
     }
-    assert _provided_pairs(services["seaweedfs"]) == {("object-storage", "s3")}
-    assert _provided_pairs(services["cloudflared"]) == {
-        ("external-routing", "cloudflare-tunnel")
-    }
-    assert _provided_pairs(services["arcadedb"]) == {
-        ("sql", "arcadedb"),
-        ("opencypher", "bolt"),
-        ("opencypher", "n4j"),
-    }
-
     app_entry = loader.get_app("backbone-check")
     assert {
         (requirement["alias"], requirement["capability"], requirement["protocol"])
@@ -53,8 +37,6 @@ def test_alpha_backbone_catalog_generator_writes_protocol_aware_entries(
     } == {
         ("postgres", "sql", "postgres"),
         ("identity", "oidc", "oidc"),
-        ("object-storage", "object-storage", "s3"),
-        ("graph", "opencypher", "bolt"),
     }
 
 
@@ -69,21 +51,19 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         service_name: yaml.safe_load(
             (catalog_root / "services" / service_name / "service.yaml").read_text()
         )
-        for service_name in (
-            "postgres",
-            "zitadel",
-            "seaweedfs",
-            "arcadedb",
-            "cloudflared",
-        )
+        for service_name in ("postgres", "zitadel")
     }
     assert _config_option_names(manifests["postgres"]) == {
+        "image",
         "storage-size",
         "storage-class-name",
+        "admin-password",
     }
     assert _runtime_mapping_pairs(manifests["postgres"]) == {
+        ("image", "image"),
         ("storage-size", "storageSize"),
         ("storage-class-name", "storageClassName"),
+        ("admin-password", "adminPassword"),
     }
     assert _config_option_names(manifests["zitadel"]) == {
         "image",
@@ -95,7 +75,7 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         "admin-username",
         "admin-password",
         "master-key",
-        "database-password",
+        "database-ssl-mode",
         "bootstrap-machine-username",
         "bootstrap-machine-name",
         "bootstrap-machine-key-path",
@@ -113,7 +93,7 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         ("admin-username", "adminUsername"),
         ("admin-password", "adminPassword"),
         ("master-key", "masterKey"),
-        ("database-password", "databasePassword"),
+        ("database-ssl-mode", "databaseSslMode"),
         ("bootstrap-machine-username", "bootstrapMachineUsername"),
         ("bootstrap-machine-name", "bootstrapMachineName"),
         ("bootstrap-machine-key-path", "bootstrapMachineKeyPath"),
@@ -122,53 +102,16 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
             "bootstrapMachineKeyExpiration",
         ),
         ("storage-size", "storageSize"),
+        ("provisioning-transport", "provisioningTransport"),
+        ("database", "databaseHost"),
+        ("database", "databasePort"),
+        ("database", "databaseName"),
+        ("database", "databaseUsername"),
+        ("database", "databasePassword"),
     }
-    assert _config_option_names(manifests["seaweedfs"]) == {
-        "image",
-        "storage-size",
-        "s3-access-key",
-        "s3-secret-key",
-    }
-    assert _runtime_mapping_pairs(manifests["seaweedfs"]) == {
-        ("image", "image"),
-        ("storage-size", "storageSize"),
-        ("s3-access-key", "s3AccessKey"),
-        ("s3-secret-key", "s3SecretKey"),
-    }
-    assert _config_option_names(manifests["arcadedb"]) == {
-        "image",
-        "storage-size",
-        "root-password",
-        "enable-gremlin",
-        "enable-mongo",
-    }
-    assert _runtime_mapping_pairs(manifests["arcadedb"]) == {
-        ("image", "image"),
-        ("storage-size", "storageSize"),
-        ("root-password", "rootPassword"),
-        ("enable-gremlin", "enableGremlin"),
-        ("enable-mongo", "enableMongo"),
-    }
-    assert _config_option_names(manifests["cloudflared"]) == {
-        "image",
-        "tunnel-name",
-        "credentials-secret-name",
-        "credentials-secret-key",
-        "hostname",
-        "origin-service-url",
-        "origin-host-header",
-    }
-    assert _runtime_mapping_pairs(manifests["cloudflared"]) == {
-        ("image", "image"),
-        ("tunnel-name", "tunnelName"),
-        ("credentials-secret-name", "credentialsSecretName"),
-        ("credentials-secret-key", "credentialsSecretKey"),
-        ("hostname", "hostname"),
-        ("origin-service-url", "originServiceUrl"),
-        ("origin-host-header", "originHostHeader"),
-    }
-    assert manifests["cloudflared"]["spec"].get("bindings") is None
-    assert manifests["cloudflared"]["spec"]["provisioning"] == {"mode": "none"}
+    assert manifests["zitadel"]["spec"]["requires"] == [
+        {"capability": "sql", "protocol": "postgres", "as": "database"}
+    ]
 
 
 def test_backbone_smoke_returns_skip_blocker_without_live_config(

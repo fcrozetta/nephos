@@ -235,6 +235,46 @@ def test_pulumi_zitadel_client_derives_oidc_outputs_from_app_route(
     assert spec.post_logout_redirect_uris == ("http://paperless.nephos.local/",)
 
 
+def test_pulumi_zitadel_client_uses_https_redirects_for_nonlocal_domains(
+    tmp_path,
+) -> None:
+    runner = FakePulumiZitadelRunner()
+    client = PulumiZitadelProvisioningClient(
+        config=PulumiZitadelProvisionerConfig(
+            work_dir=tmp_path / "workspaces",
+            state_dir=tmp_path / "state",
+            issuer_url="https://zitadel.example",
+            domain="127.0.0.1",
+            port=18080,
+            insecure=True,
+            jwt_profile_json='{"key":"bootstrap"}',
+        ),
+        runner=runner,
+    )
+
+    client.ensure_oidc_client(
+        _context(
+            service_slug="zitadel",
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+            app_routes=(
+                {"name": "web", "visibility": "public", "target": {"port": "http"}},
+            ),
+            platform_domains=(
+                {"name": "prod", "domain": "apps.example.test", "default": True},
+            ),
+        )
+    )
+
+    assert runner.oidc_specs[0].redirect_uris == (
+        "https://paperless.apps.example.test/oauth/callback",
+    )
+    assert runner.oidc_specs[0].post_logout_redirect_uris == (
+        "https://paperless.apps.example.test/",
+    )
+
+
 def test_pulumi_zitadel_client_blocks_oidc_without_route_metadata(tmp_path) -> None:
     client = PulumiZitadelProvisioningClient(
         config=PulumiZitadelProvisionerConfig(
@@ -409,7 +449,7 @@ def test_kubernetes_zitadel_client_uses_internal_forward_for_localhost_host(
         "kubeconfig": None,
         "kube_context": "docker-desktop",
     }
-    assert runner.oidc_specs[0].domain == "zitadel-smoke.nephos.localhost"
+    assert runner.oidc_specs[0].domain == "127.0.0.1"
     assert runner.oidc_specs[0].port == 23456
     assert runner.oidc_specs[0].insecure is True
 

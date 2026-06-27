@@ -8,7 +8,9 @@ import yaml
 
 from nephos_api.catalog import AppManifest, RuntimeMapping, ServiceManifest
 from nephos_api.helm_runtime import runtime_name, set_helm_value
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.providers.base import ProviderContext, RuntimeProvider
+from nephos_api.provisioners.base import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -33,11 +35,13 @@ class ProviderRuntimeDeployer:
         app_provider: RuntimeProvider,
         service_provider: RuntimeProvider,
         binding_value_source: BindingValueSource | None = None,
+        service_dependency_provisioner: BindingProvisioner | None = None,
     ) -> None:
         self._repository = repository
         self._app_provider = app_provider
         self._service_provider = service_provider
         self._binding_value_source = binding_value_source
+        self._service_dependency_provisioner = service_dependency_provisioner
 
     def deploy(self, *, target_type: str, slug: str) -> None:
         context = self._context(target_type=target_type, slug=slug)
@@ -94,11 +98,19 @@ class ProviderRuntimeDeployer:
         row: dict[str, object],
         manifest: AppManifest | ServiceManifest,
     ) -> dict[str, object]:
-        config = _manifest_config_values(row, manifest)
+        config = manifest_config_values(row, manifest)
         bindings = (
             self._repository.list_bindings_for_app(str(row["id"]))
             if target_type == "app_instance"
             else []
+        )
+        service_dependency_values = (
+            self._service_dependency_values(slug=slug, manifest=manifest)
+            if (
+                target_type == "service_instance"
+                and isinstance(manifest, ServiceManifest)
+            )
+            else {}
         )
         values: dict[str, object] = {}
         for runtime_mapping in manifest.spec.runtime.values.mappings:
@@ -107,9 +119,105 @@ class ProviderRuntimeDeployer:
                 app_slug=slug,
                 config=config,
                 bindings=bindings,
+                service_dependency_values=service_dependency_values,
             )
             set_helm_value(values, runtime_mapping.to.helmValue, value)
         return values
+
+    def _service_dependency_values(
+        self,
+        *,
+        slug: str,
+        manifest: ServiceManifest,
+    ) -> dict[str, dict[str, str]]:
+        if not manifest.spec.requires:
+            return {}
+        if self._service_dependency_provisioner is None:
+            raise RuntimeBlockedError(
+                reason="service_dependency_provisioner_unavailable",
+                message="Service dependency provisioning is not configured.",
+            )
+        values: dict[str, dict[str, str]] = {}
+        for requirement in manifest.spec.requires:
+            alias = requirement.alias or _default_capability_alias(
+                requirement.capability,
+                requirement.protocol,
+            )
+            provider_row = self._service_dependency_provider(
+                consumer_slug=slug,
+                alias=alias,
+                capability=requirement.capability,
+                protocol=requirement.protocol,
+                provider=requirement.provider,
+            )
+            provisioned = self._service_dependency_provisioner.provision_binding(
+                BindingProvisioningContext(
+                    binding_id=f"service-{slug}-{alias}",
+                    app_slug=slug,
+                    service_slug=str(provider_row["slug"]),
+                    alias=alias,
+                    capability=requirement.capability,
+                    protocol=requirement.protocol,
+                )
+            )
+            if provisioned is None:
+                raise RuntimeBlockedError(
+                    reason="service_dependency_output_unavailable",
+                    message=(
+                        f"Service dependency {alias} did not return binding values."
+                    ),
+                )
+            values[alias] = provisioned
+        return values
+
+    def _service_dependency_provider(
+        self,
+        *,
+        consumer_slug: str,
+        alias: str,
+        capability: str,
+        protocol: str | None,
+        provider: str | None,
+    ) -> dict[str, object]:
+        eligible = []
+        for row in self._repository.list_service_rows():
+            if str(row["slug"]) == consumer_slug:
+                continue
+            if row["delete_requested_at"] is not None or row["lifecycle"] != "running":
+                continue
+            if provider is not None and provider not in {
+                str(row["slug"]),
+                str(row["catalog_name"]),
+            }:
+                continue
+            service_manifest = _manifest_from_path(
+                target_type="service_instance",
+                path=Path(str(row["catalog_source_path"])),
+            )
+            if not isinstance(service_manifest, ServiceManifest):
+                continue
+            if any(
+                provided.capability == capability and provided.protocol == protocol
+                for provided in service_manifest.spec.provides
+            ):
+                eligible.append(row)
+        if len(eligible) == 1:
+            return eligible[0]
+        if not eligible:
+            raise RuntimeBlockedError(
+                reason="service_dependency_provider_unavailable",
+                message=(
+                    f"Service dependency {alias} requires {capability}/{protocol}; "
+                    "install and start a matching Service first."
+                ),
+            )
+        raise RuntimeBlockedError(
+            reason="service_dependency_provider_selection_required",
+            message=(
+                f"Service dependency {alias} has multiple eligible providers; "
+                "set an explicit provider in the Service catalog requirement."
+            ),
+        )
 
     def _runtime_mapping_value(
         self,
@@ -118,6 +226,7 @@ class ProviderRuntimeDeployer:
         app_slug: str,
         config: dict[str, object],
         bindings: list[dict[str, object]],
+        service_dependency_values: dict[str, dict[str, str]],
     ) -> object:
         source = mapping.from_
         if source.kind == "config":
@@ -133,6 +242,14 @@ class ProviderRuntimeDeployer:
                 reason="runtime_mapping_source_missing",
                 message=f"Binding {source.name} field is not specified.",
             )
+        if source.name in service_dependency_values:
+            values = service_dependency_values[source.name]
+            if source.field not in values:
+                raise RuntimeBlockedError(
+                    reason="runtime_mapping_source_missing",
+                    message=f"Binding {source.name}.{source.field} is not available.",
+                )
+            return values[source.field]
         binding = next(
             (item for item in bindings if item["alias"] == source.name),
             None,
@@ -194,23 +311,6 @@ def _provider_name_from_manifest(
     return provider.name
 
 
-def _manifest_config_values(
-    row: dict[str, object],
-    manifest: AppManifest | ServiceManifest,
-) -> dict[str, object]:
-    values: dict[str, object] = {}
-    values.update(
-        {
-            option.name: option.default
-            for option in manifest.spec.config.options
-        }
-    )
-    config_json = row.get("config_json")
-    if isinstance(config_json, str):
-        values.update(json.loads(config_json))
-    return values
-
-
 def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     output_summary_json = binding.get("output_summary_json")
     if not isinstance(output_summary_json, str):
@@ -225,6 +325,12 @@ def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     ):
         return None
     return values
+
+
+def _default_capability_alias(capability: str, protocol: str | None) -> str:
+    if protocol is None:
+        return capability
+    return f"{capability}-{protocol}"
 
 
 def _optional_str(value: object) -> str | None:

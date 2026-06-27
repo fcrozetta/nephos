@@ -56,20 +56,23 @@ flowchart LR
 
 ### 1. Configure local settings
 
+The initial Nephos API config has exactly one preconfigured registry dependency:
+the first-party `core-registry`. Nephos manages that checkout itself under
+`.nephos/registries/core-registry`; you do not clone it by hand.
+
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` if your Kubernetes context is not `docker-desktop`:
+The default development shape is:
 
 ```dotenv
-NEPHOS_API_DB_PATH=/private/tmp/nephos-manual/nephos.db
-NEPHOS_API_KUBE_CONTEXT=docker-desktop
+NEPHOS_API_DB_PATH=.nephos/state/nephos.db
 NEPHOS_API_INTERNAL_DOMAIN=nephos.localhost
-# Optional when your selected cluster has multiple IngressClasses or no default.
-# NEPHOS_API_INGRESS_CLASS=nginx
-PULUMI_CONFIG_PASSPHRASE=local-dev
 ```
+
+Kubernetes and Pulumi settings are optional until you are ready to test runtime
+reconciliation against a disposable local cluster.
 
 For local browser routes without editing `/etc/hosts`, keep:
 
@@ -77,7 +80,8 @@ For local browser routes without editing `/etc/hosts`, keep:
 NEPHOS_API_INTERNAL_DOMAIN=nephos.localhost
 ```
 
-Your selected Kubernetes cluster still needs a reachable ingress controller.
+Your selected Kubernetes cluster still needs a reachable ingress controller once
+you start runtime reconciliation.
 
 ### 2. Initialize local Nephos state
 
@@ -149,9 +153,9 @@ With the server running, common read endpoints are:
 | Platform domains | `GET /platform/config/domains` |
 
 Install requests record desired state and return `202 Accepted`. Reconciliation
-then works toward the requested state. The examples below assume your configured
-catalog roots include `postgres` and `reference-web`; the bundled smoke command
-creates its own temporary reference catalog for the proof flow.
+then works toward the requested state. The examples below use entries from the
+managed `core-registry`; the bundled smoke command creates its own temporary
+reference catalog for the proof flow.
 
 Example Service install request:
 
@@ -164,16 +168,18 @@ curl -sS -X POST http://127.0.0.1:8000/services \
   }'
 ```
 
-Example App install request with an explicit binding provider:
+Example App install request with explicit binding providers after the required
+Services have been installed:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/apps \
   -H 'content-type: application/json' \
   -d '{
-    "catalogRef": {"kind": "App", "name": "reference-web"},
-    "instanceName": "reference-web",
+    "catalogRef": {"kind": "App", "name": "nephos-console"},
+    "instanceName": "nephos-console",
     "bindings": {
-      "postgres": {"serviceInstance": "postgres"}
+      "identity": {"serviceInstance": "zitadel"},
+      "internal-routing": {"serviceInstance": "traefik"}
     }
   }'
 ```
@@ -183,7 +189,9 @@ curl -sS -X POST http://127.0.0.1:8000/apps \
 | Variable | Purpose |
 | --- | --- |
 | `NEPHOS_API_DB_PATH` | SQLite desired-state database path. Defaults to `.nephos/state/nephos.db`. |
-| `NEPHOS_API_CATALOG_ROOTS` | Extra catalog roots, separated by your OS path separator. |
+| `NEPHOS_API_CORE_REGISTRY_URL` | Optional override for the managed first-party core registry URL. Defaults to `https://git.fcrozetta.app/nephos/core-registry.git`. |
+| `NEPHOS_API_CORE_REGISTRY_PATH` | Optional override for the managed first-party core registry checkout path. Defaults to `.nephos/registries/core-registry`. |
+| `NEPHOS_API_CATALOG_ROOTS` | Escape hatch for local catalog experiments, separated by your OS path separator. When set, it replaces the managed core-registry dependency set. |
 | `NEPHOS_API_KUBECONFIG` | Optional kubeconfig path. Uses the default kubeconfig when unset. |
 | `NEPHOS_API_KUBE_CONTEXT` | Kubernetes context Nephos should target. |
 | `NEPHOS_API_INTERNAL_DOMAIN` | Default internal App route suffix. Use `nephos.localhost` for local browser testing. |

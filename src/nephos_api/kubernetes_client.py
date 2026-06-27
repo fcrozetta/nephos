@@ -19,6 +19,8 @@ class KubernetesConfigLoader(Protocol):
         context: str | None = None,
     ) -> None: ...
 
+    def load_incluster_config(self) -> None: ...
+
 
 def load_kubernetes_config(
     settings: Settings,
@@ -32,6 +34,12 @@ def load_kubernetes_config(
             context=settings.kube_context,
         )
     except Exception as exc:
+        if settings.kubeconfig is None and settings.kube_context is None:
+            try:
+                loader.load_incluster_config()
+                return
+            except Exception as incluster_exc:
+                raise KubernetesConfigError(str(incluster_exc)) from incluster_exc
         raise KubernetesConfigError(str(exc)) from exc
 
 

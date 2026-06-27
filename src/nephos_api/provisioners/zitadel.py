@@ -158,7 +158,7 @@ class KubernetesPulumiZitadelProvisioningClient:
                 work_dir=self._config.work_dir,
                 state_dir=self._config.state_dir,
                 issuer_url=_issuer_url(context),
-                domain=endpoint.domain or _provisioning_domain(context),
+                domain=endpoint.domain or endpoint.host,
                 port=endpoint.port,
                 insecure=endpoint.insecure,
                 jwt_profile_json=_bootstrap_machine_key_json(
@@ -773,7 +773,10 @@ def shlex_quote(value: str) -> str:
 
 
 def _is_oidc(context: BindingProvisioningContext) -> bool:
-    return context.capability == "oidc" and context.protocol == "oidc"
+    return (
+        context.capability in {"oidc", "auth", "identity"}
+        and context.protocol == "oidc"
+    )
 
 
 def _is_service_account(context: BindingProvisioningContext) -> bool:
@@ -818,6 +821,7 @@ def _route_base_urls(context: BindingProvisioningContext) -> tuple[str, ...]:
     )
     if default_domain is None:
         return ()
+    scheme = _route_scheme(default_domain)
     urls = []
     for index, route in enumerate(context.app_routes):
         host_prefix = (
@@ -825,8 +829,14 @@ def _route_base_urls(context: BindingProvisioningContext) -> tuple[str, ...]:
             if index == 0
             else f"{route['name']}.{context.app_slug}"
         )
-        urls.append(f"http://{host_prefix}.{default_domain}")
+        urls.append(f"{scheme}://{host_prefix}.{default_domain}")
     return tuple(urls)
+
+
+def _route_scheme(default_domain: str) -> str:
+    if default_domain.endswith((".localhost", ".local")):
+        return "http"
+    return "https"
 
 
 def _stack_name(prefix: str, context: BindingProvisioningContext) -> str:

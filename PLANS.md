@@ -22,7 +22,10 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 Goal:
 
-- Make the minimum local, no-Cloudflare Nephos core-service slice useful when the host machine is reachable over Tailscale: a configurable PostgreSQL Service, a Zitadel Service that can use that PostgreSQL Service instead of an embedded sidecar, and protocol-aware ArcadeDB catalog entries.
+- Make the minimum local Nephos core-service slice start from a clean initial
+  API config: SQLite desired state plus the first-party `core-registry` as the
+  only catalog dependency, then a configurable PostgreSQL Service and a Zitadel
+  Service that depends on PostgreSQL-created database credentials.
 
 Registry target:
 
@@ -34,15 +37,23 @@ Non-goals:
 
 - Do not add Cloudflare Tunnel/DNS/TLS management in this slice.
 - Do not create or modify a full external secret manager or backup controller.
-- Do not make Service-to-Service capability bindings a new public schema yet; use explicit Service config for the minimal local path.
+- Do not add SeaweedFS, ArcadeDB, or demo Apps until SQLite and PostgreSQL are
+  correct.
+- Do not make live smoke the acceptance gate for this batch; defer that until
+  local runtime bring-up exists.
 - Do not make Nephos manage the selected Kubernetes cluster lifecycle.
 
 Proposed steps:
 
-1. Add provider support for configurable PostgreSQL image/password/storage and a minimal first-run Zitadel database/user bootstrap on the PostgreSQL Service.
-2. Add Zitadel provider support for external PostgreSQL config and omit its embedded Postgres sidecar when configured.
-3. Update core registry manifests for protocol-aware capabilities and local Tailscale/no-Cloudflare defaults.
-4. Validate catalog loading, provider workload shape, and standard gates.
+1. Make `.env.example` and bootstrap docs rely on Nephos' built-in managed
+   `core-registry` dependency instead of asking the user to clone a sibling
+   checkout.
+2. Have startup/init clone the managed `core-registry` checkout under
+   `.nephos/registries/core-registry`; keep `NEPHOS_API_CATALOG_ROOTS` as a
+   replacement escape hatch for local catalog experiments.
+3. Keep Postgres and Zitadel as the only first runtime groundwork Services.
+4. Validate `init`, catalog loading, provider workload shape, and standard gates
+   without requiring a live Kubernetes smoke.
 
 Validation commands:
 
@@ -265,6 +276,8 @@ Current understanding:
 - Default DB path is `.nephos/state/nephos.db` relative to the backend process working directory.
 - Bootstrap configuration is environment-only:
   - `NEPHOS_API_DB_PATH`
+  - `NEPHOS_API_CORE_REGISTRY_URL`
+  - `NEPHOS_API_CORE_REGISTRY_PATH`
   - `NEPHOS_API_CATALOG_ROOTS`
   - `NEPHOS_API_KUBECONFIG`
   - `NEPHOS_API_KUBE_CONTEXT`

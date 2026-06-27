@@ -380,7 +380,6 @@ def _binding_values(credentials: dict[str, str], *, host: str) -> dict[str, str]
         ),
     }
 
-
 def _provision_database_sql(credentials: dict[str, str]) -> str:
     database = credentials["database"]
     username = credentials["username"]

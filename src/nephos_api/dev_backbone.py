@@ -3,6 +3,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,20 +26,12 @@ from nephos_api.reconciler import Reconciler
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
-BACKBONE_SERVICE_NAMES = ("postgres", "zitadel", "seaweedfs", "arcadedb")
+BACKBONE_SERVICE_NAMES = ("postgres", "zitadel")
 BACKBONE_APP_NAME = "backbone-check"
 
 EXPECTED_BINDING_SECRET_KEYS = {
     "postgres": ("host", "port", "database", "username", "password", "uri"),
     "identity": ("issuerUrl", "clientId", "clientSecret"),
-    "object-storage": (
-        "endpointUrl",
-        "bucket",
-        "accessKeyId",
-        "secretAccessKey",
-        "region",
-    ),
-    "graph": ("host", "port", "database", "username", "password", "protocol", "uri"),
 }
 
 
@@ -84,6 +77,29 @@ def run_backbone_smoke(
     )
 
 
+def _generated_local_secret(label: str) -> str:
+    return f"nephos-local-{label}-{uuid4().hex}"
+
+
+def _short_lived_bootstrap_key_expiration() -> str:
+    expires_at = datetime.now(UTC) + timedelta(hours=24)
+    return expires_at.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _backbone_service_config(service_name: str) -> dict[str, object]:
+    if service_name == "postgres":
+        return {"admin-password": _generated_local_secret("postgres")}
+    if service_name == "zitadel":
+        return {
+            "admin-password": _generated_local_secret("zitadel-admin"),
+            "master-key": uuid4().hex,
+            "bootstrap-machine-key-expiration": (
+                _short_lived_bootstrap_key_expiration()
+            ),
+        }
+    return {}
+
+
 def write_alpha_backbone_catalog(root: Path) -> None:
     _write_backbone_check_app(root)
     _write_service(
@@ -93,12 +109,16 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         provider_name="postgres",
         provides=[("sql", "postgres", "postgres")],
         config_options=[
+            {"name": "image", "type": "string", "default": "postgres:16-alpine"},
             {"name": "storage-size", "type": "string", "default": "1Gi"},
-            {"name": "storage-class-name", "type": "string"},
+            {"name": "storage-class-name", "type": "string", "default": ""},
+            {"name": "admin-password", "type": "string", "required": True},
         ],
         runtime_mappings=[
+            ("image", "image"),
             ("storage-size", "storageSize"),
             ("storage-class-name", "storageClassName"),
+            ("admin-password", "adminPassword"),
         ],
     )
     _write_service(
@@ -107,6 +127,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         display_name="Zitadel",
         provider_name="zitadel",
         provides=[("oidc", "oidc", "oidc"), ("service-account", "jwt", "jwt")],
+        requires=[("sql", "postgres", "database")],
         config_options=[
             {
                 "name": "image",
@@ -127,21 +148,9 @@ def write_alpha_backbone_catalog(root: Path) -> None:
                 "type": "string",
                 "default": "root@zitadel.nephos.localhost",
             },
-            {
-                "name": "admin-password",
-                "type": "string",
-                "default": "Nephos-local-zitadel-1!",
-            },
-            {
-                "name": "master-key",
-                "type": "string",
-                "default": "0123456789abcdef0123456789abcdef",
-            },
-            {
-                "name": "database-password",
-                "type": "string",
-                "default": "nephos-local-zitadel-db",
-            },
+            {"name": "admin-password", "type": "string", "required": True},
+            {"name": "master-key", "type": "string", "required": True},
+            {"name": "database-ssl-mode", "type": "string", "default": "disable"},
             {
                 "name": "bootstrap-machine-username",
                 "type": "string",
@@ -160,7 +169,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             {
                 "name": "bootstrap-machine-key-expiration",
                 "type": "string",
-                "default": "2036-01-01T00:00:00Z",
+                "required": True,
             },
             {
                 "name": "provisioning-transport",
@@ -179,7 +188,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             ("admin-username", "adminUsername"),
             ("admin-password", "adminPassword"),
             ("master-key", "masterKey"),
-            ("database-password", "databasePassword"),
+            ("database-ssl-mode", "databaseSslMode"),
             ("bootstrap-machine-username", "bootstrapMachineUsername"),
             ("bootstrap-machine-name", "bootstrapMachineName"),
             ("bootstrap-machine-key-path", "bootstrapMachineKeyPath"),
@@ -187,109 +196,16 @@ def write_alpha_backbone_catalog(root: Path) -> None:
                 "bootstrap-machine-key-expiration",
                 "bootstrapMachineKeyExpiration",
             ),
+            ("provisioning-transport", "provisioningTransport"),
             ("storage-size", "storageSize"),
         ],
-    )
-    _write_service(
-        root,
-        name="seaweedfs",
-        display_name="SeaweedFS",
-        provider_name="seaweedfs",
-        provides=[("object-storage", "s3", "s3")],
-        config_options=[
-            {"name": "image", "type": "string", "default": "chrislusf/seaweedfs:3.85"},
-            {"name": "storage-size", "type": "string", "default": "1Gi"},
-            {
-                "name": "s3-access-key",
-                "type": "string",
-                "default": "nephos-local-seaweedfs",
-            },
-            {
-                "name": "s3-secret-key",
-                "type": "string",
-                "default": "nephos-local-seaweedfs",
-            },
+        binding_runtime_mappings=[
+            ("database", "host", "databaseHost"),
+            ("database", "port", "databasePort"),
+            ("database", "database", "databaseName"),
+            ("database", "username", "databaseUsername"),
+            ("database", "password", "databasePassword"),
         ],
-        runtime_mappings=[
-            ("image", "image"),
-            ("storage-size", "storageSize"),
-            ("s3-access-key", "s3AccessKey"),
-            ("s3-secret-key", "s3SecretKey"),
-        ],
-    )
-    _write_service(
-        root,
-        name="arcadedb",
-        display_name="ArcadeDB",
-        provider_name="arcadedb",
-        provides=[
-            ("sql", "arcadedb", "sql"),
-            ("opencypher", "bolt", "bolt"),
-            ("opencypher", "n4j", "n4j"),
-        ],
-        config_options=[
-            {
-                "name": "image",
-                "type": "string",
-                "default": "arcadedata/arcadedb:25.5.1",
-            },
-            {"name": "storage-size", "type": "string", "default": "1Gi"},
-            {
-                "name": "root-password",
-                "type": "string",
-                "default": "nephos-local-arcadedb",
-            },
-            {"name": "enable-gremlin", "type": "boolean", "default": False},
-            {"name": "enable-mongo", "type": "boolean", "default": False},
-        ],
-        runtime_mappings=[
-            ("image", "image"),
-            ("storage-size", "storageSize"),
-            ("root-password", "rootPassword"),
-            ("enable-gremlin", "enableGremlin"),
-            ("enable-mongo", "enableMongo"),
-        ],
-    )
-    _write_service(
-        root,
-        name="cloudflared",
-        display_name="Cloudflare Tunnel",
-        provider_name="cloudflared",
-        provides=[("external-routing", "cloudflare-tunnel", "cloudflare-tunnel")],
-        config_options=[
-            {
-                "name": "image",
-                "type": "string",
-                "default": "cloudflare/cloudflared:2026.6.1",
-            },
-            {"name": "tunnel-name", "type": "string", "default": "nephos"},
-            {"name": "credentials-secret-name", "type": "string"},
-            {
-                "name": "credentials-secret-key",
-                "type": "string",
-                "default": "credentials.json",
-            },
-            {"name": "hostname", "type": "string"},
-            {
-                "name": "origin-service-url",
-                "type": "string",
-                "default": (
-                    "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
-                ),
-            },
-            {"name": "origin-host-header", "type": "string", "default": ""},
-        ],
-        runtime_mappings=[
-            ("image", "image"),
-            ("tunnel-name", "tunnelName"),
-            ("credentials-secret-name", "credentialsSecretName"),
-            ("credentials-secret-key", "credentialsSecretKey"),
-            ("hostname", "hostname"),
-            ("origin-service-url", "originServiceUrl"),
-            ("origin-host-header", "originHostHeader"),
-        ],
-        provisioning_mode="none",
-        binding_outputs=False,
     )
 
 def _run_non_live_backbone_flow(
@@ -420,6 +336,7 @@ def _install_backbone_desired_state(
                 json={
                     "catalogRef": {"kind": "Service", "name": service_name},
                     "instanceName": service_slug,
+                    "config": _backbone_service_config(service_name),
                 },
             ),
             f"service install {service_name}",
@@ -434,10 +351,6 @@ def _install_backbone_desired_state(
                 "bindings": {
                     "postgres": {"serviceInstance": resolved_service_slugs["postgres"]},
                     "identity": {"serviceInstance": resolved_service_slugs["zitadel"]},
-                    "object-storage": {
-                        "serviceInstance": resolved_service_slugs["seaweedfs"]
-                    },
-                    "graph": {"serviceInstance": resolved_service_slugs["arcadedb"]},
                 },
             },
         ),
@@ -484,12 +397,6 @@ spec:
     - capability: oidc
       protocol: oidc
       as: identity
-    - capability: object-storage
-      protocol: s3
-      as: object-storage
-    - capability: opencypher
-      protocol: bolt
-      as: graph
   routes: []
   config:
     options: []
@@ -512,6 +419,8 @@ def _write_service(
     provides: list[tuple[str, str, str]],
     config_options: list[dict[str, object]],
     runtime_mappings: list[tuple[str, str]],
+    requires: list[tuple[str, str, str]] | None = None,
+    binding_runtime_mappings: list[tuple[str, str, str]] | None = None,
     provisioning_mode: str = "app-scoped-resource",
     binding_outputs: bool = True,
 ) -> None:
@@ -526,6 +435,14 @@ def _write_service(
             }
             for capability, protocol, alias in provides
         ],
+        "requires": [
+            {
+                "capability": capability,
+                "protocol": protocol,
+                "as": alias,
+            }
+            for capability, protocol, alias in requires or []
+        ],
         "config": {"options": config_options},
         "provisioning": {"mode": provisioning_mode},
         "operations": [],
@@ -539,6 +456,17 @@ def _write_service(
                         "to": {"helmValue": target},
                     }
                     for source, target in runtime_mappings
+                ]
+                + [
+                    {
+                        "from": {
+                            "kind": "binding",
+                            "name": alias,
+                            "field": field,
+                        },
+                        "to": {"helmValue": target},
+                    }
+                    for alias, field, target in binding_runtime_mappings or []
                 ]
             },
         },
@@ -556,10 +484,7 @@ def _write_service(
         },
         "spec": spec,
     }
-    path.write_text(
-        yaml.safe_dump(manifest, sort_keys=False).strip()
-    )
-
+    path.write_text(yaml.safe_dump(manifest, sort_keys=False).strip())
 
 def _smoke_settings(
     settings: Settings,
