@@ -219,6 +219,35 @@ def test_catalog_loader_uses_local_source_ids(tmp_path: Path) -> None:
     assert loader.get_app("paperless", source="local-1")["source"] == "local-1"
 
 
+def test_catalog_loader_accepts_named_source_ids(tmp_path: Path) -> None:
+    core_root = tmp_path / "core-registry"
+    mythos_root = tmp_path / "mythos-registry"
+    write_service(core_root, name="postgres")
+    write_service(mythos_root, name="mythos-mail-ingress")
+
+    loader = CatalogLoader(
+        (core_root, mythos_root),
+        source_ids=("core-registry", "mythos-registry"),
+    )
+
+    assert (
+        loader.get_service("postgres", source="core-registry")["source"]
+        == "core-registry"
+    )
+    assert loader.get_service(
+        "mythos-mail-ingress",
+        source="mythos-registry",
+    )["source"] == "mythos-registry"
+
+
+def test_catalog_loader_rejects_source_id_count_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="source id count"):
+        CatalogLoader(
+            (tmp_path / "core-registry",),
+            source_ids=("core-registry", "extra"),
+        )
+
+
 def test_catalog_loader_rejects_directory_and_manifest_name_mismatch(
     tmp_path: Path,
 ) -> None:

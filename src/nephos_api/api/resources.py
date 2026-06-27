@@ -936,7 +936,8 @@ def _catalog_source_path(
 
 
 def _loader(request: Request) -> CatalogLoader:
-    return CatalogLoader(request.app.state.settings.catalog_roots)
+    settings = request.app.state.settings
+    return CatalogLoader(settings.catalog_roots, source_ids=settings.catalog_source_ids)
 
 
 def _repo(request: Request) -> DesiredStateRepository:

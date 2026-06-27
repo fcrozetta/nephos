@@ -56,9 +56,10 @@ flowchart LR
 
 ### 1. Configure local settings
 
-The initial Nephos API config has exactly one preconfigured registry dependency:
-the first-party `core-registry`. Nephos manages that checkout itself under
-`.nephos/registries/core-registry`; you do not clone it by hand.
+The initial Nephos API config has three preconfigured registry dependencies:
+`core-registry`, `mythos-registry`, and `community-registry`. Nephos manages
+those checkouts itself under `.nephos/registries/`; you do not clone them by
+hand.
 
 ```bash
 cp .env.example .env
@@ -191,7 +192,11 @@ curl -sS -X POST http://127.0.0.1:8000/apps \
 | `NEPHOS_API_DB_PATH` | SQLite desired-state database path. Defaults to `.nephos/state/nephos.db`. |
 | `NEPHOS_API_CORE_REGISTRY_URL` | Optional override for the managed first-party core registry URL. Defaults to `https://git.fcrozetta.app/nephos/core-registry.git`. |
 | `NEPHOS_API_CORE_REGISTRY_PATH` | Optional override for the managed first-party core registry checkout path. Defaults to `.nephos/registries/core-registry`. |
-| `NEPHOS_API_CATALOG_ROOTS` | Escape hatch for local catalog experiments, separated by your OS path separator. When set, it replaces the managed core-registry dependency set. |
+| `NEPHOS_API_MYTHOS_REGISTRY_URL` | Optional override for the managed Mythos registry URL. Defaults to `https://git.fcrozetta.app/nephos/mythos-registry.git`. |
+| `NEPHOS_API_MYTHOS_REGISTRY_PATH` | Optional override for the managed Mythos registry checkout path. Defaults to `.nephos/registries/mythos-registry`. |
+| `NEPHOS_API_COMMUNITY_REGISTRY_URL` | Optional override for the managed community registry URL. Defaults to `https://git.fcrozetta.app/nephos/community-registry.git`. |
+| `NEPHOS_API_COMMUNITY_REGISTRY_PATH` | Optional override for the managed community registry checkout path. Defaults to `.nephos/registries/community-registry`. |
+| `NEPHOS_API_CATALOG_ROOTS` | Escape hatch for local catalog experiments, separated by your OS path separator. When set, it replaces the managed registry dependency set. |
 | `NEPHOS_API_KUBECONFIG` | Optional kubeconfig path. Uses the default kubeconfig when unset. |
 | `NEPHOS_API_KUBE_CONTEXT` | Kubernetes context Nephos should target. |
 | `NEPHOS_API_INTERNAL_DOMAIN` | Default internal App route suffix. Use `nephos.localhost` for local browser testing. |

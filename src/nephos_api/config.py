@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CORE_REGISTRY_URL = "https://git.fcrozetta.app/nephos/core-registry.git"
+DEFAULT_MYTHOS_REGISTRY_URL = "https://git.fcrozetta.app/nephos/mythos-registry.git"
+DEFAULT_COMMUNITY_REGISTRY_URL = "https://git.fcrozetta.app/nephos/community-registry.git"
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,7 @@ class Settings:
     managed_catalog_registries: tuple[ManagedCatalogRegistry, ...] = field(
         default_factory=tuple
     )
+    catalog_source_ids: tuple[str, ...] = field(default_factory=tuple)
 
 
 def load_settings(
@@ -45,24 +48,19 @@ def load_settings(
         if entry
     )
     managed_catalog_registries: tuple[ManagedCatalogRegistry, ...]
+    catalog_source_ids: tuple[str, ...]
     if configured_catalog_roots:
         catalog_roots = configured_catalog_roots
         managed_catalog_registries = ()
+        catalog_source_ids = ()
     else:
-        core_registry_path = _resolve_path(
-            env.get(
-                "NEPHOS_API_CORE_REGISTRY_PATH",
-                ".nephos/registries/core-registry",
-            ),
+        managed_catalog_registries = _default_managed_catalog_registries(
+            env,
             cwd=base_path,
         )
-        catalog_roots = (core_registry_path,)
-        managed_catalog_registries = (
-            ManagedCatalogRegistry(
-                name="core-registry",
-                url=env.get("NEPHOS_API_CORE_REGISTRY_URL", DEFAULT_CORE_REGISTRY_URL),
-                path=core_registry_path,
-            ),
+        catalog_roots = tuple(registry.path for registry in managed_catalog_registries)
+        catalog_source_ids = tuple(
+            registry.name for registry in managed_catalog_registries
         )
     kubeconfig = env.get("NEPHOS_API_KUBECONFIG")
 
@@ -74,6 +72,7 @@ def load_settings(
         internal_domain=env.get("NEPHOS_API_INTERNAL_DOMAIN", "nephos.local"),
         ingress_class=env.get("NEPHOS_API_INGRESS_CLASS") or None,
         managed_catalog_registries=managed_catalog_registries,
+        catalog_source_ids=catalog_source_ids,
     )
 
 
@@ -95,6 +94,44 @@ def load_environment(
             os.environ.setdefault(key, value)
         env = dict(os.environ)
     return env
+
+
+def _default_managed_catalog_registries(
+    env: Mapping[str, str],
+    *,
+    cwd: Path,
+) -> tuple[ManagedCatalogRegistry, ...]:
+    registry_defaults = (
+        (
+            "core-registry",
+            "NEPHOS_API_CORE_REGISTRY_URL",
+            DEFAULT_CORE_REGISTRY_URL,
+            "NEPHOS_API_CORE_REGISTRY_PATH",
+            ".nephos/registries/core-registry",
+        ),
+        (
+            "mythos-registry",
+            "NEPHOS_API_MYTHOS_REGISTRY_URL",
+            DEFAULT_MYTHOS_REGISTRY_URL,
+            "NEPHOS_API_MYTHOS_REGISTRY_PATH",
+            ".nephos/registries/mythos-registry",
+        ),
+        (
+            "community-registry",
+            "NEPHOS_API_COMMUNITY_REGISTRY_URL",
+            DEFAULT_COMMUNITY_REGISTRY_URL,
+            "NEPHOS_API_COMMUNITY_REGISTRY_PATH",
+            ".nephos/registries/community-registry",
+        ),
+    )
+    return tuple(
+        ManagedCatalogRegistry(
+            name=name,
+            url=env.get(url_key, default_url),
+            path=_resolve_path(env.get(path_key, default_path), cwd=cwd),
+        )
+        for name, url_key, default_url, path_key, default_path in registry_defaults
+    )
 
 
 def _resolve_path(value: str, *, cwd: Path) -> Path:

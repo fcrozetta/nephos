@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 from nephos_api.config import (
+    DEFAULT_COMMUNITY_REGISTRY_URL,
     DEFAULT_CORE_REGISTRY_URL,
+    DEFAULT_MYTHOS_REGISTRY_URL,
     ManagedCatalogRegistry,
     Settings,
     load_settings,
@@ -16,12 +18,33 @@ def test_load_settings_uses_default_paths(tmp_path: Path) -> None:
 
     assert settings.db_path == tmp_path / ".nephos" / "state" / "nephos.db"
     core_registry_path = tmp_path / ".nephos" / "registries" / "core-registry"
-    assert settings.catalog_roots == (core_registry_path,)
+    mythos_registry_path = tmp_path / ".nephos" / "registries" / "mythos-registry"
+    community_registry_path = tmp_path / ".nephos" / "registries" / "community-registry"
+    assert settings.catalog_roots == (
+        core_registry_path,
+        mythos_registry_path,
+        community_registry_path,
+    )
+    assert settings.catalog_source_ids == (
+        "core-registry",
+        "mythos-registry",
+        "community-registry",
+    )
     assert settings.managed_catalog_registries == (
         ManagedCatalogRegistry(
             name="core-registry",
             url=DEFAULT_CORE_REGISTRY_URL,
             path=core_registry_path,
+        ),
+        ManagedCatalogRegistry(
+            name="mythos-registry",
+            url=DEFAULT_MYTHOS_REGISTRY_URL,
+            path=mythos_registry_path,
+        ),
+        ManagedCatalogRegistry(
+            name="community-registry",
+            url=DEFAULT_COMMUNITY_REGISTRY_URL,
+            path=community_registry_path,
         ),
     )
     assert settings.kubeconfig is None
@@ -124,26 +147,54 @@ def test_configured_catalog_roots_are_the_complete_catalog_dependency_set(
     )
 
     assert settings.catalog_roots == (registry_root,)
+    assert settings.catalog_source_ids == ()
     assert settings.managed_catalog_registries == ()
 
 
-def test_default_core_registry_url_and_path_can_be_overridden(tmp_path: Path) -> None:
-    registry_path = tmp_path / "managed" / "core-registry"
+def test_default_managed_registry_urls_and_paths_can_be_overridden(
+    tmp_path: Path,
+) -> None:
+    core_registry_path = tmp_path / "managed" / "core-registry"
+    mythos_registry_path = tmp_path / "managed" / "mythos-registry"
+    community_registry_path = tmp_path / "managed" / "community-registry"
 
     settings = load_settings(
         environ={
             "NEPHOS_API_CORE_REGISTRY_URL": "https://example.test/core-registry.git",
-            "NEPHOS_API_CORE_REGISTRY_PATH": str(registry_path),
+            "NEPHOS_API_CORE_REGISTRY_PATH": str(core_registry_path),
+            "NEPHOS_API_MYTHOS_REGISTRY_URL": "https://example.test/mythos-registry.git",
+            "NEPHOS_API_MYTHOS_REGISTRY_PATH": str(mythos_registry_path),
+            "NEPHOS_API_COMMUNITY_REGISTRY_URL": "https://example.test/community-registry.git",
+            "NEPHOS_API_COMMUNITY_REGISTRY_PATH": str(community_registry_path),
         },
         cwd=tmp_path,
     )
 
-    assert settings.catalog_roots == (registry_path,)
+    assert settings.catalog_roots == (
+        core_registry_path,
+        mythos_registry_path,
+        community_registry_path,
+    )
+    assert settings.catalog_source_ids == (
+        "core-registry",
+        "mythos-registry",
+        "community-registry",
+    )
     assert settings.managed_catalog_registries == (
         ManagedCatalogRegistry(
             name="core-registry",
             url="https://example.test/core-registry.git",
-            path=registry_path,
+            path=core_registry_path,
+        ),
+        ManagedCatalogRegistry(
+            name="mythos-registry",
+            url="https://example.test/mythos-registry.git",
+            path=mythos_registry_path,
+        ),
+        ManagedCatalogRegistry(
+            name="community-registry",
+            url="https://example.test/community-registry.git",
+            path=community_registry_path,
         ),
     )
 

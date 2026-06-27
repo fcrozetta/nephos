@@ -237,11 +237,19 @@ class ServiceManifest(BaseModel):
 
 
 class CatalogLoader:
-    def __init__(self, catalog_roots: tuple[Path, ...]) -> None:
+    def __init__(
+        self,
+        catalog_roots: tuple[Path, ...],
+        *,
+        source_ids: tuple[str, ...] | None = None,
+    ) -> None:
+        resolved_source_ids = source_ids or tuple(_source_ids(len(catalog_roots)))
+        if len(resolved_source_ids) != len(catalog_roots):
+            raise ValueError("catalog source id count must match catalog root count")
         self._sources = tuple(
             (source_id, root)
             for source_id, root in zip(
-                _source_ids(len(catalog_roots)),
+                resolved_source_ids,
                 catalog_roots,
                 strict=True,
             )

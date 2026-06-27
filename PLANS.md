@@ -18,7 +18,54 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: Local Tailscale Core Services
+## Current Plan Addendum: Managed Registry Lanes and Mythos Mail Ingress
+
+Goal:
+
+- Make Nephos start with the accepted three managed registry lanes:
+  `core-registry`, `mythos-registry`, and `community-registry`.
+- Keep core minimal while making `mythos-mail-ingress` a Mythos registry
+  Service package for shared `app.workflow@...` email routes and safe workflow
+  events.
+
+Registry target:
+
+- `nephos/core-registry` owns first-party platform Service catalog entries.
+- `nephos/mythos-registry` owns Mythos ecosystem apps/services, including
+  `mythos-mail-ingress`.
+- `nephos/community-registry` owns optional community catalog entries and
+  alternatives.
+
+Non-goals:
+
+- Do not add Cloudflare API mutation or external DNS changes in this slice.
+- Do not implement the mail-ingress runtime provider yet; define the catalog
+  Service package and capability boundary first.
+- Do not create a separate Mythos app/product identity for mail ingress.
+- Do not make live smoke the acceptance gate for this batch; catalog/API tests
+  are enough until runtime bring-up is intentionally in scope.
+
+Proposed steps:
+
+1. Have startup/init clone the three managed registry checkouts under
+   `.nephos/registries/`; keep `NEPHOS_API_CATALOG_ROOTS` as a replacement
+   escape hatch for local catalog experiments.
+2. Preserve named source IDs for managed registries so API clients can refer to
+   `core-registry`, `mythos-registry`, and `community-registry` explicitly.
+3. Add `mythos-mail-ingress` to the Mythos registry with its required/provided
+   capability boundary, route convention, and safety notes.
+4. Validate Nephos config/catalog behavior and the Mythos registry catalog.
+
+Validation commands:
+
+- `uv run ruff check src/nephos_api/config.py src/nephos_api/catalog.py src/nephos_api/api/catalog.py src/nephos_api/api/resources.py tests/test_config.py tests/test_catalog_loader.py`
+- `uv run pytest tests/test_config.py tests/test_catalog_loader.py tests/test_catalog_api.py tests/test_install_api.py -q`
+- `(cd <mythos-registry> && NEPHOS_SRC=<nephos-src> python3 scripts/validate_catalog.py)`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Local Tailscale Core Services
 
 Goal:
 
