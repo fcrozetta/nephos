@@ -27,6 +27,7 @@ from nephos_api.providers import (
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.reconciler import Reconciler, RuntimeAdapter, RuntimeDeployer
 from nephos_api.reconciler_worker import ReconcilerWorker
+from nephos_api.registries import ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
 
 RuntimeFactory = Callable[[Settings], RuntimeAdapter]
@@ -43,6 +44,7 @@ def create_app(
     provisioner: BindingProvisioner | None = None,
     provisioner_factory: ProvisionerFactory | None = None,
     reconciler_interval_seconds: float = 1.0,
+    ensure_registries: bool = True,
 ) -> FastAPI:
     resolved_settings = settings if settings is not None else load_settings()
     lifespan = _lifespan(
@@ -52,10 +54,12 @@ def create_app(
         provisioner=provisioner,
         provisioner_factory=provisioner_factory,
         reconciler_interval_seconds=reconciler_interval_seconds,
+        ensure_registries=ensure_registries,
     )
     app = FastAPI(title="Nephos API", version=__version__, lifespan=lifespan)
     app.state.settings = resolved_settings
     app.state.repository = DesiredStateRepository(resolved_settings.db_path)
+    app.state.ensure_registries = ensure_registries
     app.state.reconciler_enabled = start_reconciler
     app.state.deployer_enabled = deployer_factory is not None
     app.state.provisioner_enabled = (
@@ -86,11 +90,14 @@ def _lifespan(
     provisioner: BindingProvisioner | None,
     provisioner_factory: ProvisionerFactory | None,
     reconciler_interval_seconds: float,
+    ensure_registries: bool,
 ) -> Callable[[FastAPI], AsyncIterator[None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         task: asyncio.Task[None] | None = None
         worker: ReconcilerWorker | None = None
+        if ensure_registries:
+            ensure_managed_catalog_registries(app.state.settings)
         if start_reconciler:
             runtime = _LazyRuntimeAdapter(runtime_factory, app.state.settings)
             deployer = (

@@ -98,6 +98,7 @@ def serve(
             start_reconciler=True,
             deployer_factory=default_provider_deployer_factory,
             provisioner_factory=default_postgres_provisioner_factory,
+            ensure_registries=False,
         ),
         host=host,
         port=port,
@@ -109,6 +110,7 @@ def dev_smoke(
     timeout_seconds: int = typer.Option(240, "--timeout-seconds", min=1),
 ) -> None:
     settings = load_settings()
+    _ensure_catalog_registries(settings)
     context = settings.kube_context or "current context"
     typer.echo(f"Running reference smoke test against {context}")
     result = run_reference_smoke(
@@ -128,6 +130,7 @@ def dev_backbone_smoke(
     timeout_seconds: int = typer.Option(600, "--timeout-seconds", min=1),
 ) -> None:
     settings = load_settings()
+    _ensure_catalog_registries(settings)
     context = settings.kube_context or "current context"
     typer.echo(f"Running alpha backbone smoke against {context}")
     result = run_backbone_smoke(
