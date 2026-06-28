@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from pathlib import Path
 from typing import Protocol
 
@@ -48,7 +49,20 @@ class ProviderRuntimeDeployer:
         self._provider_for(target_type).deploy(context)
 
     def uninstall(self, *, target_type: str, slug: str) -> None:
-        context = self._context(target_type=target_type, slug=slug)
+        row = self._instance_row(target_type=target_type, slug=slug)
+        manifest = _manifest_from_path(
+            target_type=target_type,
+            path=Path(str(row["catalog_source_path"])),
+        )
+        if target_type == "service_instance" and isinstance(manifest, ServiceManifest):
+            self._deprovision_service_dependencies(slug=slug, manifest=manifest)
+        context = self._context_from_row(
+            target_type=target_type,
+            slug=slug,
+            row=row,
+            manifest=manifest,
+            include_values=False,
+        )
         self._provider_for(target_type).uninstall(context)
 
     def _provider_for(self, target_type: str) -> RuntimeProvider:
@@ -64,17 +78,38 @@ class ProviderRuntimeDeployer:
             target_type=target_type,
             path=Path(str(row["catalog_source_path"])),
         )
+        return self._context_from_row(
+            target_type=target_type,
+            slug=slug,
+            row=row,
+            manifest=manifest,
+            include_values=True,
+        )
+
+    def _context_from_row(
+        self,
+        *,
+        target_type: str,
+        slug: str,
+        row: dict[str, object],
+        manifest: AppManifest | ServiceManifest,
+        include_values: bool,
+    ) -> ProviderContext:
         return ProviderContext(
             target_type=target_type,
             slug=slug,
             runtime_name=runtime_name(target_type, slug),
             manifest=manifest,
             chart=_chart_from_manifest(manifest),
-            values=self._values_from_manifest(
-                target_type=target_type,
-                slug=slug,
-                row=row,
-                manifest=manifest,
+            values=(
+                self._values_from_manifest(
+                    target_type=target_type,
+                    slug=slug,
+                    row=row,
+                    manifest=manifest,
+                )
+                if include_values
+                else {}
             ),
             provider_name=_provider_name_from_manifest(manifest),
         )
@@ -138,6 +173,56 @@ class ProviderRuntimeDeployer:
                 message="Service dependency provisioning is not configured.",
             )
         values: dict[str, dict[str, str]] = {}
+        for context in self._service_dependency_contexts(
+            slug=slug,
+            manifest=manifest,
+            require_ready=True,
+        ):
+            provisioned = self._service_dependency_provisioner.provision_binding(
+                context
+            )
+            if provisioned is None:
+                raise RuntimeBlockedError(
+                    reason="service_dependency_output_unavailable",
+                    message=(
+                        f"Service dependency {context.alias} did not return "
+                        "binding values."
+                    ),
+                )
+            values[context.alias] = provisioned
+        return values
+
+    def _deprovision_service_dependencies(
+        self,
+        *,
+        slug: str,
+        manifest: ServiceManifest,
+    ) -> None:
+        if not manifest.spec.requires:
+            return
+        if self._service_dependency_provisioner is None:
+            raise RuntimeBlockedError(
+                reason="service_dependency_provisioner_unavailable",
+                message="Service dependency provisioning is not configured.",
+            )
+        contexts: list[BindingProvisioningContext] = []
+        with suppress(RuntimeBlockedError):
+            contexts = self._service_dependency_contexts(
+                slug=slug,
+                manifest=manifest,
+                require_ready=False,
+            )
+        for context in contexts:
+            self._service_dependency_provisioner.deprovision_binding(context)
+
+    def _service_dependency_contexts(
+        self,
+        *,
+        slug: str,
+        manifest: ServiceManifest,
+        require_ready: bool,
+    ) -> list[BindingProvisioningContext]:
+        contexts: list[BindingProvisioningContext] = []
         for requirement in manifest.spec.requires:
             alias = requirement.alias or _default_capability_alias(
                 requirement.capability,
@@ -149,8 +234,9 @@ class ProviderRuntimeDeployer:
                 capability=requirement.capability,
                 protocol=requirement.protocol,
                 provider=requirement.provider,
+                require_ready=require_ready,
             )
-            provisioned = self._service_dependency_provisioner.provision_binding(
+            contexts.append(
                 BindingProvisioningContext(
                     binding_id=f"service-{slug}-{alias}",
                     app_slug=slug,
@@ -160,15 +246,7 @@ class ProviderRuntimeDeployer:
                     protocol=requirement.protocol,
                 )
             )
-            if provisioned is None:
-                raise RuntimeBlockedError(
-                    reason="service_dependency_output_unavailable",
-                    message=(
-                        f"Service dependency {alias} did not return binding values."
-                    ),
-                )
-            values[alias] = provisioned
-        return values
+        return contexts
 
     def _service_dependency_provider(
         self,
@@ -178,12 +256,15 @@ class ProviderRuntimeDeployer:
         capability: str,
         protocol: str | None,
         provider: str | None,
+        require_ready: bool,
     ) -> dict[str, object]:
         eligible = []
         for row in self._repository.list_service_rows():
             if str(row["slug"]) == consumer_slug:
                 continue
             if row["delete_requested_at"] is not None or row["lifecycle"] != "running":
+                continue
+            if require_ready and not self._service_provider_runtime_ready(row):
                 continue
             if provider is not None and provider not in {
                 str(row["slug"]),
@@ -217,6 +298,17 @@ class ProviderRuntimeDeployer:
                 f"Service dependency {alias} has multiple eligible providers; "
                 "set an explicit provider in the Service catalog requirement."
             ),
+        )
+
+    def _service_provider_runtime_ready(self, row: dict[str, object]) -> bool:
+        snapshot = self._repository.get_status_snapshot(
+            resource_type="service_instance",
+            resource_id=str(row["id"]),
+        )
+        return (
+            snapshot is not None
+            and snapshot["reconciliation"] == "succeeded"
+            and snapshot["reason"] == "runtime_deployed"
         )
 
     def _runtime_mapping_value(

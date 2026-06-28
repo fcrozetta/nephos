@@ -130,7 +130,6 @@ def dev_backbone_smoke(
     timeout_seconds: int = typer.Option(600, "--timeout-seconds", min=1),
 ) -> None:
     settings = load_settings()
-    _ensure_catalog_registries(settings)
     context = settings.kube_context or "current context"
     typer.echo(f"Running alpha backbone smoke against {context}")
     result = run_backbone_smoke(

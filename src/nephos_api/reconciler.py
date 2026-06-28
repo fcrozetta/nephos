@@ -264,6 +264,11 @@ class Reconciler:
             if target_type == "service_instance" and reason == "runtime_deployed"
             else []
         )
+        dependent_services = (
+            self._dependent_services_for_service(slug)
+            if target_type == "service_instance" and reason == "runtime_deployed"
+            else []
+        )
         if target_type == "app_instance" and app_routes:
             self._runtime.ensure_app_ingresses(
                 app_slug=slug,
@@ -281,6 +286,14 @@ class Reconciler:
                         "id": str(binding["id"]),
                         "alias": str(binding["alias"]),
                     },
+                )
+            for service in dependent_services:
+                tx.create_reconciliation_request_if_not_active(
+                    target_type="service_instance",
+                    target_id=str(service["id"]),
+                    target_generation=int(str(service["generation"])),
+                    action="reconcile",
+                    target_snapshot={"slug": str(service["slug"])},
                 )
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),
@@ -327,6 +340,40 @@ class Reconciler:
                 binding["app_lifecycle"] = dependent["app_lifecycle"]
                 bindings.append(binding)
         return bindings
+
+    def _dependent_services_for_service(
+        self,
+        provider_slug: str,
+    ) -> list[dict[str, object]]:
+        provider_row = self._repository.get_service_row(provider_slug)
+        if provider_row is None:
+            return []
+        provider_manifest = _optional_service_manifest_from_row(provider_row)
+        if provider_manifest is None:
+            return []
+        provided_capabilities = {
+            (provided.capability, provided.protocol)
+            for provided in provider_manifest.spec.provides
+        }
+        if not provided_capabilities:
+            return []
+        dependent_services: list[dict[str, object]] = []
+        for row in self._repository.list_service_rows():
+            if str(row["slug"]) == provider_slug:
+                continue
+            if row["delete_requested_at"] is not None or row["lifecycle"] != "running":
+                continue
+            manifest = _optional_service_manifest_from_row(row)
+            if manifest is None:
+                continue
+            if any(
+                (requirement.capability, requirement.protocol) in provided_capabilities
+                and requirement.provider
+                in {None, str(provider_row["slug"]), str(provider_row["catalog_name"])}
+                for requirement in manifest.spec.requires
+            ):
+                dependent_services.append(row)
+        return dependent_services
 
     def _reconcile_namespace_stop_request(self, request: dict[str, object]) -> bool:
         target_type = str(request["target_type"])
@@ -984,6 +1031,21 @@ def _request_with_action(
 def _app_manifest_from_row(row: dict[str, object]) -> AppManifest:
     raw = yaml.safe_load(Path(str(row["catalog_source_path"])).read_text())
     return AppManifest.model_validate(raw)
+
+
+def _service_manifest_from_row(row: dict[str, object]) -> ServiceManifest:
+    raw = yaml.safe_load(Path(str(row["catalog_source_path"])).read_text())
+    return ServiceManifest.model_validate(raw)
+
+
+def _optional_service_manifest_from_row(
+    row: dict[str, object],
+) -> ServiceManifest | None:
+    source_path = Path(str(row["catalog_source_path"]))
+    if not source_path.exists():
+        return None
+    raw = yaml.safe_load(source_path.read_text())
+    return ServiceManifest.model_validate(raw)
 
 
 def _app_row_should_reconcile_routes(row: dict[str, object]) -> bool:

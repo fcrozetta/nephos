@@ -71,6 +71,7 @@ def run_reference_smoke(
                         json={
                             "catalogRef": {"kind": "Service", "name": "postgres"},
                             "instanceName": service_slug,
+                            "config": {"admin-password": uuid4().hex},
                         },
                     ),
                     "service install",
@@ -223,6 +224,11 @@ spec:
     outputs:
       - name: connection
         target: app-secret
+  config:
+    options:
+      - name: admin-password
+        type: string
+        required: true
   provisioning:
     mode: app-scoped-resource
   operations: []
@@ -230,6 +236,13 @@ spec:
     type: provider
     provider:
       name: postgres
+    values:
+      mappings:
+        - from:
+            kind: config
+            name: admin-password
+          to:
+            helmValue: adminPassword
 """.strip()
     )
 

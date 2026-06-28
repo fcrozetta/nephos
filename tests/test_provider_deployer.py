@@ -47,6 +47,7 @@ class RecordingPulumiRunner:
 class RecordingDependencyProvisioner:
     def __init__(self) -> None:
         self.contexts: list[BindingProvisioningContext] = []
+        self.deprovisioned: list[BindingProvisioningContext] = []
 
     def provision_binding(
         self,
@@ -62,7 +63,7 @@ class RecordingDependencyProvisioner:
         }
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
-        self.contexts.append(context)
+        self.deprovisioned.append(context)
 
 
 def test_provider_runtime_deployer_dispatches_services_to_service_provider(
@@ -237,7 +238,7 @@ def test_provider_runtime_deployer_provisions_service_dependencies(
     service_provider = RecordingProvider()
     provisioner = RecordingDependencyProvisioner()
     with repo.transaction() as tx:
-        tx.create_service_instance(
+        postgres = tx.create_service_instance(
             slug="postgres",
             catalog_name="postgres",
             catalog_source_id="default",
@@ -251,6 +252,7 @@ def test_provider_runtime_deployer_provisions_service_dependencies(
             catalog_source_path=str(zitadel_manifest),
             manifest_digest="sha256:zitadel",
         )
+        _mark_service_runtime_deployed(tx, postgres.id, postgres.generation)
 
     deployer = ProviderRuntimeDeployer(
         repository=repo,
@@ -275,6 +277,111 @@ def test_provider_runtime_deployer_provisions_service_dependencies(
     assert provision_context.alias == "database"
     assert provision_context.capability == "sql"
     assert provision_context.protocol == "postgres"
+    assert provisioner.deprovisioned == []
+
+
+def test_provider_runtime_deployer_blocks_service_dependency_until_provider_deployed(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    provisioner = RecordingDependencyProvisioner()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+        service_dependency_provisioner=provisioner,
+    )
+
+    try:
+        deployer.deploy(target_type="service_instance", slug="zitadel")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "service_dependency_provider_unavailable"
+    else:
+        raise AssertionError("expected undeployed dependency provider to block")
+
+    assert provisioner.contexts == []
+    assert service_provider.deployed == []
+
+
+def test_provider_runtime_deployer_deprovisions_service_dependencies_on_uninstall(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    app_provider = RecordingProvider()
+    service_provider = RecordingProvider()
+    provisioner = RecordingDependencyProvisioner()
+    with repo.transaction() as tx:
+        postgres = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+        _mark_service_runtime_deployed(tx, postgres.id, postgres.generation)
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=app_provider,
+        service_provider=service_provider,
+        service_dependency_provisioner=provisioner,
+    )
+    deployer.uninstall(target_type="service_instance", slug="zitadel")
+
+    assert provisioner.contexts == []
+    assert len(provisioner.deprovisioned) == 1
+    context = provisioner.deprovisioned[0]
+    assert context.binding_id == "service-zitadel-database"
+    assert context.app_slug == "zitadel"
+    assert context.service_slug == "postgres"
+    assert context.alias == "database"
+    assert context.capability == "sql"
+    assert context.protocol == "postgres"
+    assert len(service_provider.uninstalled) == 1
+    assert service_provider.uninstalled[0].slug == "zitadel"
+    assert service_provider.uninstalled[0].values == {}
 
 
 def test_pulumi_helm_provider_maps_context_to_local_stack_operations(
@@ -489,6 +596,20 @@ def _repo(tmp_path: Path) -> DesiredStateRepository:
     db_path = tmp_path / "nephos.db"
     migrate_database(db_path=db_path)
     return DesiredStateRepository(db_path)
+
+
+def _mark_service_runtime_deployed(tx, service_id: str, generation: int) -> None:
+    tx.upsert_status_snapshot(
+        resource_type="service_instance",
+        resource_id=service_id,
+        level="healthy",
+        lifecycle="running",
+        reconciliation="succeeded",
+        reason="runtime_deployed",
+        message="Runtime deployment is present and owned by Nephos.",
+        evidence=[],
+        observed_generation=generation,
+    )
 
 
 def _write_app_with_runtime_mappings(root: Path) -> Path:
