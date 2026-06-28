@@ -20,6 +20,7 @@ def _client(tmp_path: Path) -> TestClient:
 def _client_with_catalog_roots(
     db_path: Path,
     catalog_roots: tuple[Path, ...],
+    catalog_source_ids: tuple[str, ...] = (),
 ) -> TestClient:
     migrate_database(db_path=db_path)
     app = create_app(
@@ -28,6 +29,7 @@ def _client_with_catalog_roots(
             catalog_roots=catalog_roots,
             kubeconfig=None,
             kube_context=None,
+            catalog_source_ids=catalog_source_ids,
         )
     )
     return TestClient(app)
@@ -70,6 +72,74 @@ def test_install_service_from_catalog_creates_desired_state(tmp_path: Path) -> N
     list_response = client.get("/services")
     assert list_response.status_code == 200
     assert list_response.json()["services"][0]["slug"] == "postgres"
+
+
+def test_install_service_from_named_managed_catalog_source(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "core-registry"
+    write_service(catalog_root)
+    client = _client_with_catalog_roots(
+        tmp_path / "nephos.db",
+        (catalog_root,),
+        catalog_source_ids=("core-registry",),
+    )
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {
+                "kind": "Service",
+                "name": "postgres",
+                "source": "core-registry",
+            }
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["slug"] == "postgres"
+    assert body["resource"]["catalogRef"]["source"] == "core-registry"
+
+
+def test_install_app_from_named_managed_catalog_source(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "core-registry"
+    write_app(catalog_root)
+    write_service(catalog_root)
+    client = _client_with_catalog_roots(
+        tmp_path / "nephos.db",
+        (catalog_root,),
+        catalog_source_ids=("core-registry",),
+    )
+    service = client.post(
+        "/services",
+        json={
+            "catalogRef": {
+                "kind": "Service",
+                "name": "postgres",
+                "source": "core-registry",
+            }
+        },
+    )
+    assert service.status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {
+                "kind": "App",
+                "name": "paperless",
+                "source": "core-registry",
+            }
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["slug"] == "paperless"
+    assert body["resource"]["catalogRef"]["source"] == "core-registry"
 
 
 def test_install_service_rejects_instance_name_that_exceeds_namespace_limit(

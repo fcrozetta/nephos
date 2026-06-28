@@ -927,9 +927,20 @@ def _catalog_source_path(
     name: str,
     source: str,
 ) -> Path:
-    roots = request.app.state.settings.catalog_roots
-    index = 0 if source == "default" else int(source.removeprefix("local-"))
-    root = roots[index]
+    settings = request.app.state.settings
+    roots = settings.catalog_roots
+    source_ids = settings.catalog_source_ids or tuple(
+        "default" if index == 0 else f"local-{index}"
+        for index in range(len(roots))
+    )
+    source_roots = dict(zip(source_ids, roots, strict=True))
+    try:
+        root = source_roots[source]
+    except KeyError as exc:
+        raise _not_found(
+            "catalog_source_not_found",
+            "Catalog source was not found.",
+        ) from exc
     if kind == "App":
         return root / "apps" / name / "app.yaml"
     return root / "services" / name / "service.yaml"
