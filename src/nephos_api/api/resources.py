@@ -21,7 +21,7 @@ from nephos_api.catalog import (
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
 from nephos_api.kubernetes_runtime import ResourceType, namespace_name
-from nephos_api.manifest_config import effective_manifest_config
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
 
 router = APIRouter(tags=["resources"])
@@ -80,7 +80,6 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
     )
     manifest = _load_service_manifest(source_path)
     _validate_service_config(manifest, payload.config)
-    effective_config = effective_manifest_config(manifest, payload.config)
     repo = _repo(request)
 
     try:
@@ -92,7 +91,7 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
                 catalog_source_id=catalog_entry["source"],
                 catalog_source_path=str(source_path),
                 manifest_digest=catalog_entry["manifestDigest"],
-                config=effective_config,
+                config=payload.config,
             )
             reconciliation = tx.create_reconciliation_request(
                 target_type="service_instance",
@@ -191,7 +190,6 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
     )
     manifest = _load_app_manifest(source_path)
     _validate_app_config(manifest, payload.config)
-    effective_config = effective_manifest_config(manifest, payload.config)
     providers = _resolve_binding_providers(
         request,
         catalog_entry,
@@ -208,7 +206,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
                 catalog_source_id=catalog_entry["source"],
                 catalog_source_path=str(source_path),
                 manifest_digest=catalog_entry["manifestDigest"],
-                config=effective_config,
+                config=payload.config,
             )
             for requirement in catalog_entry["requires"]:
                 service_row = providers[requirement["alias"]]
@@ -680,6 +678,7 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         str(row["catalog_name"]),
         source=str(row["catalog_source_id"]),
     )
+    manifest = _load_service_manifest(Path(str(row["catalog_source_path"])))
     dependents = repo.list_dependents_for_service(str(row["id"]))
     return {
         "id": row["id"],
@@ -687,7 +686,7 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         "kind": "Service",
         "lifecycle": row["lifecycle"],
         "catalogRef": _catalog_ref(row),
-        "config": _redacted_config(_json_dict(row["config_json"])),
+        "config": _redacted_config(manifest_config_values(row, manifest)),
         "provides": catalog_entry["provides"],
         "dependents": [
             {
@@ -827,6 +826,7 @@ def _app_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any]:
         str(row["catalog_name"]),
         source=str(row["catalog_source_id"]),
     )
+    manifest = _load_app_manifest(Path(str(row["catalog_source_path"])))
     repo = _repo(request)
     bindings = repo.list_bindings_for_app(str(row["id"]))
     return {
@@ -835,7 +835,7 @@ def _app_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any]:
         "kind": "App",
         "lifecycle": row["lifecycle"],
         "catalogRef": _catalog_ref(row),
-        "config": _json_dict(row["config_json"]),
+        "config": manifest_config_values(row, manifest),
         "bindings": [
             {
                 "id": binding["id"],
@@ -1091,14 +1091,6 @@ def _catalog_or_404(call: Any) -> dict[str, Any]:
             message="Catalog entry is invalid.",
             details={"error": str(exc)},
         ) from exc
-
-
-def _json_dict(value: object) -> dict[str, Any]:
-    import json
-
-    if not isinstance(value, str):
-        return {}
-    return json.loads(value)
 
 
 def _redacted_config(config: dict[str, Any]) -> dict[str, Any]:

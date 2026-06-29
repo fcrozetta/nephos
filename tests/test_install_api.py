@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -850,6 +851,70 @@ def test_install_service_accepts_manifest_config(tmp_path: Path) -> None:
         "profile": "local",
         "admin-password": "[REDACTED]",
     }
+
+
+def test_install_service_persists_only_config_overrides(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    db_path = tmp_path / "nephos.db"
+    client = _client_with_catalog_roots(db_path, (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {"storage-size": "8Gi"},
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["config"] == {
+        "storage-size": "8Gi",
+        "enable-backups": False,
+        "profile": "local",
+    }
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT config_json FROM service_instances WHERE slug = ?",
+            ("postgres",),
+        ).fetchone()
+    assert row is not None
+    assert json.loads(row[0]) == {"storage-size": "8Gi"}
+
+
+def test_install_app_persists_only_config_overrides(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_app(catalog_root)
+    write_service(catalog_root)
+    db_path = tmp_path / "nephos.db"
+    client = _client_with_catalog_roots(db_path, (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "config": {"admin-email": "fer@example.test"},
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["config"] == {
+        "admin-email": "fer@example.test",
+        "workers": 1,
+        "schedule": "daily",
+        "enable-ocr": True,
+    }
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT config_json FROM app_instances WHERE slug = ?",
+            ("paperless",),
+        ).fetchone()
+    assert row is not None
+    assert json.loads(row[0]) == {"admin-email": "fer@example.test"}
 
 
 def test_install_service_rejects_unknown_config_keys(tmp_path: Path) -> None:
