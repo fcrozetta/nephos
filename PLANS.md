@@ -18,6 +18,271 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
+## Current Plan Addendum: Managed Registry Lanes and Mythos Mail Ingress
+
+Goal:
+
+- Make Nephos start with the accepted three managed registry lanes:
+  `core-registry`, `mythos-registry`, and `community-registry`.
+- Keep core minimal while making `mythos-mail-ingress` a Mythos registry
+  Service package for shared `app.workflow@...` email routes and safe workflow
+  events.
+
+Registry target:
+
+- `nephos/core-registry` owns first-party platform Service catalog entries.
+- `nephos/mythos-registry` owns Mythos ecosystem apps/services, including
+  `mythos-mail-ingress`.
+- `nephos/community-registry` owns optional community catalog entries and
+  alternatives.
+
+Non-goals:
+
+- Do not add Cloudflare API mutation or external DNS changes in this slice.
+- Do not implement the mail-ingress runtime provider yet; define the catalog
+  Service package and capability boundary first.
+- Do not create a separate Mythos app/product identity for mail ingress.
+- Do not make live smoke the acceptance gate for this batch; catalog/API tests
+  are enough until runtime bring-up is intentionally in scope.
+
+Proposed steps:
+
+1. Have startup/init clone the three managed registry checkouts under
+   `.nephos/registries/`; keep `NEPHOS_API_CATALOG_ROOTS` as a replacement
+   escape hatch for local catalog experiments.
+2. Preserve named source IDs for managed registries so API clients can refer to
+   `core-registry`, `mythos-registry`, and `community-registry` explicitly.
+3. Add `mythos-mail-ingress` to the Mythos registry with its required/provided
+   capability boundary, route convention, and safety notes.
+4. Validate Nephos config/catalog behavior and the Mythos registry catalog.
+
+Validation commands:
+
+- `uv run ruff check src/nephos_api/config.py src/nephos_api/catalog.py src/nephos_api/api/catalog.py src/nephos_api/api/resources.py tests/test_config.py tests/test_catalog_loader.py`
+- `uv run pytest tests/test_config.py tests/test_catalog_loader.py tests/test_catalog_api.py tests/test_install_api.py -q`
+- `(cd <mythos-registry> && NEPHOS_SRC=<nephos-src> python3 scripts/validate_catalog.py)`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Local Tailscale Core Services
+
+Goal:
+
+- Make the minimum local Nephos core-service slice start from a clean initial
+  API config: SQLite desired state plus the first-party `core-registry` as the
+  only catalog dependency, then a configurable PostgreSQL Service and a Zitadel
+  Service that depends on PostgreSQL-created database credentials.
+
+Registry target:
+
+- `nephos/core-registry` owns these first-party platform Service catalog entries.
+- `nephos/mythos-registry` is for Mythos apps/services and should not receive core database/auth entries.
+- `nephos/community-registry` is for community catalog entries and should not receive first-party PRD backbone entries.
+
+Non-goals:
+
+- Do not add Cloudflare Tunnel/DNS/TLS management in this slice.
+- Do not create or modify a full external secret manager or backup controller.
+- Do not add SeaweedFS, ArcadeDB, or demo Apps until SQLite and PostgreSQL are
+  correct.
+- Do not make live smoke the acceptance gate for this batch; defer that until
+  local runtime bring-up exists.
+- Do not make Nephos manage the selected Kubernetes cluster lifecycle.
+
+Proposed steps:
+
+1. Make `.env.example` and bootstrap docs rely on Nephos' built-in managed
+   `core-registry` dependency instead of asking the user to clone a sibling
+   checkout.
+2. Have startup/init clone the managed `core-registry` checkout under
+   `.nephos/registries/core-registry`; keep `NEPHOS_API_CATALOG_ROOTS` as a
+   replacement escape hatch for local catalog experiments.
+3. Keep Postgres and Zitadel as the only first runtime groundwork Services.
+4. Validate `init`, catalog loading, provider workload shape, and standard gates
+   without requiring a live Kubernetes smoke.
+
+Validation commands:
+
+- `uv run pytest tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
+- `uv run ruff check src/nephos_api/dev_backbone.py src/nephos_api/providers/kubernetes.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py`
+- `(cd <core-registry> && NEPHOS_SRC=<nephos-src> python3 scripts/validate_catalog.py)`
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Cloudflared Service
+
+Goal:
+
+- Add a Nephos-managed `cloudflared` Service so Cloudflare Tunnel runtime is reconciled by Nephos instead of depending on a local host process or the `nomad` debug route.
+
+Plan file:
+
+- `docs/plans/2026-06-23-cloudflared-service.md`
+
+Non-goals:
+
+- Do not create, delete, or update Cloudflare DNS records or tunnel routes in this slice.
+- Do not store Cloudflare tunnel tokens, credentials JSON, certs, API tokens, or account credentials in Nephos SQLite Service config.
+- Do not touch Forgejo or `git.fcrozetta.app` routing.
+
+Validation commands:
+
+- `uv run ruff check src/nephos_api/dev_backbone.py src/nephos_api/providers/kubernetes.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py`
+- `uv run pytest tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Zitadel Production Readiness
+
+Goal:
+
+- Make the Nephos `zitadel` Service production-ready as a shared identity Service for Apps, including reliable runtime, provisioning, secrets, backup/restore, health/status, and operational lifecycle.
+
+Plan file:
+
+- `docs/plans/2026-06-23-zitadel-production-readiness.md`
+
+Non-goals:
+
+- Do not depend on debug Cloudflare/host port-forwards for production provisioning.
+- Do not silently choose production topology decisions for issuer exposure, TLS, secrets, backup, database topology, or management endpoint.
+- Do not expose raw passwords, client secrets, machine keys, JWT private keys, Pulumi stack outputs, or connection strings in API/status/log summaries.
+
+Captured decisions:
+
+- production issuer exposure supports both public HTTPS and private access
+- management/provisioning should use the same canonical issuer hostname with a separate internal network path, not a separate Zitadel issuer identity
+- TLS termination remains external to Nephos for now
+- Kubernetes Secrets are acceptable for this slice; external secret manager integration is later
+- backup implementation is skipped for now, with hooks/status/future work only
+- embedded Postgres sidecar is acceptable for now, but should remain replaceable by shared PostgreSQL Service later
+- establish a generic production-readiness contract for core Services and implement Zitadel first
+
+Validation commands:
+
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+- live production-readiness smoke command to define after blocking decisions; must not require debug Cloudflare/host port-forward
+- `provisioning-transport=auto` uses the issuer endpoint for non-local hosts and bounded port-forward for `.localhost` dev hosts
+- Zitadel `ingress-enabled` publishes a Service-owned Ingress for the canonical issuer host
+
+---
+
+## Previous Plan Addendum: Zitadel Service Provisioning
+
+Goal:
+
+- Make the Nephos Zitadel Service fully usable for dogfood Apps by adding
+  Service-owned bootstrap automation credentials and app-scoped provisioning for
+  `oidc/oidc` and `service-account/jwt` bindings.
+
+Plan file:
+
+- `docs/plans/2026-06-22-zitadel-service-provisioning.md`
+
+Non-goals:
+
+- Do not make Zitadel the Nephos control-plane login in this slice.
+- Do not model Chiron or any specific dogfood App here.
+- Do not expose secrets in API/status/database summaries.
+- Do not depend on debug Cloudflare/host port-forwards for provisioning.
+
+Validation commands:
+
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Alpha Backbone Service Config Plumbing
+
+Goal:
+
+- Wire Service manifest config options through catalog validation, install
+  validation, provider runtime values, and the temporary alpha backbone Service
+  manifests.
+
+Non-goals:
+
+- Do not add canonical schemas under `schemas/`.
+- Do not add canonical examples under `examples/`.
+- Do not implement live Zitadel, SeaweedFS, or ArcadeDB app-scoped API clients.
+- Do not require a live Kubernetes cluster for tests.
+
+Current understanding:
+
+- App manifests already support `spec.config.options`; Service manifests do
+  not.
+- App install config is validated before desired state is written; Service
+  install config is currently persisted without Service manifest validation.
+- Provider runtime value mapping exists, but Service manifest defaults are not
+  included when config-backed runtime values are built.
+- The temporary alpha backbone catalog must declare non-canonical Service
+  config options and runtime mappings so local smoke resources are not driven
+  only by provider hardcoded defaults.
+
+Files likely to change:
+
+- `src/nephos_api/catalog.py`
+- `src/nephos_api/api/resources.py`
+- `src/nephos_api/providers/deployer.py`
+- `src/nephos_api/providers/kubernetes.py`
+- `src/nephos_api/dev_backbone.py`
+- focused tests for catalog loading, install API, provider deployer, backbone
+  generation, and Pulumi Kubernetes resource specs
+
+Proposed steps:
+
+1. Add failing tests for Service config schema/validation and install API
+   errors.
+2. Add failing tests for Service runtime defaults plus install config reaching
+   provider values.
+3. Add failing tests for generated alpha backbone Service options/mappings.
+4. Add failing tests for Zitadel, SeaweedFS, and ArcadeDB resource specs using
+   configured values without known-broken env/property names.
+5. Implement the smallest catalog/API/provider/runtime changes needed.
+
+Risks:
+
+- Silently creating public manifest contract drift without recording it.
+- Encoding fake live auth behavior for SeaweedFS or non-Postgres binding
+  clients before those clients are verified.
+- Leaving provider hardcoded defaults as the only effective runtime path.
+
+Validation commands:
+
+- `uv run pytest tests/test_catalog_loader.py tests/test_install_api.py tests/test_dev_backbone.py tests/test_pulumi_kubernetes_provider.py -q`
+- `uv lock --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+- `uv run nephos-api dev backbone-smoke --timeout-seconds 600`
+
+Rollback notes:
+
+- Revert this slice as a single commit if Service config shape or alpha
+  backbone runtime plumbing needs a different accepted direction.
+
+Open questions:
+
+- None blocking; live non-Postgres client provisioning remains explicitly
+  blocked by scope.
+
+---
+
 ## Current Plan: API 0.0.1 Runtime Convergence
 
 Goal:
@@ -58,6 +323,8 @@ Current understanding:
 - Default DB path is `.nephos/state/nephos.db` relative to the backend process working directory.
 - Bootstrap configuration is environment-only:
   - `NEPHOS_API_DB_PATH`
+  - `NEPHOS_API_CORE_REGISTRY_URL`
+  - `NEPHOS_API_CORE_REGISTRY_PATH`
   - `NEPHOS_API_CATALOG_ROOTS`
   - `NEPHOS_API_KUBECONFIG`
   - `NEPHOS_API_KUBE_CONTEXT`
@@ -128,6 +395,8 @@ Current understanding:
 
 Files likely to change:
 
+- `docs/maintainers.md`
+- `README.md`
 - `PLANS.md`
 - `pyproject.toml`
 - `uv.lock`
@@ -204,6 +473,11 @@ Proposed steps:
    - Consolidate duplicated App/Service desired-state repository insert/update helpers in `repository.py`.
    - Split binding provider resolution in `api/resources.py` into smaller explicit validation/selection helpers.
    - Do not touch reconciler/runtime/provider architecture in this batch.
+10. Documentation audience split and comment convention:
+   - Keep `README.md` useful for users evaluating or trying Nephos.
+   - Move maintainer workflow, verification, architecture links, and comment conventions into Markdown files under `docs/`.
+   - Use Better Comments syntax for non-obvious code invariants and API contract warnings.
+   - Avoid turning maintainer internals into README content.
 
 Current verification:
 
@@ -271,3 +545,40 @@ Open questions:
 - Canonicalizing the reference catalog examples in this repository remains unapproved.
 - Provider operation lock table shape.
 - Exact redacted Pulumi preview/apply evidence fields.
+
+---
+
+## Next Plan: Alpha Backbone Core Catalog
+
+Goal:
+
+- Build the first usable Nephos alpha backbone: PostgreSQL, Zitadel, SeaweedFS, ArcadeDB, and a local connection smoke for the first real dogfood App path.
+
+Current decisions from Fer:
+
+- Accepted ADR: `docs/adr/20260622-alpha-backbone-catalog-and-service-providers.md`.
+- Pulumi is the runtime path; do not use Aspire.
+- Helm is acceptable under Pulumi-backed Service providers when it is the easiest way to deploy a Service, but Helm must not define Nephos Service behavior.
+- Zitadel is a Service only. Its login/admin UI is a Service surface, not a separate App.
+- Database capabilities must express the connection/query model and protocol, not broad database categories.
+- PostgreSQL provides `sql/postgres`.
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, `opencypher/n4j`, optional `gremlin/gremlin`, and optional `mongo/mongo` when enabled.
+
+Implementation plans:
+
+- `docs/plans/2026-06-22-alpha-backbone-dispatch.md`
+- `docs/plans/2026-06-22-protocol-aware-capability-matching.md`
+- `docs/plans/2026-06-22-core-service-runtime-providers.md`
+- `docs/plans/2026-06-22-core-service-binding-provisioners.md`
+- `docs/plans/2026-06-22-alpha-local-backbone-smoke.md`
+
+Architecture files likely to change before implementation:
+
+- new ADR: `docs/adr/20260622-alpha-backbone-catalog-and-service-providers.md`
+- `.agents/context/nephos-catalog-loading.md`
+- `.agents/context/nephos-reconciliation.md`
+- `.agents/context/nephos-auth.md`
+- `.agents/context/nephos-phase1.md`
+- `.agents/context/nephos-open-questions.md`
+
+Do not silently modify those architecture files; explain the change and why before editing them.

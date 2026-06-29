@@ -7,8 +7,9 @@ from typing import Protocol
 
 import yaml
 
-from nephos_api.catalog import AppManifest
+from nephos_api.catalog import AppManifest, ServiceManifest
 from nephos_api.kubernetes_runtime import ResourceType
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
@@ -30,6 +31,7 @@ class RuntimeAdapter(Protocol):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> object: ...
 
@@ -40,6 +42,7 @@ class RuntimeAdapter(Protocol):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool: ...
 
     def scale_workloads(
@@ -261,6 +264,11 @@ class Reconciler:
             if target_type == "service_instance" and reason == "runtime_deployed"
             else []
         )
+        dependent_services = (
+            self._dependent_services_for_service(slug)
+            if target_type == "service_instance" and reason == "runtime_deployed"
+            else []
+        )
         if target_type == "app_instance" and app_routes:
             self._runtime.ensure_app_ingresses(
                 app_slug=slug,
@@ -279,10 +287,28 @@ class Reconciler:
                         "alias": str(binding["alias"]),
                     },
                 )
+            for service in dependent_services:
+                tx.create_reconciliation_request_if_not_active(
+                    target_type="service_instance",
+                    target_id=str(service["id"]),
+                    target_generation=int(str(service["generation"])),
+                    action="reconcile",
+                    target_snapshot={"slug": str(service["slug"])},
+                )
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),
                 state="succeeded",
             )
+            evidence: list[dict[str, object]] = [
+                {
+                    "source": "nephos-api",
+                    "subject": str(request["id"]),
+                    "reason": reason,
+                    "message": message,
+                }
+            ]
+            if target_type == "service_instance" and reason == "runtime_deployed":
+                evidence.append(_service_production_readiness_evidence(slug))
             tx.upsert_status_snapshot(
                 resource_type=target_type,
                 resource_id=str(request["target_id"]),
@@ -291,14 +317,7 @@ class Reconciler:
                 reconciliation="succeeded",
                 reason=reason,
                 message=message,
-                evidence=[
-                    {
-                        "source": "nephos-api",
-                        "subject": str(request["id"]),
-                        "reason": reason,
-                        "message": message,
-                    }
-                ],
+                evidence=evidence,
                 observed_generation=int(request["target_generation"]),
             )
         return True
@@ -321,6 +340,40 @@ class Reconciler:
                 binding["app_lifecycle"] = dependent["app_lifecycle"]
                 bindings.append(binding)
         return bindings
+
+    def _dependent_services_for_service(
+        self,
+        provider_slug: str,
+    ) -> list[dict[str, object]]:
+        provider_row = self._repository.get_service_row(provider_slug)
+        if provider_row is None:
+            return []
+        provider_manifest = _optional_service_manifest_from_row(provider_row)
+        if provider_manifest is None:
+            return []
+        provided_capabilities = {
+            (provided.capability, provided.protocol)
+            for provided in provider_manifest.spec.provides
+        }
+        if not provided_capabilities:
+            return []
+        dependent_services: list[dict[str, object]] = []
+        for row in self._repository.list_service_rows():
+            if str(row["slug"]) == provider_slug:
+                continue
+            if row["delete_requested_at"] is not None or row["lifecycle"] != "running":
+                continue
+            manifest = _optional_service_manifest_from_row(row)
+            if manifest is None:
+                continue
+            if any(
+                (requirement.capability, requirement.protocol) in provided_capabilities
+                and requirement.provider
+                in {None, str(provider_row["slug"]), str(provider_row["catalog_name"])}
+                for requirement in manifest.spec.requires
+            ):
+                dependent_services.append(row)
+        return dependent_services
 
     def _reconcile_namespace_stop_request(self, request: dict[str, object]) -> bool:
         target_type = str(request["target_type"])
@@ -510,6 +563,21 @@ class Reconciler:
             for route in manifest.spec.routes
         ]
 
+    def _service_config(self, slug: str) -> dict[str, object]:
+        row = self._repository.get_service_row(slug)
+        if row is None:
+            raise RuntimeBlockedError(
+                reason="service_not_found",
+                message="Service desired state was not found.",
+            )
+        source_path = Path(str(row["catalog_source_path"]))
+        if not source_path.exists():
+            return _stored_config(row)
+        manifest = ServiceManifest.model_validate(
+            yaml.safe_load(source_path.read_text())
+        )
+        return manifest_config_values(row, manifest)
+
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
             {
@@ -535,13 +603,20 @@ class Reconciler:
         if deprovision is None:
             return
         for binding in self._repository.list_bindings_for_app(app_instance_id):
+            app_slug = str(binding["app_instance_slug"])
             deprovision(
                 BindingProvisioningContext(
                     binding_id=str(binding["id"]),
-                    app_slug=str(binding["app_instance_slug"]),
+                    app_slug=app_slug,
                     service_slug=str(binding["service_instance_slug"]),
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
+                    protocol=_optional_str(binding["protocol"]),
+                    service_config=self._service_config(
+                        str(binding["service_instance_slug"])
+                    ),
+                    app_routes=tuple(self._app_routes(app_slug)),
+                    platform_domains=tuple(self._platform_domains_for_ingress()),
                 )
             )
 
@@ -558,12 +633,19 @@ class Reconciler:
             else None
         )
         for binding in bindings:
+            app_slug = str(binding["app_instance_slug"])
             context = BindingProvisioningContext(
                 binding_id=str(binding["id"]),
-                app_slug=str(binding["app_instance_slug"]),
+                app_slug=app_slug,
                 service_slug=str(binding["service_instance_slug"]),
                 alias=str(binding["alias"]),
                 capability=str(binding["capability"]),
+                protocol=_optional_str(binding["protocol"]),
+                service_config=self._service_config(
+                    str(binding["service_instance_slug"])
+                ),
+                app_routes=tuple(self._app_routes(app_slug)),
+                platform_domains=tuple(self._platform_domains_for_ingress()),
             )
             if deprovision is not None:
                 # Force-destroy tears down the whole Service namespace next. If
@@ -577,6 +659,7 @@ class Reconciler:
                 service_slug=context.service_slug,
                 alias=context.alias,
                 capability=context.capability,
+                protocol=context.protocol,
             )
         return bindings
 
@@ -663,6 +746,7 @@ class Reconciler:
             return True
 
         values = _binding_output_values(binding)
+        service_config = self._service_config(str(binding["service_instance_slug"]))
         if values is None and self._provisioner is not None:
             values = self._provisioner.provision_binding(
                 BindingProvisioningContext(
@@ -671,6 +755,12 @@ class Reconciler:
                     service_slug=str(binding["service_instance_slug"]),
                     alias=str(binding["alias"]),
                     capability=str(binding["capability"]),
+                    protocol=_optional_str(binding["protocol"]),
+                    service_config=service_config,
+                    app_routes=tuple(
+                        self._app_routes(str(binding["app_instance_slug"]))
+                    ),
+                    platform_domains=tuple(self._platform_domains_for_ingress()),
                 )
             )
         if values is None:
@@ -690,6 +780,7 @@ class Reconciler:
             service_slug=str(binding["service_instance_slug"]),
             alias=str(binding["alias"]),
             capability=str(binding["capability"]),
+            protocol=_optional_str(binding["protocol"]),
             values=values,
         )
         message = "Binding Secret is present and owned by Nephos."
@@ -699,6 +790,8 @@ class Reconciler:
                 output_summary=_redacted_binding_output_summary(
                     app_slug=str(binding["app_instance_slug"]),
                     alias=str(binding["alias"]),
+                    capability=str(binding["capability"]),
+                    protocol=_optional_str(binding["protocol"]),
                     values=values,
                 ),
             )
@@ -839,6 +932,87 @@ class Reconciler:
         return str(row["lifecycle"])
 
 
+def _service_production_readiness_evidence(slug: str) -> dict[str, object]:
+    checks: list[dict[str, object]] = [
+        {
+            "name": "runtime",
+            "status": "ready",
+            "message": "Runtime deployment reconciled successfully.",
+        },
+        {
+            "name": "secrets",
+            "status": "accepted-for-now",
+            "storage": "kubernetes-secrets",
+            "message": (
+                "Phase 1 stores Service and binding secrets in Kubernetes Secrets."
+            ),
+        },
+        {
+            "name": "backup",
+            "status": "deferred",
+            "message": "Backup implementation is explicitly deferred for this slice.",
+        },
+        {
+            "name": "maintenance",
+            "status": "deferred",
+            "message": (
+                "Maintenance actions beyond lifecycle reconcile are future work."
+            ),
+        },
+    ]
+    if slug == "zitadel":
+        checks.extend(
+            [
+                {
+                    "name": "exposure",
+                    "status": "planned",
+                    "public": True,
+                    "private": True,
+                    "message": (
+                        "Production exposure should support public HTTPS and "
+                        "private access."
+                    ),
+                },
+                {
+                    "name": "tls",
+                    "status": "external",
+                    "termination": "external",
+                    "message": "TLS termination remains external to Nephos for now.",
+                },
+                {
+                    "name": "database-topology",
+                    "status": "accepted-for-now",
+                    "topology": "embedded-postgres-sidecar",
+                    "message": (
+                        "Embedded Postgres sidecar is accepted for now and must "
+                        "remain replaceable by the shared PostgreSQL Service later."
+                    ),
+                },
+                {
+                    "name": "provisioning",
+                    "status": "needs-production-transport",
+                    "issuerHostPolicy": "same-host-private-path",
+                    "message": (
+                        "Provisioning must preserve the canonical issuer hostname "
+                        "while using a production/private network path, not the "
+                        "debug tunnel or host port-forward."
+                    ),
+                },
+            ]
+        )
+    return {
+        "source": "nephos-api",
+        "subject": slug,
+        "reason": "production_readiness",
+        "message": "Service production-readiness dimensions evaluated.",
+        "data": {
+            "contractVersion": "2026-06-23",
+            "checks": checks,
+        },
+    }
+
+
+
 def _target_slug(request: dict[str, object]) -> str:
     snapshot = json.loads(str(request["target_snapshot_json"]))
     slug = snapshot.get("slug")
@@ -859,6 +1033,21 @@ def _app_manifest_from_row(row: dict[str, object]) -> AppManifest:
     return AppManifest.model_validate(raw)
 
 
+def _service_manifest_from_row(row: dict[str, object]) -> ServiceManifest:
+    raw = yaml.safe_load(Path(str(row["catalog_source_path"])).read_text())
+    return ServiceManifest.model_validate(raw)
+
+
+def _optional_service_manifest_from_row(
+    row: dict[str, object],
+) -> ServiceManifest | None:
+    source_path = Path(str(row["catalog_source_path"]))
+    if not source_path.exists():
+        return None
+    raw = yaml.safe_load(source_path.read_text())
+    return ServiceManifest.model_validate(raw)
+
+
 def _app_row_should_reconcile_routes(row: dict[str, object]) -> bool:
     if row.get("lifecycle") == "removed" or row.get("delete_requested_at") is not None:
         return False
@@ -871,6 +1060,22 @@ def _resource_type(value: str) -> ResourceType:
     if value == "service_instance":
         return "service_instance"
     raise ValueError(f"unsupported namespace resource type {value}")
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _stored_config(row: dict[str, object]) -> dict[str, object]:
+    config_json = row.get("config_json")
+    if not isinstance(config_json, str):
+        return {}
+    config = json.loads(config_json)
+    if not isinstance(config, dict):
+        return {}
+    return dict(config)
 
 
 def _binding_output_values(row: dict[str, object]) -> dict[str, str] | None:
@@ -893,12 +1098,18 @@ def _redacted_binding_output_summary(
     *,
     app_slug: str,
     alias: str,
+    capability: str,
+    protocol: str | None,
     values: dict[str, str],
 ) -> dict[str, object]:
-    return {
+    summary: dict[str, object] = {
         "target": "app-secret",
         "secretName": f"nephos-bind-{alias}",
         "namespace": f"app-{app_slug}",
         "keys": sorted(values),
         "redacted": True,
     }
+    if protocol is not None:
+        summary["capability"] = capability
+        summary["protocol"] = protocol
+    return summary

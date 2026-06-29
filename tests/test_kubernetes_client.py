@@ -13,6 +13,7 @@ from nephos_api.kubernetes_client import (
 class FakeConfigLoader:
     def __init__(self) -> None:
         self.calls: list[tuple[str | None, str | None]] = []
+        self.incluster_calls = 0
 
     def load_kube_config(
         self,
@@ -21,6 +22,14 @@ class FakeConfigLoader:
         context: str | None = None,
     ) -> None:
         self.calls.append((config_file, context))
+
+    def load_incluster_config(self) -> None:
+        self.incluster_calls += 1
+
+
+class KubeconfigFailureInclusterSuccessLoader(FakeConfigLoader):
+    def load_kube_config(self, **_kwargs: object) -> None:
+        raise RuntimeError("kubeconfig unavailable")
 
 
 def _settings(
@@ -43,6 +52,7 @@ def test_load_kubernetes_config_uses_normal_resolution_by_default() -> None:
     load_kubernetes_config(_settings(), config_loader=loader)
 
     assert loader.calls == [(None, None)]
+    assert loader.incluster_calls == 0
 
 
 def test_load_kubernetes_config_uses_env_override_settings(tmp_path: Path) -> None:
@@ -55,6 +65,29 @@ def test_load_kubernetes_config_uses_env_override_settings(tmp_path: Path) -> No
     )
 
     assert loader.calls == [(str(kubeconfig), "nephos-dev")]
+    assert loader.incluster_calls == 0
+
+
+def test_load_kubernetes_config_falls_back_to_incluster_without_overrides() -> None:
+    loader = KubeconfigFailureInclusterSuccessLoader()
+
+    load_kubernetes_config(_settings(), config_loader=loader)
+
+    assert loader.incluster_calls == 1
+
+
+def test_load_kubernetes_config_does_not_fallback_when_overrides_fail(
+    tmp_path: Path,
+) -> None:
+    loader = KubeconfigFailureInclusterSuccessLoader()
+
+    with pytest.raises(KubernetesConfigError, match="kubeconfig unavailable"):
+        load_kubernetes_config(
+            _settings(kubeconfig=tmp_path / "kubeconfig"),
+            config_loader=loader,
+        )
+
+    assert loader.incluster_calls == 0
 
 
 def test_load_kubernetes_config_wraps_loader_errors() -> None:
@@ -62,7 +95,10 @@ def test_load_kubernetes_config_wraps_loader_errors() -> None:
         def load_kube_config(self, **_kwargs: object) -> None:
             raise RuntimeError("not reachable")
 
-    with pytest.raises(KubernetesConfigError, match="not reachable"):
+        def load_incluster_config(self) -> None:
+            raise RuntimeError("incluster not reachable")
+
+    with pytest.raises(KubernetesConfigError, match="incluster not reachable"):
         load_kubernetes_config(_settings(), config_loader=BrokenConfigLoader())
 
 

@@ -201,6 +201,15 @@ Service install shape:
 }
 ```
 
+Service install `config` is validated against the selected Service manifest
+before desired state is written.
+
+Unknown Service config keys return `service_config_unknown`.
+
+Missing required Service config values return `service_config_required`.
+
+Invalid Service config value types or enum values return `service_config_invalid`.
+
 `catalogRef.source` is optional unless needed to disambiguate duplicate catalog entries.
 
 `catalogRef.source` uses catalog source ids such as `default` or `local-1`.

@@ -98,6 +98,7 @@ class DesiredStateRepository:
                     bindings.id,
                     bindings.alias,
                     bindings.capability,
+                    bindings.protocol,
                     bindings.output_summary_json,
                     app_instances.slug AS app_instance_slug,
                     service_instances.id AS service_instance_id,
@@ -122,6 +123,7 @@ class DesiredStateRepository:
                     bindings.id,
                     bindings.alias,
                     bindings.capability,
+                    bindings.protocol,
                     bindings.generation,
                     bindings.output_summary_json,
                     bindings.created_at,
@@ -149,6 +151,7 @@ class DesiredStateRepository:
                     bindings.id,
                     bindings.alias,
                     bindings.capability,
+                    bindings.protocol,
                     bindings.generation,
                     bindings.output_summary_json,
                     bindings.created_at,
@@ -200,7 +203,8 @@ class DesiredStateRepository:
                     app_instances.delete_requested_at AS app_delete_requested_at,
                     bindings.id AS binding_id,
                     bindings.alias AS binding_alias,
-                    bindings.capability
+                    bindings.capability,
+                    bindings.protocol
                 FROM bindings
                 JOIN app_instances
                     ON app_instances.id = bindings.app_instance_id
@@ -377,6 +381,7 @@ class StateTransaction:
         service_instance_id: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         output_summary: Mapping[str, object] | None = None,
     ) -> Binding:
         validate_machine_identifier(alias)
@@ -385,6 +390,7 @@ class StateTransaction:
             id=generate_id("binding"),
             alias=alias,
             capability=capability,
+            protocol=protocol,
             generation=1,
         )
         self._connection.execute(
@@ -395,12 +401,13 @@ class StateTransaction:
                 service_instance_id,
                 alias,
                 capability,
+                protocol,
                 generation,
                 output_summary_json,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 binding.id,
@@ -408,6 +415,7 @@ class StateTransaction:
                 service_instance_id,
                 binding.alias,
                 binding.capability,
+                binding.protocol,
                 binding.generation,
                 _json_object(output_summary),
                 now,

@@ -6,7 +6,9 @@
 
 ## Context and Problem Statement
 
-API 0.0.1 loads catalog entries from one repo-shipped catalog root plus optional local filesystem roots configured through `NEPHOS_API_CATALOG_ROOTS`.
+API 0.0.1 loads catalog entries from the managed first-party `core-registry`
+checkout by default. When `NEPHOS_API_CATALOG_ROOTS` is set, those local roots
+replace the managed registry dependency set for development experiments.
 
 Duplicate catalog entries with the same kind and name are already defined as ambiguous unless the caller explicitly selects a source.
 
@@ -22,13 +24,13 @@ The remaining implementation blockers are:
 
 Use stable source ids within the current backend configuration.
 
-The repo-shipped catalog root uses source id:
+The managed core registry, or the first configured override root, uses source id:
 
 ```text
 default
 ```
 
-Additional roots from `NEPHOS_API_CATALOG_ROOTS` use source ids in configured order:
+Additional configured override roots use source ids in configured order:
 
 ```text
 local-1

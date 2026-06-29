@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from catalog_fixtures import write_app
+from catalog_fixtures import write_app, write_service
 
 from nephos_api.db import migrate_database
 from nephos_api.kubernetes_runtime import KubernetesRuntimeSafetyError
@@ -36,17 +36,19 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> None:
-        self.binding_secrets.append(
-            {
-                "app_slug": app_slug,
-                "service_slug": service_slug,
-                "alias": alias,
-                "capability": capability,
-                "values": values,
-            }
-        )
+        record = {
+            "app_slug": app_slug,
+            "service_slug": service_slug,
+            "alias": alias,
+            "capability": capability,
+            "values": values,
+        }
+        if protocol is not None:
+            record["protocol"] = protocol
+        self.binding_secrets.append(record)
 
     def delete_binding_secret_if_owned(
         self,
@@ -55,15 +57,17 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
-        self.deleted_binding_secrets.append(
-            {
-                "app_slug": app_slug,
-                "service_slug": service_slug,
-                "alias": alias,
-                "capability": capability,
-            }
-        )
+        record = {
+            "app_slug": app_slug,
+            "service_slug": service_slug,
+            "alias": alias,
+            "capability": capability,
+        }
+        if protocol is not None:
+            record["protocol"] = protocol
+        self.deleted_binding_secrets.append(record)
         return True
 
     def scale_workloads(
@@ -108,6 +112,7 @@ class FailingRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> None:
         raise RuntimeError(f"boom for binding {alias}")
@@ -119,6 +124,7 @@ class FailingRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         raise RuntimeError(f"boom for binding {alias}")
 
@@ -220,6 +226,7 @@ class RecordingRuntime(FakeRuntime):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         self.events.append(f"delete-binding-secret:{alias}")
         return super().delete_binding_secret_if_owned(
@@ -227,6 +234,7 @@ class RecordingRuntime(FakeRuntime):
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         )
 
     def delete_namespace_if_owned(self, resource_type: str, slug: str) -> bool:
@@ -600,6 +608,64 @@ def test_service_deployment_enqueues_dependent_binding_reconciles(
         ("binding", binding.id, binding.generation, "reconcile", "pending")
     ]
     _assert_reconciled_deployment_status(repo, request.id, service.id)
+
+
+def test_service_deployment_enqueues_dependent_service_reconciles(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    deployer = FakeDeployer()
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_requiring_postgres(catalog_root)
+    with repo.transaction() as tx:
+        postgres = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        zitadel = tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=postgres.id,
+            target_generation=postgres.generation,
+            action="install",
+            target_snapshot={"slug": postgres.slug},
+        )
+
+    assert Reconciler(repo, runtime=runtime, deployer=deployer).run_once() == 1
+
+    with sqlite3.connect(repo.db_path) as connection:
+        service_requests = connection.execute(
+            """
+            SELECT target_type, target_id, target_generation, action, state
+            FROM reconciliation_requests
+            WHERE target_type = 'service_instance'
+                AND target_id = ?
+                AND action = 'reconcile'
+            """,
+            (zitadel.id,),
+        ).fetchall()
+
+    assert service_requests == [
+        ("service_instance", zitadel.id, zitadel.generation, "reconcile", "pending")
+    ]
+    _assert_reconciled_deployment_status(repo, request.id, postgres.id)
 
 
 def test_service_deployment_does_not_duplicate_pending_binding_reconciles(
@@ -1727,6 +1793,118 @@ def test_binding_reconcile_uses_provisioner_without_persisting_secret_values(
     _assert_reconciled_binding_status(repo, request.id, binding.id)
 
 
+def test_binding_reconcile_persists_protocol_in_redacted_summary(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = write_app(catalog_root)
+    service_manifest_path = _write_zitadel_service_with_config_defaults(catalog_root)
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    values = {
+        "issuerUrl": "https://zitadel.example",
+        "clientId": "client-1",
+        "clientSecret": "secret-client",
+        "redirectUris": '["https://paperless.example/callback"]',
+    }
+    provisioner = FakeProvisioner(values)
+    with repo.transaction() as tx:
+        domain = tx.create_platform_domain(
+            name="local",
+            domain="nephos.local",
+            is_default=True,
+        )
+        service = tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(service_manifest_path),
+            manifest_digest="sha256:zitadel",
+            config={"external-port": 8443},
+        )
+        app = tx.create_app_instance(
+            slug="paperless",
+            catalog_name="paperless",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:paperless",
+        )
+        binding = tx.create_binding(
+            app_instance_id=app.id,
+            service_instance_id=service.id,
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+            output_summary={
+                "target": "app-secret",
+                "secretName": "nephos-bind-auth",
+                "namespace": "app-paperless",
+                "keys": ["redacted"],
+                "redacted": True,
+            },
+        )
+        request = tx.create_reconciliation_request(
+            target_type="binding",
+            target_id=binding.id,
+            target_generation=binding.generation,
+            action="reconcile",
+            target_snapshot={"id": binding.id, "alias": binding.alias},
+        )
+
+    assert Reconciler(repo, runtime=runtime, provisioner=provisioner).run_once() == 1
+
+    assert provisioner.contexts == [
+        BindingProvisioningContext(
+            binding_id=binding.id,
+            app_slug="paperless",
+            service_slug="zitadel",
+            alias="auth",
+            capability="oidc",
+            protocol="oidc",
+            service_config={
+                "external-host": "login.default.test",
+                "external-port": 8443,
+                "external-secure": False,
+            },
+            app_routes=(
+                {"name": "web", "visibility": "local", "target": {"port": "http"}},
+            ),
+            platform_domains=(
+                {
+                    "id": domain.id,
+                    "name": "local",
+                    "domain": "nephos.local",
+                    "default": True,
+                },
+            ),
+        )
+    ]
+    assert runtime.binding_secrets == [
+        {
+            "app_slug": "paperless",
+            "service_slug": "zitadel",
+            "alias": "auth",
+            "capability": "oidc",
+            "protocol": "oidc",
+            "values": values,
+        }
+    ]
+    row = repo.get_binding_row(binding.id)
+    assert row is not None
+    summary = json.loads(str(row["output_summary_json"]))
+    assert summary == {
+        "target": "app-secret",
+        "secretName": "nephos-bind-auth",
+        "namespace": "app-paperless",
+        "capability": "oidc",
+        "protocol": "oidc",
+        "keys": ["clientId", "clientSecret", "issuerUrl", "redirectUris"],
+        "redacted": True,
+    }
+    assert "secret-client" not in str(row["output_summary_json"])
+    _assert_reconciled_binding_status(repo, request.id, binding.id)
+
+
 def test_binding_reconcile_skips_runtime_materialization_for_removed_app(
     tmp_path: Path,
 ) -> None:
@@ -2140,6 +2318,71 @@ spec:
       version: "1.0.0"
     values:
       mappings: []
+""".strip()
+    )
+    return path
+
+
+def _write_service_requiring_postgres(root: Path) -> Path:
+    path = root / "services" / "zitadel" / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: zitadel
+spec:
+  provides:
+    - capability: oidc
+      protocol: oidc
+      as: oidc
+  requires:
+    - capability: sql
+      protocol: postgres
+      as: database
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: zitadel
+""".strip()
+    )
+    return path
+
+
+def _write_zitadel_service_with_config_defaults(root: Path) -> Path:
+    path = root / "services" / "zitadel" / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: zitadel
+spec:
+  provides:
+    - capability: oidc
+      protocol: oidc
+      as: oidc
+  config:
+    options:
+      - name: external-host
+        type: string
+        default: login.default.test
+      - name: external-port
+        type: integer
+        default: 443
+      - name: external-secure
+        type: boolean
+        default: false
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: zitadel
 """.strip()
     )
     return path

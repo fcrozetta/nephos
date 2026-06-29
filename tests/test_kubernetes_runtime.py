@@ -368,7 +368,8 @@ def test_runtime_creates_binding_secret_with_redacted_relationship_labels() -> N
         app_slug="paperless",
         service_slug="postgres",
         alias="database",
-        capability="postgres",
+        capability="sql",
+        protocol="postgres",
         values={
             "host": "postgres.svc",
             "port": "5432",
@@ -385,9 +386,11 @@ def test_runtime_creates_binding_secret_with_redacted_relationship_labels() -> N
         "app.kubernetes.io/managed-by": "nephos",
         "nephos.pro/app-instance": "paperless",
         "nephos.pro/service-instance": "postgres",
-        "nephos.pro/capability": "postgres",
+        "nephos.pro/capability": "sql",
+        "nephos.pro/protocol": "postgres",
         "nephos.pro/binding-alias": "database",
     }
+    assert secret.metadata.annotations is None
     assert secret.string_data == {
         "host": "postgres.svc",
         "port": "5432",
@@ -397,6 +400,32 @@ def test_runtime_creates_binding_secret_with_redacted_relationship_labels() -> N
         "uri": "postgres://paperless:secret@postgres.svc:5432/paperless",
     }
     assert api.created_secrets == [secret]
+
+
+def test_runtime_keeps_binding_secret_name_alias_based_with_protocol() -> None:
+    api = FakeCoreV1Api()
+    runtime = KubernetesRuntime(api)
+    runtime.ensure_namespace("app_instance", "paperless")
+
+    secret = runtime.ensure_binding_secret(
+        app_slug="paperless",
+        service_slug="arcadedb",
+        alias="graph",
+        capability="opencypher",
+        protocol="bolt",
+        values={"uri": "bolt://arcadedb"},
+    )
+
+    assert secret.metadata is not None
+    assert secret.metadata.name == "nephos-bind-graph"
+    assert secret.metadata.labels == {
+        "app.kubernetes.io/managed-by": "nephos",
+        "nephos.pro/app-instance": "paperless",
+        "nephos.pro/service-instance": "arcadedb",
+        "nephos.pro/capability": "opencypher",
+        "nephos.pro/protocol": "bolt",
+        "nephos.pro/binding-alias": "graph",
+    }
 
 
 def test_runtime_replaces_owned_binding_secret() -> None:

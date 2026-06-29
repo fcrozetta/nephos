@@ -11,8 +11,13 @@ from nephos_api.main import create_app
 def _client_with_binding(tmp_path: Path) -> tuple[TestClient, str]:
     db_path = tmp_path / "nephos.db"
     catalog_root = tmp_path / "catalog"
-    write_app(catalog_root)
-    write_service(catalog_root)
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
     migrate_database(db_path=db_path)
     app = create_app(
         settings=Settings(
@@ -47,7 +52,8 @@ def test_list_bindings_returns_redacted_binding_snapshots(tmp_path: Path) -> Non
             {
                 "id": binding_id,
                 "alias": "database",
-                "capability": "postgres",
+                "capability": "sql",
+                "protocol": "postgres",
                 "appInstance": {
                     "id": response.json()["bindings"][0]["appInstance"]["id"],
                     "slug": "paperless",

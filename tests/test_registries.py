@@ -1,0 +1,108 @@
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from nephos_api.config import ManagedCatalogRegistry, Settings
+from nephos_api.registries import RegistrySyncError, ensure_managed_catalog_registries
+
+
+def _settings(registry: ManagedCatalogRegistry) -> Settings:
+    return Settings(
+        db_path=registry.path.parent / "nephos.db",
+        catalog_roots=(registry.path,),
+        kubeconfig=None,
+        kube_context=None,
+        managed_catalog_registries=(registry,),
+    )
+
+
+def test_ensure_managed_catalog_registries_clones_missing_registry(
+    tmp_path: Path,
+) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+    commands: list[list[str]] = []
+
+    def fake_runner(command):
+        commands.append(list(command))
+        registry.path.mkdir(parents=True)
+        (registry.path / ".git").mkdir()
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)
+
+    assert commands == [
+        ["git", "clone", "--depth", "1", registry.url, str(registry.path)]
+    ]
+
+
+def test_ensure_managed_catalog_registries_keeps_existing_checkout(
+    tmp_path: Path,
+) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+    (registry.path / ".git").mkdir(parents=True)
+    commands: list[list[str]] = []
+
+    def fake_runner(command):
+        commands.append(list(command))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    ensure_managed_catalog_registries(
+        _settings(registry),
+        runner=fake_runner,
+    )
+
+    assert commands == []
+
+
+def test_ensure_managed_catalog_registries_rejects_existing_non_checkout(
+    tmp_path: Path,
+) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+    registry.path.mkdir(parents=True)
+
+    def fake_runner(command):
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    with pytest.raises(RegistrySyncError, match="not a git checkout"):
+        ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)
+
+
+def test_ensure_managed_catalog_registries_wraps_clone_failure(tmp_path: Path) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+
+    def fake_runner(command):
+        raise subprocess.CalledProcessError(128, command, stderr="network down")
+
+    with pytest.raises(RegistrySyncError, match="network down"):
+        ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)
+
+
+def test_ensure_managed_catalog_registries_wraps_missing_git(tmp_path: Path) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+
+    def fake_runner(_command):
+        raise FileNotFoundError("git")
+
+    with pytest.raises(RegistrySyncError, match="git"):
+        ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)

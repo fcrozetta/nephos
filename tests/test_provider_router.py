@@ -60,3 +60,34 @@ def test_runtime_provider_router_blocks_unknown_provider_runtime() -> None:
         assert exc.reason == "runtime_provider_unknown"
     else:
         raise AssertionError("expected unknown provider runtime to block")
+
+
+def test_runtime_provider_router_dispatches_alpha_backbone_service_names() -> None:
+    helm = RecordingProvider()
+    providers = {
+        "postgres": RecordingProvider(),
+        "zitadel": RecordingProvider(),
+        "seaweedfs": RecordingProvider(),
+        "arcadedb": RecordingProvider(),
+    }
+    router = RuntimeProviderRouter(
+        helm_provider=helm,
+        provider_runtimes=providers,
+    )
+
+    for provider_name, provider in providers.items():
+        context = ProviderContext(
+            target_type="service_instance",
+            slug=provider_name,
+            runtime_name=f"svc-{provider_name}",
+            manifest=None,
+            chart=None,
+            values={"marker": provider_name},
+            provider_name=provider_name,
+        )
+
+        router.deploy(context)
+
+        assert provider.deployed == [context]
+
+    assert helm.deployed == []

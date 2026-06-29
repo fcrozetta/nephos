@@ -15,6 +15,7 @@ from nephos_api.providers.pulumi import (
     _pulumi_release_config,
     _pulumi_workspace_env_vars,
 )
+from nephos_api.provisioners.base import BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -41,6 +42,28 @@ class RecordingPulumiRunner:
 
     def destroy(self, spec: PulumiHelmReleaseSpec) -> None:
         self.destroys.append(spec)
+
+
+class RecordingDependencyProvisioner:
+    def __init__(self) -> None:
+        self.contexts: list[BindingProvisioningContext] = []
+        self.deprovisioned: list[BindingProvisioningContext] = []
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str] | None:
+        self.contexts.append(context)
+        return {
+            "host": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
+            "port": "5432",
+            "database": "nephos_zitadel_database",
+            "username": "nephos_zitadel_database",
+            "password": "pg-secret",
+        }
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        self.deprovisioned.append(context)
 
 
 def test_provider_runtime_deployer_dispatches_services_to_service_provider(
@@ -163,6 +186,202 @@ def test_provider_runtime_deployer_passes_provider_runtime_without_chart(
     context = service_provider.deployed[0]
     assert context.chart is None
     assert context.provider_name == "postgres"
+
+
+def test_provider_runtime_deployer_maps_service_config_defaults_and_overrides(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_provider_service_with_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    app_provider = RecordingProvider()
+    service_provider = RecordingProvider()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"storage-size": "8Gi"},
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=app_provider,
+        service_provider=service_provider,
+    )
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    context = service_provider.deployed[0]
+    assert context.values == {
+        "image": "postgres:16-alpine",
+        "storageSize": "8Gi",
+        "debug": {"enabled": False},
+    }
+
+
+def test_provider_runtime_deployer_provisions_service_dependencies(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    app_provider = RecordingProvider()
+    service_provider = RecordingProvider()
+    provisioner = RecordingDependencyProvisioner()
+    with repo.transaction() as tx:
+        postgres = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+        _mark_service_runtime_deployed(tx, postgres.id, postgres.generation)
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=app_provider,
+        service_provider=service_provider,
+        service_dependency_provisioner=provisioner,
+    )
+    deployer.deploy(target_type="service_instance", slug="zitadel")
+
+    context = service_provider.deployed[0]
+    assert context.values == {
+        "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
+        "databasePort": "5432",
+        "databaseName": "nephos_zitadel_database",
+        "databaseUsername": "nephos_zitadel_database",
+        "databasePassword": "pg-secret",
+    }
+    assert len(provisioner.contexts) == 1
+    provision_context = provisioner.contexts[0]
+    assert provision_context.app_slug == "zitadel"
+    assert provision_context.service_slug == "postgres"
+    assert provision_context.alias == "database"
+    assert provision_context.capability == "sql"
+    assert provision_context.protocol == "postgres"
+    assert provisioner.deprovisioned == []
+
+
+def test_provider_runtime_deployer_blocks_service_dependency_until_provider_deployed(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    provisioner = RecordingDependencyProvisioner()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+        service_dependency_provisioner=provisioner,
+    )
+
+    try:
+        deployer.deploy(target_type="service_instance", slug="zitadel")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "service_dependency_provider_unavailable"
+    else:
+        raise AssertionError("expected undeployed dependency provider to block")
+
+    assert provisioner.contexts == []
+    assert service_provider.deployed == []
+
+
+def test_provider_runtime_deployer_deprovisions_service_dependencies_on_uninstall(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    postgres_manifest = write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    app_provider = RecordingProvider()
+    service_provider = RecordingProvider()
+    provisioner = RecordingDependencyProvisioner()
+    with repo.transaction() as tx:
+        postgres = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(postgres_manifest),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(zitadel_manifest),
+            manifest_digest="sha256:zitadel",
+        )
+        _mark_service_runtime_deployed(tx, postgres.id, postgres.generation)
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=app_provider,
+        service_provider=service_provider,
+        service_dependency_provisioner=provisioner,
+    )
+    deployer.uninstall(target_type="service_instance", slug="zitadel")
+
+    assert provisioner.contexts == []
+    assert len(provisioner.deprovisioned) == 1
+    context = provisioner.deprovisioned[0]
+    assert context.binding_id == "service-zitadel-database"
+    assert context.app_slug == "zitadel"
+    assert context.service_slug == "postgres"
+    assert context.alias == "database"
+    assert context.capability == "sql"
+    assert context.protocol == "postgres"
+    assert len(service_provider.uninstalled) == 1
+    assert service_provider.uninstalled[0].slug == "zitadel"
+    assert service_provider.uninstalled[0].values == {}
 
 
 def test_pulumi_helm_provider_maps_context_to_local_stack_operations(
@@ -379,6 +598,20 @@ def _repo(tmp_path: Path) -> DesiredStateRepository:
     return DesiredStateRepository(db_path)
 
 
+def _mark_service_runtime_deployed(tx, service_id: str, generation: int) -> None:
+    tx.upsert_status_snapshot(
+        resource_type="service_instance",
+        resource_id=service_id,
+        level="healthy",
+        lifecycle="running",
+        reconciliation="succeeded",
+        reason="runtime_deployed",
+        message="Runtime deployment is present and owned by Nephos.",
+        evidence=[],
+        observed_generation=generation,
+    )
+
+
 def _write_app_with_runtime_mappings(root: Path) -> Path:
     path = root / "apps" / "paperless" / "app.yaml"
     path.parent.mkdir(parents=True)
@@ -441,6 +674,120 @@ spec:
     type: provider
     provider:
       name: postgres
+""".strip()
+    )
+    return path
+
+
+def _write_provider_service_with_runtime_mappings(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: image
+        type: string
+        default: postgres:16-alpine
+      - name: storage-size
+        type: string
+        default: 1Gi
+      - name: debug-enabled
+        type: boolean
+        default: false
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
+    values:
+      mappings:
+        - from:
+            kind: config
+            name: image
+          to:
+            helmValue: image
+        - from:
+            kind: config
+            name: storage-size
+          to:
+            helmValue: storageSize
+        - from:
+            kind: config
+            name: debug-enabled
+          to:
+            helmValue: debug.enabled
+""".strip()
+    )
+    return path
+
+
+def _write_service_with_dependency_runtime_mappings(root: Path) -> Path:
+    path = root / "services" / "zitadel" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: zitadel
+spec:
+  provides:
+    - capability: oidc
+      protocol: oidc
+      as: oidc
+  requires:
+    - capability: sql
+      protocol: postgres
+      as: database
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: zitadel
+    values:
+      mappings:
+        - from:
+            kind: binding
+            name: database
+            field: host
+          to:
+            helmValue: databaseHost
+        - from:
+            kind: binding
+            name: database
+            field: port
+          to:
+            helmValue: databasePort
+        - from:
+            kind: binding
+            name: database
+            field: database
+          to:
+            helmValue: databaseName
+        - from:
+            kind: binding
+            name: database
+            field: username
+          to:
+            helmValue: databaseUsername
+        - from:
+            kind: binding
+            name: database
+            field: password
+          to:
+            helmValue: databasePassword
 """.strip()
     )
     return path

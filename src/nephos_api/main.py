@@ -27,6 +27,7 @@ from nephos_api.providers import (
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.reconciler import Reconciler, RuntimeAdapter, RuntimeDeployer
 from nephos_api.reconciler_worker import ReconcilerWorker
+from nephos_api.registries import ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
 
 RuntimeFactory = Callable[[Settings], RuntimeAdapter]
@@ -43,6 +44,7 @@ def create_app(
     provisioner: BindingProvisioner | None = None,
     provisioner_factory: ProvisionerFactory | None = None,
     reconciler_interval_seconds: float = 1.0,
+    ensure_registries: bool = True,
 ) -> FastAPI:
     resolved_settings = settings if settings is not None else load_settings()
     lifespan = _lifespan(
@@ -52,10 +54,12 @@ def create_app(
         provisioner=provisioner,
         provisioner_factory=provisioner_factory,
         reconciler_interval_seconds=reconciler_interval_seconds,
+        ensure_registries=ensure_registries,
     )
     app = FastAPI(title="Nephos API", version=__version__, lifespan=lifespan)
     app.state.settings = resolved_settings
     app.state.repository = DesiredStateRepository(resolved_settings.db_path)
+    app.state.ensure_registries = ensure_registries
     app.state.reconciler_enabled = start_reconciler
     app.state.deployer_enabled = deployer_factory is not None
     app.state.provisioner_enabled = (
@@ -86,11 +90,14 @@ def _lifespan(
     provisioner: BindingProvisioner | None,
     provisioner_factory: ProvisionerFactory | None,
     reconciler_interval_seconds: float,
+    ensure_registries: bool,
 ) -> Callable[[FastAPI], AsyncIterator[None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         task: asyncio.Task[None] | None = None
         worker: ReconcilerWorker | None = None
+        if ensure_registries:
+            ensure_managed_catalog_registries(app.state.settings)
         if start_reconciler:
             runtime = _LazyRuntimeAdapter(runtime_factory, app.state.settings)
             deployer = (
@@ -165,6 +172,7 @@ class _LazyRuntimeAdapter:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> object:
         return self._get().ensure_binding_secret(
@@ -172,6 +180,7 @@ class _LazyRuntimeAdapter:
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
             values=values,
         )
 
@@ -182,12 +191,14 @@ class _LazyRuntimeAdapter:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         return self._get().delete_binding_secret_if_owned(
             app_slug=app_slug,
             service_slug=service_slug,
             alias=alias,
             capability=capability,
+            protocol=protocol,
         )
 
     def scale_workloads(
@@ -277,6 +288,7 @@ def default_provider_deployer_factory(
     from kubernetes import client
 
     from nephos_api.kubernetes_runtime import KubernetesSecretBindingValueSource
+    from nephos_api.provisioning import PostgresAppScopedProvisioner
 
     load_kubernetes_config(settings)
     core_v1_api = client.CoreV1Api()
@@ -288,7 +300,7 @@ def default_provider_deployer_factory(
             "reference-web": PulumiKubernetesProvider(
                 config=kubernetes_config,
                 workload="reference-app",
-            )
+            ),
         },
     )
     service_provider = RuntimeProviderRouter(
@@ -297,7 +309,15 @@ def default_provider_deployer_factory(
             "postgres": PulumiKubernetesProvider(
                 config=kubernetes_config,
                 workload="postgres-service",
-            )
+            ),
+            "zitadel": PulumiKubernetesProvider(
+                config=kubernetes_config,
+                workload="zitadel-service",
+            ),
+            "cloudflared": PulumiKubernetesProvider(
+                config=kubernetes_config,
+                workload="cloudflared-service",
+            ),
         },
     )
     return ProviderRuntimeDeployer(
@@ -305,6 +325,9 @@ def default_provider_deployer_factory(
         app_provider=app_provider,
         service_provider=service_provider,
         binding_value_source=KubernetesSecretBindingValueSource(core_v1_api),
+        service_dependency_provisioner=PostgresAppScopedProvisioner(
+            core_v1_api=core_v1_api
+        ),
     )
 
 
@@ -344,10 +367,32 @@ def _pulumi_base_dir(settings: Settings) -> Path:
 def default_postgres_provisioner_factory(settings: Settings) -> BindingProvisioner:
     from kubernetes import client
 
-    from nephos_api.provisioning import PostgresAppScopedProvisioner
+    from nephos_api.provisioning import (
+        CompositeBindingProvisioner,
+        KubernetesPulumiZitadelProvisioningClient,
+        KubernetesZitadelProvisionerConfig,
+        PostgresAppScopedProvisioner,
+        ZitadelAppScopedProvisioner,
+    )
 
     load_kubernetes_config(settings)
-    return PostgresAppScopedProvisioner(core_v1_api=client.CoreV1Api())
+    core_v1_api = client.CoreV1Api()
+    pulumi_dir = _pulumi_base_dir(settings) / "pulumi"
+    zitadel_client = KubernetesPulumiZitadelProvisioningClient(
+        core_v1_api=core_v1_api,
+        config=KubernetesZitadelProvisionerConfig(
+            work_dir=pulumi_dir / "workspaces",
+            state_dir=pulumi_dir / "state",
+            kubeconfig=settings.kubeconfig,
+            kube_context=settings.kube_context,
+        ),
+    )
+    return CompositeBindingProvisioner(
+        [
+            PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
+            ZitadelAppScopedProvisioner(client=zitadel_client),
+        ]
+    )
 
 
 app = create_app()

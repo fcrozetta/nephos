@@ -509,8 +509,10 @@ dependencies = [
     { name = "kubernetes" },
     { name = "pulumi" },
     { name = "pulumi-kubernetes" },
+    { name = "pulumiverse-zitadel" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "setuptools" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
@@ -529,8 +531,10 @@ requires-dist = [
     { name = "kubernetes", specifier = ">=31,<35" },
     { name = "pulumi", specifier = ">=3,<4" },
     { name = "pulumi-kubernetes", specifier = ">=4,<5" },
+    { name = "pulumiverse-zitadel", specifier = ">=0.2,<1" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "setuptools", specifier = ">=70,<81" },
     { name = "typer", specifier = ">=0.12,<1" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]
@@ -737,6 +741,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/65/a4/62252f0283392f7a4f516fcc1e832649e78ecd56408881770495d3175088/pulumi_kubernetes-4.31.1.tar.gz", hash = "sha256:14f041dcf289e1151db30a7955ff4fb5c3e4f84ac8f24814bb6c61b1ae7a94e1", size = 1979144, upload-time = "2026-05-19T19:27:49.643Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/6c/af048163a4280c6941860abeaeb72e6c1133971c5679d4da823d4177d5d7/pulumi_kubernetes-4.31.1-py3-none-any.whl", hash = "sha256:94e7a6b8963d6b237b84d1fde8794bc6c9a129a558303219209c2db9cb589466", size = 3094266, upload-time = "2026-05-19T19:27:46.508Z" },
+]
+
+[[package]]
+name = "pulumiverse-zitadel"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "parver" },
+    { name = "pulumi" },
+    { name = "semver" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/ab/8584cbe3540c7ba92bab64e6bdf84b86f8c23930391948b84514436e3f71/pulumiverse_zitadel-0.2.0.tar.gz", hash = "sha256:33549b5030358bad436065883531d93fa8d5657f2b87b9c5d962914a8ff14f30", size = 137082, upload-time = "2025-03-25T20:22:25.466Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/ce/3f820c832e2f5a84ef8e0cedf64465bd296d4a20a3e7f85f2be061b273bd/pulumiverse_zitadel-0.2.0-py3-none-any.whl", hash = "sha256:5cc491c82628d18f8a988a7cf73354ea4c10c6ec0c0615b5c2cb0c51967f1822", size = 273128, upload-time = "2025-03-25T20:22:24.154Z" },
 ]
 
 [[package]]
@@ -1015,6 +1033,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/d1/d3159231aec234a59dd7d601e9dd9fe96f3afff15efd33c1070019b26132/semver-3.0.4.tar.gz", hash = "sha256:afc7d8c584a5ed0a11033af086e8af226a9c0b206f313e0301f8dd7b6b589602", size = 269730, upload-time = "2025-01-24T13:19:27.617Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/24/4d91e05817e92e3a61c8a21e08fd0f390f5301f1c448b137c57c4bc6e543/semver-3.0.4-py3-none-any.whl", hash = "sha256:9c824d87ba7f7ab4a1890799cec8596f15c1241cb473404ea1cb0c55e4b04746", size = 17912, upload-time = "2025-01-24T13:19:24.949Z" },
+]
+
+[[package]]
+name = "setuptools"
+version = "80.10.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/95/faf61eb8363f26aa7e1d762267a8d602a1b26d4f3a1e758e92cb3cb8b054/setuptools-80.10.2.tar.gz", hash = "sha256:8b0e9d10c784bf7d262c4e5ec5d4ec94127ce206e8738f29a437945fbc219b70", size = 1200343, upload-time = "2026-01-25T22:38:17.252Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/b8/f1f62a5e3c0ad2ff1d189590bfa4c46b4f3b6e49cef6f26c6ee4e575394d/setuptools-80.10.2-py3-none-any.whl", hash = "sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173", size = 1064234, upload-time = "2026-01-25T22:38:15.216Z" },
 ]
 
 [[package]]

@@ -32,7 +32,7 @@ def test_migrations_are_packaged_resources() -> None:
         if migration.is_file() and migration.name.endswith(".sql")
     )
 
-    assert migration_names == ["0000_initial.sql"]
+    assert migration_names == ["0000_initial.sql", "0001_add_binding_protocol.sql"]
 
 
 def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
 
     migrate_database(db_path=db_path)
 
-    assert _versions(db_path) == ["0000_initial"]
+    assert _versions(db_path) == ["0000_initial", "0001_add_binding_protocol"]
     assert {
         "app_instances",
         "service_instances",
@@ -58,7 +58,20 @@ def test_migrate_database_is_idempotent(tmp_path: Path) -> None:
     migrate_database(db_path=db_path)
     migrate_database(db_path=db_path)
 
-    assert _versions(db_path) == ["0000_initial"]
+    assert _versions(db_path) == ["0000_initial", "0001_add_binding_protocol"]
+
+
+def test_binding_protocol_migration_adds_nullable_protocol(tmp_path: Path) -> None:
+    db_path = tmp_path / "nephos.db"
+
+    migrate_database(db_path=db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        columns = {
+            row[1]: row[2]
+            for row in connection.execute("PRAGMA table_info(bindings)").fetchall()
+        }
+    assert columns["protocol"] == "TEXT"
 
 
 def test_migrate_database_rejects_unknown_applied_versions(tmp_path: Path) -> None:

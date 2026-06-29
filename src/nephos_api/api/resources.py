@@ -16,10 +16,12 @@ from nephos_api.catalog import (
     CatalogLoader,
     CatalogSourceNotFoundError,
     CatalogValidationError,
+    ServiceManifest,
 )
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
 from nephos_api.kubernetes_runtime import ResourceType, namespace_name
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
 
 router = APIRouter(tags=["resources"])
@@ -69,30 +71,15 @@ def get_service(service_instance: str, request: Request) -> dict[str, Any]:
 
 @router.post("/services", status_code=status.HTTP_202_ACCEPTED)
 def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]:
-    if payload.catalogRef.kind != "Service":
-        raise NephosError(
-            status_code=400,
-            code="catalog_kind_mismatch",
-            message="Service install requires a Service catalog reference.",
-            details={"kind": payload.catalogRef.kind},
-        )
+    _require_catalog_kind(payload.catalogRef.kind, expected="Service")
 
-    _validate_catalog_name(payload.catalogRef.name)
-    loader = _loader(request)
-    catalog_entry = _catalog_or_404(
-        lambda: loader.get_service(
-            payload.catalogRef.name,
-            source=payload.catalogRef.source,
-        )
-    )
-    slug = payload.instanceName or catalog_entry["name"]
-    _validate_runtime_namespace_slug("service_instance", slug)
-    source_path = _catalog_source_path(
+    catalog_entry, slug, source_path = _install_catalog_entry(
+        payload,
         request,
         kind="Service",
-        name=catalog_entry["name"],
-        source=catalog_entry["source"],
     )
+    manifest = _load_service_manifest(source_path)
+    _validate_service_config(manifest, payload.config)
     repo = _repo(request)
 
     try:
@@ -194,31 +181,15 @@ def get_app(app_instance: str, request: Request) -> dict[str, Any]:
 
 @router.post("/apps", status_code=status.HTTP_202_ACCEPTED)
 def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
-    if payload.catalogRef.kind != "App":
-        raise NephosError(
-            status_code=400,
-            code="catalog_kind_mismatch",
-            message="App install requires an App catalog reference.",
-            details={"kind": payload.catalogRef.kind},
-        )
+    _require_catalog_kind(payload.catalogRef.kind, expected="App")
 
-    _validate_catalog_name(payload.catalogRef.name)
-    loader = _loader(request)
-    catalog_entry = _catalog_or_404(
-        lambda: loader.get_app(
-            payload.catalogRef.name,
-            source=payload.catalogRef.source,
-        )
-    )
-    slug = payload.instanceName or catalog_entry["name"]
-    _validate_runtime_namespace_slug("app_instance", slug)
-    source_path = _catalog_source_path(
+    catalog_entry, slug, source_path = _install_catalog_entry(
+        payload,
         request,
         kind="App",
-        name=catalog_entry["name"],
-        source=catalog_entry["source"],
     )
-    _validate_app_config(_load_app_manifest(source_path), payload.config)
+    manifest = _load_app_manifest(source_path)
+    _validate_app_config(manifest, payload.config)
     providers = _resolve_binding_providers(
         request,
         catalog_entry,
@@ -244,6 +215,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
                     service_instance_id=str(service_row["id"]),
                     alias=requirement["alias"],
                     capability=requirement["capability"],
+                    protocol=requirement["protocol"],
                     output_summary={
                         "target": "app-secret",
                         "secretName": f"nephos-bind-{requirement['alias']}",
@@ -326,6 +298,52 @@ def app_action(
     }
 
 
+def _require_catalog_kind(
+    actual: Literal["App", "Service"],
+    *,
+    expected: Literal["App", "Service"],
+) -> None:
+    if actual == expected:
+        return
+    article = "an" if expected == "App" else "a"
+    raise NephosError(
+        status_code=400,
+        code="catalog_kind_mismatch",
+        message=f"{expected} install requires {article} {expected} catalog reference.",
+        details={"kind": actual},
+    )
+
+
+def _install_catalog_entry(
+    payload: InstallRequest,
+    request: Request,
+    *,
+    kind: Literal["App", "Service"],
+) -> tuple[dict[str, Any], str, Path]:
+    # * Shared install preflight: resolve catalog identity before mutating state.
+    _validate_catalog_name(payload.catalogRef.name)
+    loader = _loader(request)
+    get_entry = loader.get_app if kind == "App" else loader.get_service
+    catalog_entry = _catalog_or_404(
+        lambda: get_entry(
+            payload.catalogRef.name,
+            source=payload.catalogRef.source,
+        )
+    )
+    slug = payload.instanceName or str(catalog_entry["name"])
+    resource_type: ResourceType = (
+        "app_instance" if kind == "App" else "service_instance"
+    )
+    _validate_runtime_namespace_slug(resource_type, slug)
+    source_path = _catalog_source_path(
+        request,
+        kind=kind,
+        name=str(catalog_entry["name"]),
+        source=str(catalog_entry["source"]),
+    )
+    return catalog_entry, slug, source_path
+
+
 def _validate_runtime_namespace_slug(resource_type: ResourceType, slug: str) -> None:
     try:
         namespace_name(resource_type, slug)
@@ -370,20 +388,24 @@ def _resolve_binding_providers(
     loader = _loader(request)
     service_rows = repo.list_service_rows()
     requirements = _requirements_by_alias(app_catalog_entry)
+    # ! Error precedence is part of the API contract; keep this before selection.
     _reject_unknown_binding_aliases(selections, requirements)
 
     providers: dict[str, dict[str, object]] = {}
     for requirement in app_catalog_entry["requires"]:
         alias = requirement["alias"]
         capability = requirement["capability"]
-        capable = _capability_provider_rows(
+        protocol = requirement.get("protocol")
+        capable = _matching_provider_rows(
             loader=loader,
             service_rows=service_rows,
             capability=capability,
+            protocol=protocol,
         )
         providers[alias] = _select_binding_provider(
             alias=alias,
             capability=capability,
+            protocol=protocol,
             service_rows=service_rows,
             capable=capable,
             selection=selections.get(alias),
@@ -419,6 +441,7 @@ def _select_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
     selection: BindingSelection | None,
@@ -432,6 +455,7 @@ def _select_binding_provider(
         return _selected_binding_provider(
             alias=alias,
             capability=capability,
+            protocol=protocol,
             service_rows=service_rows,
             capable=capable,
             eligible=eligible,
@@ -440,6 +464,7 @@ def _select_binding_provider(
     return _automatic_binding_provider(
         alias=alias,
         capability=capability,
+        protocol=protocol,
         eligible=eligible,
     )
 
@@ -448,6 +473,7 @@ def _selected_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
@@ -474,6 +500,7 @@ def _selected_binding_provider(
     _reject_ineligible_binding_provider(
         alias=alias,
         capability=capability,
+        protocol=protocol,
         capable=capable,
         eligible=eligible,
         selected=selected,
@@ -482,6 +509,7 @@ def _selected_binding_provider(
     _reject_unavailable_binding_provider(
         alias=alias,
         capability=capability,
+        protocol=protocol,
         selected=selected,
         selection=selection,
     )
@@ -492,6 +520,7 @@ def _reject_ineligible_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
     selected: dict[str, object],
@@ -504,8 +533,11 @@ def _reject_ineligible_binding_provider(
         code="binding_provider_ineligible",
         message="Selected binding provider does not expose the required capability.",
         details={
-            "alias": alias,
-            "capability": capability,
+            **_binding_requirement_details(
+                alias=alias,
+                capability=capability,
+                protocol=protocol,
+            ),
             "serviceInstance": selection.serviceInstance,
             "eligibleProviders": [row["slug"] for row in eligible],
         },
@@ -516,6 +548,7 @@ def _reject_unavailable_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     selected: dict[str, object],
     selection: BindingSelection,
 ) -> None:
@@ -525,8 +558,11 @@ def _reject_unavailable_binding_provider(
             code="binding_provider_unavailable",
             message="Selected binding provider is not available.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "reason": "destroy_already_requested",
                 "serviceInstance": selection.serviceInstance,
             },
@@ -537,8 +573,11 @@ def _reject_unavailable_binding_provider(
             code="binding_provider_unavailable",
             message="Selected binding provider is not available.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "reason": "service_not_running",
                 "lifecycle": selected["lifecycle"],
                 "serviceInstance": selection.serviceInstance,
@@ -550,6 +589,7 @@ def _automatic_binding_provider(
     *,
     alias: str,
     capability: str,
+    protocol: object,
     eligible: list[dict[str, object]],
 ) -> dict[str, object]:
     if not eligible:
@@ -558,8 +598,11 @@ def _automatic_binding_provider(
             code="binding_provider_unavailable",
             message="No eligible Service provider exposes the required capability.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "eligibleProviders": [],
             },
         )
@@ -569,8 +612,11 @@ def _automatic_binding_provider(
             code="binding_provider_selection_required",
             message="Required capability needs explicit provider selection.",
             details={
-                "alias": alias,
-                "capability": capability,
+                **_binding_requirement_details(
+                    alias=alias,
+                    capability=capability,
+                    protocol=protocol,
+                ),
                 "eligibleProviders": [row["slug"] for row in eligible],
             },
         )
@@ -584,11 +630,27 @@ def _binding_provider_is_available(service_row: dict[str, object]) -> bool:
     )
 
 
-def _capability_provider_rows(
+def _binding_requirement_details(
+    *,
+    alias: str,
+    capability: str,
+    protocol: object,
+) -> dict[str, object]:
+    details: dict[str, object] = {
+        "alias": alias,
+        "capability": capability,
+    }
+    if protocol is not None:
+        details["protocol"] = protocol
+    return details
+
+
+def _matching_provider_rows(
     *,
     loader: CatalogLoader,
     service_rows: list[dict[str, object]],
     capability: str,
+    protocol: object,
 ) -> list[dict[str, object]]:
     eligible = []
     for service_row in service_rows:
@@ -603,6 +665,7 @@ def _capability_provider_rows(
         )
         if any(
             provided["capability"] == capability
+            and provided["protocol"] == protocol
             for provided in service_catalog["provides"]
         ):
             eligible.append(service_row)
@@ -615,6 +678,7 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         str(row["catalog_name"]),
         source=str(row["catalog_source_id"]),
     )
+    manifest = _load_service_manifest(Path(str(row["catalog_source_path"])))
     dependents = repo.list_dependents_for_service(str(row["id"]))
     return {
         "id": row["id"],
@@ -622,7 +686,7 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         "kind": "Service",
         "lifecycle": row["lifecycle"],
         "catalogRef": _catalog_ref(row),
-        "config": _json_dict(row["config_json"]),
+        "config": _redacted_config(manifest_config_values(row, manifest)),
         "provides": catalog_entry["provides"],
         "dependents": [
             {
@@ -630,6 +694,11 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
                 "bindingId": dependent["binding_id"],
                 "bindingAlias": dependent["binding_alias"],
                 "capability": dependent["capability"],
+                **(
+                    {"protocol": dependent["protocol"]}
+                    if dependent["protocol"] is not None
+                    else {}
+                ),
                 "lifecycle": dependent["app_lifecycle"],
                 "status": compact_status_snapshot(
                     repo,
@@ -654,17 +723,47 @@ def _load_app_manifest(path: Path) -> AppManifest:
     return AppManifest.model_validate(yaml.safe_load(path.read_text()))
 
 
+def _load_service_manifest(path: Path) -> ServiceManifest:
+    return ServiceManifest.model_validate(yaml.safe_load(path.read_text()))
+
+
 def _validate_app_config(
     manifest: AppManifest,
     config: dict[str, Any],
 ) -> None:
-    options = {option.name: option for option in manifest.spec.config.options}
+    _validate_manifest_config(
+        options={option.name: option for option in manifest.spec.config.options},
+        config=config,
+        code_prefix="app_config",
+        label="App",
+    )
+
+
+def _validate_service_config(
+    manifest: ServiceManifest,
+    config: dict[str, Any],
+) -> None:
+    _validate_manifest_config(
+        options={option.name: option for option in manifest.spec.config.options},
+        config=config,
+        code_prefix="service_config",
+        label="Service",
+    )
+
+
+def _validate_manifest_config(
+    *,
+    options: dict[str, Any],
+    config: dict[str, Any],
+    code_prefix: str,
+    label: str,
+) -> None:
     unknown_keys = sorted(set(config) - set(options))
     if unknown_keys:
         raise NephosError(
             status_code=400,
-            code="app_config_unknown",
-            message="App config contains unknown option keys.",
+            code=f"{code_prefix}_unknown",
+            message=f"{label} config contains unknown option keys.",
             details={"keys": unknown_keys},
         )
 
@@ -676,8 +775,8 @@ def _validate_app_config(
     if missing_required:
         raise NephosError(
             status_code=400,
-            code="app_config_required",
-            message="App config is missing required option values.",
+            code=f"{code_prefix}_required",
+            message=f"{label} config is missing required option values.",
             details={"keys": missing_required},
         )
 
@@ -687,8 +786,8 @@ def _validate_app_config(
         if not _config_value_matches_type(value, expected_type):
             raise NephosError(
                 status_code=400,
-                code="app_config_invalid",
-                message="App config value does not match the declared type.",
+                code=f"{code_prefix}_invalid",
+                message=f"{label} config value does not match the declared type.",
                 details={
                     "key": key,
                     "expectedType": expected_type,
@@ -702,8 +801,8 @@ def _validate_app_config(
             if value not in allowed_values:
                 raise NephosError(
                     status_code=400,
-                    code="app_config_invalid",
-                    message="App config enum value is not allowed.",
+                    code=f"{code_prefix}_invalid",
+                    message=f"{label} config enum value is not allowed.",
                     details={
                         "key": key,
                         "allowedValues": allowed_values,
@@ -712,6 +811,7 @@ def _validate_app_config(
 
 
 def _config_value_matches_type(value: object, expected_type: str) -> bool:
+    # ! Keep exact checks here; isinstance(True, int) is True.
     if expected_type in {"string", "enum"}:
         return isinstance(value, str)
     if expected_type == "integer":
@@ -726,6 +826,7 @@ def _app_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any]:
         str(row["catalog_name"]),
         source=str(row["catalog_source_id"]),
     )
+    manifest = _load_app_manifest(Path(str(row["catalog_source_path"])))
     repo = _repo(request)
     bindings = repo.list_bindings_for_app(str(row["id"]))
     return {
@@ -734,12 +835,13 @@ def _app_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any]:
         "kind": "App",
         "lifecycle": row["lifecycle"],
         "catalogRef": _catalog_ref(row),
-        "config": _json_dict(row["config_json"]),
+        "config": manifest_config_values(row, manifest),
         "bindings": [
             {
                 "id": binding["id"],
                 "alias": binding["alias"],
                 "capability": binding["capability"],
+                "protocol": binding["protocol"],
                 "serviceInstance": {
                     "id": binding["service_instance_id"],
                     "slug": binding["service_instance_slug"],
@@ -825,16 +927,28 @@ def _catalog_source_path(
     name: str,
     source: str,
 ) -> Path:
-    roots = request.app.state.settings.catalog_roots
-    index = 0 if source == "default" else int(source.removeprefix("local-"))
-    root = roots[index]
+    settings = request.app.state.settings
+    roots = settings.catalog_roots
+    source_ids = settings.catalog_source_ids or tuple(
+        "default" if index == 0 else f"local-{index}"
+        for index in range(len(roots))
+    )
+    source_roots = dict(zip(source_ids, roots, strict=True))
+    try:
+        root = source_roots[source]
+    except KeyError as exc:
+        raise _not_found(
+            "catalog_source_not_found",
+            "Catalog source was not found.",
+        ) from exc
     if kind == "App":
         return root / "apps" / name / "app.yaml"
     return root / "services" / name / "service.yaml"
 
 
 def _loader(request: Request) -> CatalogLoader:
-    return CatalogLoader(request.app.state.settings.catalog_roots)
+    settings = request.app.state.settings
+    return CatalogLoader(settings.catalog_roots, source_ids=settings.catalog_source_ids)
 
 
 def _repo(request: Request) -> DesiredStateRepository:
@@ -858,6 +972,7 @@ def _dependency_blocked(dependents: list[dict[str, object]]) -> NephosError:
                     "bindingId": dependent["binding_id"],
                     "bindingAlias": dependent["binding_alias"],
                     "capability": dependent["capability"],
+                    "protocol": dependent["protocol"],
                 }
                 for dependent in dependents
             ],
@@ -978,9 +1093,16 @@ def _catalog_or_404(call: Any) -> dict[str, Any]:
         ) from exc
 
 
-def _json_dict(value: object) -> dict[str, Any]:
-    import json
+def _redacted_config(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: "[REDACTED]" if _is_sensitive_config_key(key) else value
+        for key, value in config.items()
+    }
 
-    if not isinstance(value, str):
-        return {}
-    return json.loads(value)
+
+def _is_sensitive_config_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(
+        marker in lowered
+        for marker in ("password", "secret", "token", "key", "credential")
+    )

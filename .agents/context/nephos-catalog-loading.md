@@ -95,10 +95,14 @@ App catalog summaries include:
 App catalog `requires` entries use:
 
 - `capability`
+- `protocol`
 - `alias`
 - optional `provider`
 
 If the manifest omits the binding alias, `alias` is defaulted from the capability.
+
+For protocol-aware requirements, `capability + protocol` is the binding match
+key. The alias remains the App-local binding name.
 
 App catalog `routes` entries use:
 
@@ -113,9 +117,43 @@ Service catalog summaries include:
 Service catalog `provides` entries use:
 
 - `capability`
+- `protocol`
 - optional `alias`
 - optional `version`
 - `bindingOutputTargets`
+
+Service manifests may declare install-time config with the same option shape as
+App manifests:
+
+```yaml
+spec:
+  config:
+    options:
+      - name: storage-size
+        type: string
+        default: 1Gi
+```
+
+Runtime value mappings may read Service config values with
+`from.kind: config`, just as App runtime mappings do.
+
+Service install config is validated against the Service manifest before desired
+state is written.
+
+For protocol-aware provisions, `capability + protocol` is the Service eligibility
+key. Capability alone is not enough for alpha backbone database bindings.
+
+Accepted alpha backbone Service provisions:
+
+- PostgreSQL provides `sql/postgres`.
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, and `opencypher/n4j`.
+- ArcadeDB may provide `gremlin/gremlin` and `mongo/mongo` when those protocols
+  are enabled.
+- SeaweedFS provides `object-storage/s3`.
+- Zitadel provides `oidc/oidc` and `service-account/jwt`.
+
+Do not model Zitadel login/admin UI as an App catalog entry. They are Zitadel
+Service surfaces/routes.
 
 Do not return raw manifest blobs by default.
 
@@ -158,6 +196,13 @@ Do not add canonical JSON Schema files under `schemas/` until Fer approves the c
 Reject unknown manifest fields once canonical validation models exist.
 
 Loose YAML dictionary validation is not the accepted API 0.0.1 direction.
+
+App and Service config option validation uses the same rules:
+
+- option names are machine identifiers
+- default values must match declared type
+- enum options must declare allowed values
+- enum defaults must be one of the allowed values
 
 ## Install Selection
 

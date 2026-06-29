@@ -1,4 +1,6 @@
-from nephos_api.dev_reference import _ensure_platform_domain
+import yaml
+
+from nephos_api.dev_reference import _ensure_platform_domain, write_reference_catalog
 
 
 class FakeResponse:
@@ -27,6 +29,23 @@ class FakeApi:
     ) -> FakeResponse:
         self.posts.append((path, json))
         return FakeResponse(202, {"resource": {}, "reconciliation": {}})
+
+
+def test_reference_catalog_maps_postgres_admin_password_config(tmp_path) -> None:
+    write_reference_catalog(tmp_path)
+    manifest = yaml.safe_load(
+        (tmp_path / "services" / "postgres" / "service.yaml").read_text()
+    )
+
+    assert manifest["spec"]["config"]["options"] == [
+        {"name": "admin-password", "type": "string", "required": True}
+    ]
+    assert manifest["spec"]["runtime"]["values"]["mappings"] == [
+        {
+            "from": {"kind": "config", "name": "admin-password"},
+            "to": {"helmValue": "adminPassword"},
+        }
+    ]
 
 
 def test_reference_smoke_reuses_existing_default_platform_domain() -> None:

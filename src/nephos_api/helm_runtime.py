@@ -13,6 +13,7 @@ import yaml
 
 from nephos_api.catalog import AppManifest, RuntimeMapping, ServiceManifest
 from nephos_api.kubernetes_runtime import namespace_name
+from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -185,6 +186,7 @@ class BindingValueSource(Protocol):
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> dict[str, str] | None: ...
 
 
@@ -199,6 +201,7 @@ class ManifestBindingValueSource:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> dict[str, str] | None:
         return self._values.get((app_slug, alias))
 
@@ -257,7 +260,7 @@ class ManifestHelmDeployer:
         row: dict[str, object],
         manifest: AppManifest | ServiceManifest,
     ) -> dict[str, object]:
-        config = _manifest_config_values(row, manifest)
+        config = manifest_config_values(row, manifest)
         bindings = (
             self._repository.list_bindings_for_app(str(row["id"]))
             if target_type == "app_instance"
@@ -316,6 +319,7 @@ class ManifestHelmDeployer:
                 service_slug=str(binding["service_instance_slug"]),
                 alias=str(binding["alias"]),
                 capability=str(binding["capability"]),
+                protocol=_optional_str(binding["protocol"]),
             )
         if values is None or source.field not in values:
             raise RuntimeBlockedError(
@@ -360,25 +364,6 @@ def _chart_from_manifest(manifest: AppManifest | ServiceManifest) -> HelmChartRe
     )
 
 
-def _manifest_config_values(
-    row: dict[str, object],
-    manifest: AppManifest | ServiceManifest,
-) -> dict[str, object]:
-    values: dict[str, object] = {}
-    if isinstance(manifest, AppManifest):
-        values.update(
-            {
-                option.name: option.default
-                for option in manifest.spec.config.options
-                if option.default is not None
-            }
-        )
-    config_json = row.get("config_json")
-    if isinstance(config_json, str):
-        values.update(json.loads(config_json))
-    return values
-
-
 def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     output_summary_json = binding.get("output_summary_json")
     if not isinstance(output_summary_json, str):
@@ -393,3 +378,9 @@ def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     ):
         return None
     return values
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)

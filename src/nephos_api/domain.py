@@ -65,6 +65,7 @@ class Binding:
     id: str
     alias: str
     capability: str
+    protocol: str | None
     generation: int
 
 

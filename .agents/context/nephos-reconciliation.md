@@ -63,8 +63,8 @@ Request states:
 
 Examples of blocked requests:
 
-- required capability has no eligible Service instance
-- multiple eligible Service providers require explicit selection
+- required capability/protocol has no eligible Service instance
+- multiple eligible Service providers for the same capability/protocol require explicit selection
 - required platform root domain configuration is missing
 - required runtime mapping source is missing
 
@@ -124,6 +124,12 @@ Jobs.
 Binding reconciliation may ask an internal provisioning handler for output values,
 then materialize the accepted `app-secret` Secret in the consuming App namespace.
 
+Binding provider selection is protocol-aware. A Service is eligible only when it
+provides the App requirement's `capability + protocol`.
+
+Provisioning handler dispatch also uses `capability + protocol`, not capability
+alone.
+
 Secret values flow from handler to Kubernetes Secret materialization and must not
 be exposed in API responses, status evidence, or redacted binding summaries.
 
@@ -139,6 +145,16 @@ Secret, reads the PostgreSQL administrator password from the Helm release Secret
 using the API 0.0.1 chart convention, executes idempotent `psql` statements
 inside the Nephos-owned PostgreSQL runtime pod, and returns the accepted
 `host`, `port`, `database`, `username`, `password`, and `uri` output fields.
+
+The PostgreSQL provisioning handler is the `sql/postgres` handler.
+
+Alpha backbone handlers still to implement:
+
+- `object-storage/s3` for SeaweedFS app-scoped bucket/access credentials.
+- `oidc/oidc` for Zitadel per-App OIDC client material.
+- `service-account/jwt` for Zitadel service account/JWT material.
+- `sql/arcadedb`, `opencypher/bolt`, and `opencypher/n4j` for ArcadeDB.
+- optional `gremlin/gremlin` and `mongo/mongo` for ArcadeDB when enabled.
 
 Those pod, Secret, SQL, and chart-convention details are adapter internals, not
 public manifest, API, or CLI contracts.

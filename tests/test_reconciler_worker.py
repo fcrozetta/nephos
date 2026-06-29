@@ -1,6 +1,8 @@
+import asyncio
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from catalog_fixtures import write_app, write_service
 from fastapi.testclient import TestClient
@@ -8,6 +10,8 @@ from fastapi.testclient import TestClient
 from nephos_api.config import Settings
 from nephos_api.db import migrate_database
 from nephos_api.main import create_app
+from nephos_api.reconciler import Reconciler
+from nephos_api.reconciler_worker import ReconcilerWorker
 
 
 class FakeRuntime:
@@ -33,6 +37,7 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
         values: dict[str, str],
     ) -> None:
         self.binding_secrets.append(
@@ -52,6 +57,7 @@ class FakeRuntime:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> bool:
         self.deleted_binding_secrets.append(
             {
@@ -110,6 +116,33 @@ class FakeProvisioner:
 
     def deprovision_binding(self, context):
         self.deprovisioned_contexts.append(context)
+
+
+def test_reconciler_worker_runs_reconciler_off_event_loop(monkeypatch) -> None:
+    calls = []
+
+    class FakeReconciler:
+        def run_once(self) -> int:
+            return 0
+
+    async def fake_to_thread(function):
+        calls.append(function)
+        return function()
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    reconciler = FakeReconciler()
+    worker = ReconcilerWorker(cast(Reconciler, reconciler), interval_seconds=60)
+
+    async def run_worker_once() -> None:
+        task = asyncio.create_task(worker.run())
+        while not calls:
+            await asyncio.sleep(0)
+        await worker.stop()
+        await asyncio.wait_for(task, timeout=1)
+
+    asyncio.run(run_worker_once())
+
+    assert calls == [reconciler.run_once]
 
 
 def test_api_lifespan_worker_reconciles_created_service_request(
@@ -213,6 +246,57 @@ def test_api_lifespan_worker_uses_deployer_factory_for_service_install(
 
     assert runtime.namespaces == [("service_instance", "postgres")]
     assert deployer.deployed == [("service_instance", "postgres")]
+
+
+def test_service_runtime_status_includes_production_readiness_evidence(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    runtime = FakeRuntime()
+    deployer = FakeDeployer()
+    write_service(catalog_root, name="zitadel", capability="oidc", protocol="oidc")
+    migrate_database(db_path=db_path)
+    app = create_app(
+        settings=Settings(
+            db_path=db_path,
+            catalog_roots=(catalog_root,),
+            kubeconfig=None,
+            kube_context=None,
+        ),
+        start_reconciler=True,
+        runtime_factory=lambda _settings: runtime,
+        deployer_factory=lambda _settings, _repository: deployer,
+        reconciler_interval_seconds=0.01,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "zitadel"}},
+        )
+        assert response.status_code == 202
+
+        _eventually(
+            lambda: _service_status_reason(client, "zitadel") == "runtime_deployed"
+        )
+        status = client.get("/services/zitadel").json()["status"]
+
+    readiness = next(
+        item for item in status["evidence"] if item["reason"] == "production_readiness"
+    )
+    assert readiness["source"] == "nephos-api"
+    assert readiness["subject"] == "zitadel"
+    checks = {check["name"]: check for check in readiness["data"]["checks"]}
+    assert checks["runtime"]["status"] == "ready"
+    assert checks["secrets"]["storage"] == "kubernetes-secrets"
+    assert checks["backup"]["status"] == "deferred"
+    assert checks["exposure"]["public"] is True
+    assert checks["exposure"]["private"] is True
+    assert checks["tls"]["termination"] == "external"
+    assert checks["database-topology"]["topology"] == "embedded-postgres-sidecar"
+    assert checks["provisioning"]["issuerHostPolicy"] == "same-host-private-path"
+
 
 
 def test_api_lifespan_worker_reconciles_app_flow_until_provisioning_output_block(
@@ -437,8 +521,8 @@ def _eventually(check: Callable[[], bool]) -> None:
     assert check()
 
 
-def _service_status_reason(client: TestClient) -> str | None:
-    status = client.get("/services/postgres").json()["status"]
+def _service_status_reason(client: TestClient, slug: str = "postgres") -> str | None:
+    status = client.get(f"/services/{slug}").json()["status"]
     return status["reason"] if status else None
 
 

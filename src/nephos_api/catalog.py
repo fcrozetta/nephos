@@ -62,6 +62,7 @@ class CapabilityRequirement(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     capability: str
+    protocol: str | None = None
     alias: str | None = Field(default=None, alias="as")
     provider: str | None = None
 
@@ -74,6 +75,7 @@ class RouteTarget(BaseModel):
     @field_validator("port", mode="before")
     @classmethod
     def reject_boolean_port(cls, value: Any) -> Any:
+        # ! YAML booleans parse as bool, and bool is an int subclass in Python.
         if type(value) is bool:
             raise ValueError("route target port must be a string name or integer")
         return value
@@ -180,6 +182,7 @@ class ProvidedCapability(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     capability: str
+    protocol: str | None = None
     alias: str | None = Field(default=None, alias="as")
     version: str | None = None
 
@@ -207,7 +210,9 @@ class ServiceSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provides: list[ProvidedCapability] = Field(min_length=1)
+    requires: list[CapabilityRequirement] = Field(default_factory=list)
     bindings: BindingOutputs | None = None
+    config: AppConfig = Field(default_factory=AppConfig)
     provisioning: Provisioning
     operations: list[dict[str, Any]] = Field(default_factory=list)
     runtime: RuntimeRef
@@ -232,11 +237,19 @@ class ServiceManifest(BaseModel):
 
 
 class CatalogLoader:
-    def __init__(self, catalog_roots: tuple[Path, ...]) -> None:
+    def __init__(
+        self,
+        catalog_roots: tuple[Path, ...],
+        *,
+        source_ids: tuple[str, ...] | None = None,
+    ) -> None:
+        resolved_source_ids = source_ids or tuple(_source_ids(len(catalog_roots)))
+        if len(resolved_source_ids) != len(catalog_roots):
+            raise ValueError("catalog source id count must match catalog root count")
         self._sources = tuple(
             (source_id, root)
             for source_id, root in zip(
-                _source_ids(len(catalog_roots)),
+                resolved_source_ids,
                 catalog_roots,
                 strict=True,
             )
@@ -381,7 +394,16 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             label="capability",
             value=requirement.capability,
         )
-        alias = requirement.alias or requirement.capability
+        if requirement.protocol is not None:
+            _validate_catalog_identifier(
+                path=path,
+                label="protocol",
+                value=requirement.protocol,
+            )
+        alias = requirement.alias or _default_capability_alias(
+            requirement.capability,
+            requirement.protocol,
+        )
         _validate_catalog_identifier(
             path=path,
             label="binding alias",
@@ -427,46 +449,58 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             )
         route_names.add(route.name)
 
-    for option in manifest.spec.config.options:
-        _validate_catalog_identifier(
-            path=path,
-            label="config option name",
-            value=option.name,
-        )
-        if option.default is not None and not _config_value_matches_type(
-            option.default,
-            option.type_,
-        ):
-            raise CatalogValidationError(
-                f"invalid App manifest {path}: invalid config default "
-                f"for {option.name!r}"
-            )
-        if option.type_ == "enum":
-            allowed_values = [
-                enum_value["value"]
-                for enum_value in option.values or []
-            ]
-            if not allowed_values:
-                raise CatalogValidationError(
-                    f"invalid App manifest {path}: enum config values "
-                    f"are required for {option.name!r}"
-                )
-            if option.default is not None and option.default not in allowed_values:
-                raise CatalogValidationError(
-                    f"invalid App manifest {path}: invalid enum default "
-                    f"for {option.name!r}"
-                )
+    _validate_config_options(
+        kind="App",
+        path=path,
+        options=manifest.spec.config.options,
+    )
 
 
 def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None:
     aliases: set[str] = set()
+    requirement_aliases: set[str] = set()
+    for requirement in manifest.spec.requires:
+        _validate_catalog_identifier(
+            path=path,
+            label="capability",
+            value=requirement.capability,
+        )
+        if requirement.protocol is not None:
+            _validate_catalog_identifier(
+                path=path,
+                label="protocol",
+                value=requirement.protocol,
+            )
+        alias = requirement.alias or _default_capability_alias(
+            requirement.capability,
+            requirement.protocol,
+        )
+        _validate_catalog_identifier(
+            path=path,
+            label="required alias",
+            value=alias,
+        )
+        if alias in requirement_aliases:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: duplicate required alias {alias!r}"
+            )
+        requirement_aliases.add(alias)
     for provided in manifest.spec.provides:
         _validate_catalog_identifier(
             path=path,
             label="capability",
             value=provided.capability,
         )
-        alias = provided.alias or provided.capability
+        if provided.protocol is not None:
+            _validate_catalog_identifier(
+                path=path,
+                label="protocol",
+                value=provided.protocol,
+            )
+        alias = provided.alias or _default_capability_alias(
+            provided.capability,
+            provided.protocol,
+        )
         _validate_catalog_identifier(
             path=path,
             label="provided alias",
@@ -491,9 +525,52 @@ def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None
                     f"duplicate binding output name {output.name!r}"
                 )
             output_names.add(output.name)
+    _validate_config_options(
+        kind="Service",
+        path=path,
+        options=manifest.spec.config.options,
+    )
+
+
+def _validate_config_options(
+    *,
+    kind: str,
+    path: Path,
+    options: list[ConfigOption],
+) -> None:
+    for option in options:
+        _validate_catalog_identifier(
+            path=path,
+            label="config option name",
+            value=option.name,
+        )
+        if option.default is not None and not _config_value_matches_type(
+            option.default,
+            option.type_,
+        ):
+            raise CatalogValidationError(
+                f"invalid {kind} manifest {path}: invalid config default "
+                f"for {option.name!r}"
+            )
+        if option.type_ == "enum":
+            allowed_values = [
+                enum_value["value"]
+                for enum_value in option.values or []
+            ]
+            if not allowed_values:
+                raise CatalogValidationError(
+                    f"invalid {kind} manifest {path}: enum config values "
+                    f"are required for {option.name!r}"
+                )
+            if option.default is not None and option.default not in allowed_values:
+                raise CatalogValidationError(
+                    f"invalid {kind} manifest {path}: invalid enum default "
+                    f"for {option.name!r}"
+                )
 
 
 def _config_value_matches_type(value: object, expected_type: str) -> bool:
+    # ! Keep exact checks here; isinstance(True, int) is True.
     if expected_type in {"string", "enum"}:
         return isinstance(value, str)
     if expected_type == "integer":
@@ -501,6 +578,12 @@ def _config_value_matches_type(value: object, expected_type: str) -> bool:
     if expected_type == "boolean":
         return type(value) is bool
     return False
+
+
+def _default_capability_alias(capability: str, protocol: str | None) -> str:
+    if protocol is None:
+        return capability
+    return f"{capability}-{protocol}"
 
 
 def _validate_catalog_identifier(*, path: Path, label: str, value: str) -> None:
@@ -555,7 +638,11 @@ def _app_summary(
         "requires": [
             {
                 "capability": requirement.capability,
-                "alias": requirement.alias or requirement.capability,
+                "protocol": requirement.protocol,
+                "alias": requirement.alias or _default_capability_alias(
+                    requirement.capability,
+                    requirement.protocol,
+                ),
                 "provider": requirement.provider,
             }
             for requirement in manifest.spec.requires
@@ -589,10 +676,26 @@ def _service_summary(
         "version": manifest.metadata.version,
         "source": source_id,
         "manifestDigest": digest,
+        "requires": [
+            {
+                "capability": requirement.capability,
+                "protocol": requirement.protocol,
+                "alias": requirement.alias or _default_capability_alias(
+                    requirement.capability,
+                    requirement.protocol,
+                ),
+                "provider": requirement.provider,
+            }
+            for requirement in manifest.spec.requires
+        ],
         "provides": [
             {
                 "capability": provided.capability,
-                "alias": provided.alias,
+                "protocol": provided.protocol,
+                "alias": provided.alias or _default_capability_alias(
+                    provided.capability,
+                    provided.protocol,
+                ),
                 "version": provided.version,
                 "bindingOutputTargets": output_targets,
             }

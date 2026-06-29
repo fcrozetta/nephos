@@ -1,11 +1,26 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
 import uvicorn
 from typer.testing import CliRunner
 
 from nephos_api.cli import app
+from nephos_api.dev_backbone import BackboneSmokeResult
 from nephos_api.dev_reference import ReferenceSmokeResult
+
+_MIGRATION_ROWS = [("0000_initial",), ("0001_add_binding_protocol",)]
+
+
+@pytest.fixture(autouse=True)
+def _registry_sync_calls(monkeypatch):
+    calls = []
+
+    def fake_sync(settings) -> None:
+        calls.append(settings)
+
+    monkeypatch.setattr("nephos_api.cli.ensure_managed_catalog_registries", fake_sync)
+    return calls
 
 
 def test_cli_db_migrate_creates_database(tmp_path: Path) -> None:
@@ -22,11 +37,12 @@ def test_cli_db_migrate_creates_database(tmp_path: Path) -> None:
     assert db_path.exists()
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT version FROM schema_migrations").fetchall()
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
 
 
 def test_cli_init_applies_migrations_and_creates_internal_domain(
     tmp_path: Path,
+    _registry_sync_calls,
 ) -> None:
     db_path = tmp_path / "state" / "nephos.db"
     runner = CliRunner()
@@ -51,9 +67,11 @@ def test_cli_init_applies_migrations_and_creates_internal_domain(
         reconciliation_count = connection.execute(
             "SELECT count(*) FROM reconciliation_requests"
         ).fetchone()[0]
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
     assert domains == [("internal", "nephos.local", 1)]
     assert reconciliation_count == 0
+    assert len(_registry_sync_calls) == 1
+    assert _registry_sync_calls[0].managed_catalog_registries
 
 
 def test_cli_init_accepts_custom_internal_domain(tmp_path: Path) -> None:
@@ -171,10 +189,14 @@ def test_cli_db_reset_force_recreates_database(tmp_path: Path) -> None:
     assert reset.exit_code == 0
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT version FROM schema_migrations").fetchall()
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
 
 
-def test_cli_serve_starts_worker_enabled_app(monkeypatch, tmp_path: Path) -> None:
+def test_cli_serve_starts_worker_enabled_app(
+    monkeypatch,
+    tmp_path: Path,
+    _registry_sync_calls,
+) -> None:
     db_path = tmp_path / "state" / "nephos.db"
     runner = CliRunner()
     captured = {}
@@ -198,6 +220,8 @@ def test_cli_serve_starts_worker_enabled_app(monkeypatch, tmp_path: Path) -> Non
     assert captured["target"].state.reconciler_enabled is True
     assert captured["target"].state.deployer_enabled is True
     assert captured["target"].state.provisioner_enabled is True
+    assert len(_registry_sync_calls) == 1
+    assert _registry_sync_calls[0].managed_catalog_registries
 
 
 def test_cli_serve_applies_migrations_before_starting_app(
@@ -222,7 +246,7 @@ def test_cli_serve_applies_migrations_before_starting_app(
     assert result.exit_code == 0
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute("SELECT version FROM schema_migrations").fetchall()
-    assert rows == [("0000_initial",)]
+    assert rows == _MIGRATION_ROWS
 
 
 def test_cli_dev_smoke_runs_nephos_owned_reference_flow(
@@ -261,3 +285,37 @@ def test_cli_dev_smoke_runs_nephos_owned_reference_flow(
     assert captured["timeout_seconds"] == 9
     assert "Reference smoke test passed" in result.output
     assert "reference-web-test" in result.output
+
+
+def test_cli_dev_backbone_smoke_reports_skip_without_registry_sync(
+    monkeypatch,
+    tmp_path: Path,
+    _registry_sync_calls,
+) -> None:
+    db_path = tmp_path / "state" / "nephos.db"
+    runner = CliRunner()
+    captured = {}
+
+    def fake_backbone_smoke(*, settings, timeout_seconds: int, progress):
+        captured["settings"] = settings
+        captured["timeout_seconds"] = timeout_seconds
+        captured["progress"] = progress
+        return BackboneSmokeResult(
+            status="skipped",
+            blocker_code="pulumi_passphrase_missing",
+            message="PULUMI_CONFIG_PASSPHRASE is required.",
+        )
+
+    monkeypatch.setattr("nephos_api.cli.run_backbone_smoke", fake_backbone_smoke)
+
+    result = runner.invoke(
+        app,
+        ["dev", "backbone-smoke", "--timeout-seconds", "7"],
+        env={"NEPHOS_API_DB_PATH": str(db_path)},
+    )
+
+    assert result.exit_code == 0
+    assert captured["settings"].db_path == db_path
+    assert captured["timeout_seconds"] == 7
+    assert _registry_sync_calls == []
+    assert "Alpha backbone smoke skipped" in result.output

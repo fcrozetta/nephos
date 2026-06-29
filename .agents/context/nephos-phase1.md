@@ -99,6 +99,16 @@ Catalog and packaging:
 - missing mapping sources block reconciliation with a reason
 - unknown manifest fields rejected once canonical schemas exist
 - no schema files until Fer approves concrete validation schema
+- alpha backbone Service scope is PostgreSQL, Zitadel, SeaweedFS, ArcadeDB, then the first dogfood App
+- Pulumi is the alpha runtime path
+- Aspire is out of scope
+- Helm may be used underneath Pulumi-backed Service providers when it is the easiest install path
+- Helm charts do not define Nephos Service behavior
+- App requirements and Service provisions match by `capability + protocol`
+- PostgreSQL provides `sql/postgres`
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, `opencypher/n4j`, optional `gremlin/gremlin`, and optional `mongo/mongo` when enabled
+- SeaweedFS provides `object-storage/s3`
+- Zitadel provides `oidc/oidc` and `service-account/jwt`
 
 Services:
 
@@ -107,6 +117,8 @@ Services:
 - Service operations reserved but bounded
 - internal typed Service handlers may support minimal accepted provisioning work
 - no general user-facing Service operation API or CLI UX
+- Service surfaces are allowed for the narrow Zitadel alpha use case
+- Zitadel login/admin UI are Service surfaces/routes, not a separate App
 
 Apps:
 
@@ -155,7 +167,8 @@ Ingress and secrets:
 - later user-facing setup UX is deferred to `nephos-cli`
 - path-based App routing out of scope
 - HTTP-only Nephos-managed ingress
-- no Service admin routes through Nephos ingress
+- no generic Service admin routes through Nephos ingress
+- Zitadel login/admin UI are the accepted narrow Service-surface exception
 - stopped Apps keep route intent and may keep runtime ingress
 - remove/destroy remove runtime ingress
 - Kubernetes Secrets for Phase 1
@@ -215,9 +228,9 @@ Reference scenario:
 
 - Paperless App
 - PostgreSQL Service
-- reference catalog should exercise local filesystem catalog/manifest flow
+- alpha reference/dogfood catalog should exercise local filesystem catalog/manifest flow
 - Paperless requires only PostgreSQL in the Phase 1 reference scenario
-- bind Paperless to the `postgres` capability exposed by PostgreSQL
+- bind Paperless to the `sql/postgres` capability/protocol exposed by PostgreSQL
 - PostgreSQL provisions an app-scoped database/user for Paperless
 - Nephos materializes PostgreSQL binding outputs into the Paperless App namespace
 - PostgreSQL binding fields are `host`, `port`, `database`, `username`, `password`, and `uri`

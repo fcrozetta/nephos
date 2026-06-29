@@ -21,24 +21,33 @@ The catalog must not become a generic app marketplace detached from composition.
 
 ## Decision
 
-Phase 1 uses local filesystem catalogs.
+Phase 1 uses one managed first-party filesystem registry by default.
 
 Supported Phase 1 catalog sources:
 
-- repo-shipped reference catalog entries
-- user-configured local filesystem catalog paths
+- the Nephos-managed `core-registry` checkout
+- user-configured local filesystem catalog paths for development experiments
 
-API 0.0.1 supports one repo-shipped catalog root plus optional configured local filesystem catalog roots.
+API 0.0.1 starts with exactly one built-in registry dependency: the first-party
+`core-registry`. Nephos clones and manages that checkout locally. If
+`NEPHOS_API_CATALOG_ROOTS` is configured, those roots replace the managed
+registry dependency set for that backend process.
 
-The repo-shipped catalog root is:
+The managed core registry checkout path is:
 
 ```text
-catalog/
+.nephos/registries/core-registry
+```
+
+The managed core registry URL is:
+
+```text
+https://git.fcrozetta.app/nephos/core-registry.git
 ```
 
 Custom catalog roots are backend local configuration for API 0.0.1.
 
-Additional local catalog roots are configured with:
+Local catalog root override paths are configured with:
 
 ```text
 NEPHOS_API_CATALOG_ROOTS
@@ -48,8 +57,8 @@ NEPHOS_API_CATALOG_ROOTS
 
 Catalog source ids:
 
-- repo-shipped catalog root: `default`
-- configured local roots: `local-1`, `local-2`, `local-3`, in configured order
+- managed core registry or first override root: `default`
+- additional override roots: `local-1`, `local-2`, `local-3`, in configured order
 
 Source ids are stable only for the current backend configuration and root order.
 

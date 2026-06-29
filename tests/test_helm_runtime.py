@@ -43,6 +43,7 @@ class FakeBindingValueSource:
         service_slug: str,
         alias: str,
         capability: str,
+        protocol: str | None = None,
     ) -> dict[str, str] | None:
         return self.values.get(alias)
 
@@ -227,6 +228,37 @@ def test_manifest_helm_deployer_deploys_installed_service_chart(
         "svc-postgres",
     ]
     assert runner.values_content == ["{}\n"]
+
+
+def test_manifest_helm_deployer_maps_service_config_defaults_and_overrides(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    db_path = tmp_path / "nephos.db"
+    manifest_path = _write_service_with_runtime_mappings(catalog_root)
+    migrate_database(db_path=db_path)
+    repo = DesiredStateRepository(db_path)
+    runner = FakeRunner()
+    helm = HelmRuntime(config=HelmRuntimeConfig(), runner=runner, temp_dir=tmp_path)
+    deployer = ManifestHelmDeployer(repository=repo, helm_runtime=helm)
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"storage-size": "8Gi"},
+        )
+
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    assert runner.values_content == [
+        "debug:\n"
+        "  enabled: false\n"
+        "image: postgres:16-alpine\n"
+        "storageSize: 8Gi\n"
+    ]
 
 
 def test_manifest_helm_deployer_deploys_installed_app_chart(
@@ -473,6 +505,63 @@ spec:
             field: uri
           to:
             helmValue: env.DATABASE_URL
+""".strip()
+    )
+    return path
+
+
+def _write_service_with_runtime_mappings(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: image
+        type: string
+        default: postgres:16-alpine
+      - name: storage-size
+        type: string
+        default: 1Gi
+      - name: debug-enabled
+        type: boolean
+        default: false
+      - name: optional-note
+        type: string
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: postgresql
+      version: "16.0.0"
+    values:
+      mappings:
+        - from:
+            kind: config
+            name: image
+          to:
+            helmValue: image
+        - from:
+            kind: config
+            name: storage-size
+          to:
+            helmValue: storageSize
+        - from:
+            kind: config
+            name: debug-enabled
+          to:
+            helmValue: debug.enabled
 """.strip()
     )
     return path

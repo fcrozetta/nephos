@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -20,6 +21,7 @@ def _client(tmp_path: Path) -> TestClient:
 def _client_with_catalog_roots(
     db_path: Path,
     catalog_roots: tuple[Path, ...],
+    catalog_source_ids: tuple[str, ...] = (),
 ) -> TestClient:
     migrate_database(db_path=db_path)
     app = create_app(
@@ -28,6 +30,7 @@ def _client_with_catalog_roots(
             catalog_roots=catalog_roots,
             kubeconfig=None,
             kube_context=None,
+            catalog_source_ids=catalog_source_ids,
         )
     )
     return TestClient(app)
@@ -57,6 +60,7 @@ def test_install_service_from_catalog_creates_desired_state(tmp_path: Path) -> N
     assert body["resource"]["provides"] == [
         {
             "capability": "postgres",
+            "protocol": None,
             "alias": "postgres",
             "version": "16",
             "bindingOutputTargets": ["app-secret"],
@@ -69,6 +73,74 @@ def test_install_service_from_catalog_creates_desired_state(tmp_path: Path) -> N
     list_response = client.get("/services")
     assert list_response.status_code == 200
     assert list_response.json()["services"][0]["slug"] == "postgres"
+
+
+def test_install_service_from_named_managed_catalog_source(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "core-registry"
+    write_service(catalog_root)
+    client = _client_with_catalog_roots(
+        tmp_path / "nephos.db",
+        (catalog_root,),
+        catalog_source_ids=("core-registry",),
+    )
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {
+                "kind": "Service",
+                "name": "postgres",
+                "source": "core-registry",
+            }
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["slug"] == "postgres"
+    assert body["resource"]["catalogRef"]["source"] == "core-registry"
+
+
+def test_install_app_from_named_managed_catalog_source(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "core-registry"
+    write_app(catalog_root)
+    write_service(catalog_root)
+    client = _client_with_catalog_roots(
+        tmp_path / "nephos.db",
+        (catalog_root,),
+        catalog_source_ids=("core-registry",),
+    )
+    service = client.post(
+        "/services",
+        json={
+            "catalogRef": {
+                "kind": "Service",
+                "name": "postgres",
+                "source": "core-registry",
+            }
+        },
+    )
+    assert service.status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {
+                "kind": "App",
+                "name": "paperless",
+                "source": "core-registry",
+            }
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["slug"] == "paperless"
+    assert body["resource"]["catalogRef"]["source"] == "core-registry"
 
 
 def test_install_service_rejects_instance_name_that_exceeds_namespace_limit(
@@ -172,7 +244,16 @@ def test_install_service_returns_invalid_catalog_name_error(tmp_path: Path) -> N
 
 
 def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
     service = client.post(
         "/services",
         json={"catalogRef": {"kind": "Service", "name": "postgres"}},
@@ -190,7 +271,8 @@ def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
     assert body["resource"]["kind"] == "App"
     assert body["resource"]["bindings"][0]["id"].startswith("binding_")
     assert body["resource"]["bindings"][0]["alias"] == "database"
-    assert body["resource"]["bindings"][0]["capability"] == "postgres"
+    assert body["resource"]["bindings"][0]["capability"] == "sql"
+    assert body["resource"]["bindings"][0]["protocol"] == "postgres"
     assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "postgres"
     assert body["reconciliation"]["state"] == "pending"
 
@@ -200,7 +282,8 @@ def test_install_app_auto_binds_single_eligible_service(tmp_path: Path) -> None:
             "appInstance": "paperless",
             "bindingId": body["resource"]["bindings"][0]["id"],
             "bindingAlias": "database",
-            "capability": "postgres",
+            "capability": "sql",
+            "protocol": "postgres",
             "lifecycle": "running",
             "status": None,
         }
@@ -259,6 +342,130 @@ def test_install_app_uses_explicit_binding_provider_selection(
     assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == (
         "postgres-lab"
     )
+
+
+def test_install_app_matches_binding_provider_by_capability_and_protocol(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        name="postgres",
+        capability="sql",
+        protocol="postgres",
+        alias="postgres",
+    )
+    write_service(
+        catalog_root,
+        name="arcadedb",
+        capability="sql",
+        protocol="arcadedb",
+        alias="arcadedb",
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    ).status_code == 202
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={"catalogRef": {"kind": "App", "name": "paperless"}},
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["bindings"][0]["capability"] == "sql"
+    assert body["resource"]["bindings"][0]["protocol"] == "postgres"
+    assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "postgres"
+
+
+def test_install_app_matches_opencypher_bolt_provider(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(
+        catalog_root,
+        capability="opencypher",
+        protocol="bolt",
+        alias=None,
+    )
+    write_service(
+        catalog_root,
+        name="arcadedb",
+        capability="opencypher",
+        protocol="bolt",
+        alias=None,
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={"catalogRef": {"kind": "App", "name": "paperless"}},
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["resource"]["bindings"][0]["alias"] == "opencypher-bolt"
+    assert body["resource"]["bindings"][0]["capability"] == "opencypher"
+    assert body["resource"]["bindings"][0]["protocol"] == "bolt"
+    assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "arcadedb"
+
+
+def test_install_app_rejects_explicit_provider_with_wrong_protocol(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root,
+        name="arcadedb",
+        capability="sql",
+        protocol="arcadedb",
+        alias="arcadedb",
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {
+                    "serviceInstance": "arcadedb",
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "binding_provider_ineligible",
+            "message": (
+                "Selected binding provider does not expose the required "
+                "capability."
+            ),
+            "details": {
+                "alias": "database",
+                "capability": "sql",
+                "protocol": "postgres",
+                "serviceInstance": "arcadedb",
+                "eligibleProviders": [],
+            },
+        }
+    }
 
 
 def test_install_app_returns_unavailable_when_no_eligible_binding_provider(
@@ -619,6 +826,198 @@ def test_install_app_rejects_invalid_enum_config_value(tmp_path: Path) -> None:
     }
 
 
+def test_install_service_accepts_manifest_config(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {
+                "storage-size": "8Gi",
+                "enable-backups": True,
+                "profile": "local",
+                "admin-password": "super-secret",
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["config"] == {
+        "storage-size": "8Gi",
+        "enable-backups": True,
+        "profile": "local",
+        "admin-password": "[REDACTED]",
+    }
+
+
+def test_install_service_persists_only_config_overrides(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    db_path = tmp_path / "nephos.db"
+    client = _client_with_catalog_roots(db_path, (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {"storage-size": "8Gi"},
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["config"] == {
+        "storage-size": "8Gi",
+        "enable-backups": False,
+        "profile": "local",
+    }
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT config_json FROM service_instances WHERE slug = ?",
+            ("postgres",),
+        ).fetchone()
+    assert row is not None
+    assert json.loads(row[0]) == {"storage-size": "8Gi"}
+
+
+def test_install_app_persists_only_config_overrides(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_app(catalog_root)
+    write_service(catalog_root)
+    db_path = tmp_path / "nephos.db"
+    client = _client_with_catalog_roots(db_path, (catalog_root,))
+    assert client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    ).status_code == 202
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "config": {"admin-email": "fer@example.test"},
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["config"] == {
+        "admin-email": "fer@example.test",
+        "workers": 1,
+        "schedule": "daily",
+        "enable-ocr": True,
+    }
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT config_json FROM app_instances WHERE slug = ?",
+            ("paperless",),
+        ).fetchone()
+    assert row is not None
+    assert json.loads(row[0]) == {"admin-email": "fer@example.test"}
+
+
+def test_install_service_rejects_unknown_config_keys(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {"unknown": "value"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_unknown",
+            "message": "Service config contains unknown option keys.",
+            "details": {"keys": ["unknown"]},
+        }
+    }
+
+
+def test_install_service_rejects_missing_required_config(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_required",
+            "message": "Service config is missing required option values.",
+            "details": {"keys": ["storage-size"]},
+        }
+    }
+
+
+def test_install_service_rejects_invalid_config_value_type(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {
+                "storage-size": "8Gi",
+                "enable-backups": "yes",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_invalid",
+            "message": "Service config value does not match the declared type.",
+            "details": {
+                "key": "enable-backups",
+                "expectedType": "boolean",
+            },
+        }
+    }
+
+
+def test_install_service_rejects_invalid_enum_config_value(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    _write_configured_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "postgres"},
+            "config": {
+                "storage-size": "8Gi",
+                "profile": "prod",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": "service_config_invalid",
+            "message": "Service config enum value is not allowed.",
+            "details": {
+                "key": "profile",
+                "allowedValues": ["local", "ci"],
+            },
+        }
+    }
+
+
 def test_service_stop_with_dependents_requires_force(tmp_path: Path) -> None:
     client = _client(tmp_path)
     assert client.post(
@@ -647,6 +1046,7 @@ def test_service_stop_with_dependents_requires_force(tmp_path: Path) -> None:
                         "bindingId": binding_id,
                         "bindingAlias": "database",
                         "capability": "postgres",
+                        "protocol": None,
                     }
                 ],
             },
@@ -698,6 +1098,51 @@ spec:
       repository: https://charts.example.test
       name: paperless
       version: "1.0.0"
+    values:
+      mappings: []
+""".strip()
+    )
+    return path
+
+
+def _write_configured_service(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: storage-size
+        type: string
+        required: true
+      - name: enable-backups
+        type: boolean
+        default: false
+      - name: profile
+        type: enum
+        default: local
+        values:
+          - value: local
+            label: Local
+          - value: ci
+            label: CI
+      - name: admin-password
+        type: string
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
     values:
       mappings: []
 """.strip()

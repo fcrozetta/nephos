@@ -67,6 +67,7 @@ def _binding_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         "id": row["id"],
         "alias": row["alias"],
         "capability": row["capability"],
+        "protocol": row["protocol"],
         "appInstance": {
             "id": row["app_instance_id"],
             "slug": row["app_instance_slug"],
