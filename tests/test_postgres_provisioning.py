@@ -227,7 +227,7 @@ def test_postgres_provisioner_creates_credentials_and_returns_outputs() -> None:
     provisioner = PostgresAppScopedProvisioner(
         core_v1_api=core,
         psql_runner=runner,
-        password_factory=lambda: "pg-secret",
+        password_factory=lambda: "pg-secret!",
     )
 
     values = provisioner.provision_binding(_context())
@@ -237,13 +237,14 @@ def test_postgres_provisioner_creates_credentials_and_returns_outputs() -> None:
         "port": "5432",
         "database": "nephos_paperless_database",
         "username": "nephos_paperless_database",
-        "password": "pg-secret",
+        "password": "pg-secret!",
         "uri": (
-            "postgresql://nephos_paperless_database:pg-secret"
-            "@svc-postgres-postgresql.svc-postgres.svc.cluster.local:5432/"
+            "postgresql://nephos_paperless_database:pg-secret%21@"
+            "svc-postgres-postgresql.svc-postgres.svc.cluster.local:5432/"
             "nephos_paperless_database"
         ),
     }
+
     created = core.created_secrets[0]
     assert created.metadata is not None
     assert created.metadata.name == "nephos-pg-paperless-database"
@@ -258,7 +259,7 @@ def test_postgres_provisioner_creates_credentials_and_returns_outputs() -> None:
     assert created.string_data == {
         "database": "nephos_paperless_database",
         "username": "nephos_paperless_database",
-        "password": "pg-secret",
+        "password": "pg-secret!",
     }
     assert runner.calls[0]["namespace"] == "svc-postgres"
     assert runner.calls[0]["pod_name"] == "svc-postgres-postgresql-0"
@@ -266,6 +267,37 @@ def test_postgres_provisioner_creates_credentials_and_returns_outputs() -> None:
     assert "CREATE ROLE" in runner.calls[0]["sql"]
     assert "CREATE DATABASE" in runner.calls[0]["sql"]
     assert "nephos_paperless_database" in runner.calls[0]["sql"]
+
+
+def test_postgres_provisioner_returns_admin_outputs_for_service_dependency() -> None:
+    core = FakeCoreV1Api()
+    runner = FakePsqlRunner()
+    provisioner = PostgresAppScopedProvisioner(
+        core_v1_api=core,
+        psql_runner=runner,
+        password_factory=lambda: "pg-secret",
+    )
+
+    values = provisioner.provision_binding(
+        BindingProvisioningContext(
+            binding_id="service-zitadel-database",
+            app_slug="zitadel",
+            service_slug="postgres",
+            alias="database",
+            capability="sql",
+            protocol="postgres",
+        )
+    )
+
+    assert values is not None
+    assert values["adminUsername"] == "postgres"
+    assert values["adminPassword"] == "admin-secret"
+    created = core.created_secrets[0]
+    assert created.string_data == {
+        "database": "nephos_zitadel_database",
+        "username": "nephos_zitadel_database",
+        "password": "pg-secret",
+    }
 
 
 def test_postgres_provisioner_reuses_existing_owned_credential_secret() -> None:
