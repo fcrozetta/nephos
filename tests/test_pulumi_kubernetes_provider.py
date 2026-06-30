@@ -702,7 +702,7 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
         namespace="svc-arcadedb",
         workload="arcadedb-service",
         values={
-            "image": "arcadedata/arcadedb:25.5.1",
+            "image": "arcadedata/arcadedb:26.5.1",
             "storageSize": "3Gi",
             "rootPassword": "arcade-secret",
             "enableGremlin": True,
@@ -717,16 +717,45 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
     service = k8s.service.calls[0]
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     assert secret["string_data"] == {"root-password": "arcade-secret"}
-    assert container["image"] == "arcadedata/arcadedb:25.5.1"
+    assert container["image"] == "arcadedata/arcadedb:26.5.1"
     assert container["command"] == ["/bin/sh", "-ec"]
     assert "root_password=\"$(cat /run/secrets/arcadedb/root-password)\"" in (
         container["args"][0]
     )
     assert "-Darcadedb.server.rootPassword=${root_password}" in container["args"][0]
+    assert "-Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin" in (
+        container["args"][0]
+    )
     assert "rootPasswordFile" not in container["args"][0]
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},
+        {"name": "bolt", "port": 7687, "targetPort": "bolt"},
         {"name": "gremlin", "port": 8182, "targetPort": "gremlin"},
         {"name": "mongo", "port": 27017, "targetPort": "mongo"},
     ]
+    assert {"name": "bolt", "containerPort": 7687} in container["ports"]
+
+
+def test_arcadedb_service_blocks_images_without_bolt_support() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-arcadedb",
+        work_dir=Path("/tmp/workspaces/svc-arcadedb"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-arcadedb",
+        namespace="svc-arcadedb",
+        workload="arcadedb-service",
+        values={"image": "arcadedata/arcadedb:25.5.1", "rootPassword": "arcade-secret"},
+    )
+
+    try:
+        _arcadedb_service(spec, k8s=k8s, opts=None)
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "runtime_config_unsupported"
+        assert "26.2.1" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected ArcadeDB image version block")

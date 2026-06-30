@@ -30,6 +30,8 @@ Goal:
   mappings only.
 - Record SeaweedFS and ArcadeDB binding-output keys as an accepted ADR before
   treating them as a public App-side Secret contract.
+- Enable ArcadeDB's accepted `opencypher/bolt` runtime surface before the
+  default router can report ArcadeDB as deployed.
 
 Non-goals:
 

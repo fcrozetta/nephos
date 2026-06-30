@@ -57,6 +57,11 @@ ArcadeDB `gremlin/gremlin` and `mongo/mongo` remain catalog-visible optional
 runtime surfaces, but app-scoped provisioning for them is disabled by default
 until explicitly enabled and verified.
 
+ArcadeDB `opencypher/bolt` requires the runtime image and provider shape to
+support the Bolt plugin. The Phase 1 ArcadeDB runtime must use ArcadeDB 26.2.1
+or newer, expose port `7687`, and start the Bolt plugin before Nephos may report
+the `arcadedb` Service runtime as deployed for the accepted Bolt capability.
+
 Binding Secret values remain sensitive. API/status/repository summaries must
 report only redacted output metadata such as target, Secret name, namespace, key
 names, capability, protocol, and `redacted: true`.

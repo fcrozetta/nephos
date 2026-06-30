@@ -1173,15 +1173,18 @@ def _arcadedb_service(
     name = f"{spec.runtime_name}-arcadedb"
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
-    image = _string_value(spec.values, "image", "arcadedata/arcadedb:25.5.1")
+    image = _string_value(spec.values, "image", "arcadedata/arcadedb:26.5.1")
+    _ensure_arcadedb_bolt_supported(image)
     root_password = _required_string_value(spec.values, "rootPassword")
     ports = [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},
+        {"name": "bolt", "port": 7687, "targetPort": "bolt"},
     ]
     container_ports = [
         {"name": "http", "containerPort": 2480},
         {"name": "binary", "containerPort": 2424},
+        {"name": "bolt", "containerPort": 7687},
     ]
     if _bool_value(spec.values, "enableGremlin", False):
         ports.append({"name": "gremlin", "port": 8182, "targetPort": "gremlin"})
@@ -1235,7 +1238,9 @@ def _arcadedb_service(
                                     "/run/secrets/arcadedb/root-password)\"\n"
                                     "exec /opt/arcadedb/bin/server.sh "
                                     "\"-Darcadedb.server.rootPassword="
-                                    "${root_password}\""
+                                    "${root_password}\" "
+                                    "\"-Darcadedb.server.plugins="
+                                    "Bolt:com.arcadedb.bolt.BoltProtocolPlugin\""
                                 )
                             ],
                             "ports": container_ports,
@@ -1264,6 +1269,33 @@ def _arcadedb_service(
         },
         opts=opts,
     )
+
+
+def _ensure_arcadedb_bolt_supported(image: str) -> None:
+    tag = image.rsplit(":", 1)[-1] if ":" in image.rsplit("/", 1)[-1] else ""
+    if not tag or tag == "latest":
+        return
+    version = _version_tuple(tag)
+    if version is None or version >= (26, 2, 1):
+        return
+    raise RuntimeBlockedError(
+        reason="runtime_config_unsupported",
+        message=(
+            "ArcadeDB opencypher/bolt requires ArcadeDB image version 26.2.1 "
+            "or newer."
+        ),
+    )
+
+
+def _version_tuple(tag: str) -> tuple[int, int, int] | None:
+    parts = tag.split("-", 1)[0].split(".")
+    if not parts or not all(part.isdigit() for part in parts[:3]):
+        return None
+    padded = [int(part) for part in parts[:3]]
+    while len(padded) < 3:
+        padded.append(0)
+    major, minor, patch = padded[:3]
+    return (major, minor, patch)
 
 
 def _string_value(

@@ -113,6 +113,8 @@ Catalog and packaging:
 - ArcadeDB optional `gremlin/gremlin` and `mongo/mongo` are catalog-visible
   runtime surfaces but app-scoped provisioning remains disabled by default until
   explicitly enabled and verified
+- ArcadeDB `opencypher/bolt` requires ArcadeDB 26.2.1 or newer, Bolt plugin
+  startup, and port 7687 exposure before the runtime can be reported deployed
 - Zitadel provides `oidc/oidc` and `service-account/jwt`
 
 Services:
