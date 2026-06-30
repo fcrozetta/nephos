@@ -60,6 +60,8 @@ class RecordingDependencyProvisioner:
             "database": "nephos_zitadel_database",
             "username": "nephos_zitadel_database",
             "password": "pg-secret",
+            "adminUsername": "postgres",
+            "adminPassword": "admin-secret",
         }
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
@@ -269,6 +271,8 @@ def test_provider_runtime_deployer_provisions_service_dependencies(
         "databaseName": "nephos_zitadel_database",
         "databaseUsername": "nephos_zitadel_database",
         "databasePassword": "pg-secret",
+        "databaseAdminUsername": "postgres",
+        "databaseAdminPassword": "admin-secret",
     }
     assert len(provisioner.contexts) == 1
     provision_context = provisioner.contexts[0]
@@ -788,6 +792,18 @@ spec:
             field: password
           to:
             helmValue: databasePassword
+        - from:
+            kind: binding
+            name: database
+            field: adminUsername
+          to:
+            helmValue: databaseAdminUsername
+        - from:
+            kind: binding
+            name: database
+            field: adminPassword
+          to:
+            helmValue: databaseAdminPassword
 """.strip()
     )
     return path

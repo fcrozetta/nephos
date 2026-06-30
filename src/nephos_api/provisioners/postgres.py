@@ -138,7 +138,13 @@ class PostgresAppScopedProvisioner:
             admin_password=admin_password,
             sql=_provision_database_sql(credentials),
         )
-        return _binding_values(credentials, host=runtime.host)
+        return _binding_values(
+            credentials,
+            host=runtime.host,
+            admin_password=(
+                admin_password if _is_service_dependency_context(context) else None
+            ),
+        )
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
         if not _is_postgres_binding(context):
@@ -363,22 +369,40 @@ def _assert_owned_credential_secret(
         )
 
 
-def _binding_values(credentials: dict[str, str], *, host: str) -> dict[str, str]:
+def _binding_values(
+    credentials: dict[str, str],
+    *,
+    host: str,
+    admin_password: str | None = None,
+) -> dict[str, str]:
     database = credentials["database"]
     username = credentials["username"]
     password = credentials["password"]
     port = "5432"
-    return {
+    values = {
         "host": host,
         "port": port,
         "database": database,
         "username": username,
         "password": password,
         "uri": (
-            f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}"
-            f"@{host}:{port}/{quote(database, safe='')}"
+            f"postgresql://{quote(username, safe='')}:"
+            f"{quote(password, safe='')}@{host}:{port}/"
+            f"{quote(database, safe='')}"
         ),
     }
+    if admin_password is not None:
+        values.update(
+            {
+                "adminUsername": "postgres",
+                "adminPassword": admin_password,
+            }
+        )
+    return values
+
+
+def _is_service_dependency_context(context: BindingProvisioningContext) -> bool:
+    return context.binding_id.startswith("service-")
 
 def _provision_database_sql(credentials: dict[str, str]) -> str:
     database = credentials["database"]

@@ -108,6 +108,8 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
         ("database", "databaseName"),
         ("database", "databaseUsername"),
         ("database", "databasePassword"),
+        ("database", "databaseAdminUsername"),
+        ("database", "databaseAdminPassword"),
     }
     assert manifests["zitadel"]["spec"]["requires"] == [
         {"capability": "sql", "protocol": "postgres", "as": "database"}

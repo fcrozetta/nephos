@@ -59,6 +59,17 @@ For PostgreSQL bindings, the accepted logical output fields are:
 - `password`
 - `uri`
 
+For synthetic Service dependency runtime mappings, PostgreSQL providers may also
+return transient administrative fields when a dependent Service needs them to
+initialize its own runtime database schema:
+
+- `adminUsername`
+- `adminPassword`
+
+These administrative fields are for Service-to-Service runtime mapping only.
+They are not part of the PostgreSQL `app-secret` output contract for Apps and
+must not be materialized into App binding Secrets by default.
+
 Do not add a manifest `fields:` syntax for PostgreSQL binding outputs in Phase 1.
 
 For PostgreSQL `app-secret` outputs, use these exact lowercase Kubernetes Secret keys:

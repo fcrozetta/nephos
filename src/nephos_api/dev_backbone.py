@@ -205,6 +205,8 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             ("database", "database", "databaseName"),
             ("database", "username", "databaseUsername"),
             ("database", "password", "databasePassword"),
+            ("database", "adminUsername", "databaseAdminUsername"),
+            ("database", "adminPassword", "databaseAdminPassword"),
         ],
     )
 
