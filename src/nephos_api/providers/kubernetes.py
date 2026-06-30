@@ -1044,6 +1044,93 @@ def _seaweedfs_service(
     )
 
 
+def _onepassword_connect_service(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    name = f"{spec.runtime_name}-onepassword-connect"
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    api_image = _string_value(spec.values, "apiImage", "1password/connect-api:1")
+    sync_image = _string_value(spec.values, "syncImage", "1password/connect-sync:1")
+    credentials_json = _required_string_value(spec.values, "credentialsJson")
+    connect_token = _optional_string_value(spec.values, "connectToken")
+    http_port = _int_value(spec.values, "httpPort", 8080)
+    secret_data = {
+        "1password-credentials.json": credentials_json,
+        **({"token": connect_token} if connect_token is not None else {}),
+    }
+    k8s.core.v1.Secret(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        type="Opaque",
+        string_data=secret_data,
+        opts=opts,
+    )
+    k8s.core.v1.Service(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "ports": [{"name": "http", "port": http_port, "targetPort": "http"}],
+            "selector": selector,
+        },
+        opts=opts,
+    )
+    shared_mounts = [
+        {"name": "credentials", "mountPath": "/home/opuser/.op", "readOnly": True},
+        {"name": "data", "mountPath": "/home/opuser/.op/data"},
+    ]
+    k8s.apps.v1.Deployment(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "connect-api",
+                            "image": api_image,
+                            "ports": [{"name": "http", "containerPort": http_port}],
+                            "env": [{"name": "OP_HTTP_PORT", "value": str(http_port)}],
+                            "volumeMounts": shared_mounts,
+                        },
+                        {
+                            "name": "connect-sync",
+                            "image": sync_image,
+                            "volumeMounts": shared_mounts,
+                        },
+                    ],
+                    "volumes": [
+                        {
+                            "name": "credentials",
+                            "secret": {"secretName": name},
+                        },
+                        {"name": "data", "emptyDir": {}},
+                    ],
+                },
+            },
+        },
+        opts=opts,
+    )
+
+
 def _arcadedb_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -1291,5 +1378,6 @@ _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "cloudflared-service": _cloudflared_service,
     "zitadel-service": _zitadel_service,
     "seaweedfs-service": _seaweedfs_service,
+    "onepassword-connect-service": _onepassword_connect_service,
     "arcadedb-service": _arcadedb_service,
 }

@@ -8,6 +8,7 @@ from nephos_api.providers.kubernetes import (
     PulumiKubernetesWorkloadSpec,
     _arcadedb_service,
     _cloudflared_service,
+    _onepassword_connect_service,
     _postgres_service,
     _pulumi_program,
     _seaweedfs_service,
@@ -616,6 +617,53 @@ def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
     assert service["spec"]["ports"] == [
         {"name": "s3", "port": 8333, "targetPort": "s3"}
     ]
+
+
+def test_onepassword_connect_service_materializes_credentials_secret() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-onepassword-connect",
+        work_dir=Path("/tmp/workspaces/svc-onepassword-connect"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-onepassword-connect",
+        namespace="svc-onepassword-connect",
+        workload="onepassword-connect-service",
+        values={
+            "apiImage": "1password/connect-api:1",
+            "syncImage": "1password/connect-sync:1",
+            "credentialsJson": '{"version":"2"}',
+            "connectToken": "connect-token",
+            "httpPort": 8080,
+        },
+    )
+
+    _onepassword_connect_service(spec, k8s=k8s, opts=None)
+
+    secret = cast(dict[str, Any], k8s.secret.calls[0])
+    service = cast(dict[str, Any], k8s.service.calls[0])
+    deployment = cast(dict[str, Any], k8s.deployment.calls[0])
+    pod_spec = deployment["spec"]["template"]["spec"]
+    containers = pod_spec["containers"]
+    assert secret["string_data"] == {
+        "1password-credentials.json": '{"version":"2"}',
+        "token": "connect-token",
+    }
+    assert service["spec"]["ports"] == [
+        {"name": "http", "port": 8080, "targetPort": "http"}
+    ]
+    assert containers[0]["name"] == "connect-api"
+    assert containers[0]["image"] == "1password/connect-api:1"
+    assert containers[0]["env"] == [{"name": "OP_HTTP_PORT", "value": "8080"}]
+    assert containers[1]["name"] == "connect-sync"
+    assert containers[1]["image"] == "1password/connect-sync:1"
+    assert {"name": "data", "emptyDir": {}} in pod_spec["volumes"]
+    assert {
+        "name": "credentials",
+        "secret": {"secretName": "svc-onepassword-connect-onepassword-connect"},
+    } in pod_spec["volumes"]
 
 
 def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
