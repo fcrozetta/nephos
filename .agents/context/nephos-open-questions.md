@@ -25,11 +25,20 @@ Need to decide:
 
 - exact OIDC client binding output fields and Secret key names
 - exact Zitadel service-account/JWT binding output fields and Secret key names
-- exact SeaweedFS S3 binding output fields and Secret key names
-- exact ArcadeDB binding output fields and Secret key names per protocol
-- default enablement policy for optional ArcadeDB `gremlin/gremlin` and `mongo/mongo`
 - Service-surface route shape for Zitadel login/admin UI
 - whether generic Service surfaces need a shared response shape before the first implementation
+
+Resolved for this phase:
+
+- SeaweedFS S3 app binding output fields are `endpointUrl`, `bucket`,
+  `accessKeyId`, `secretAccessKey`, and `region`.
+- ArcadeDB app binding output fields are `host`, `port`, `database`,
+  `username`, `password`, `protocol`, and `uri` for each enabled protocol.
+- ArcadeDB core protocols are `sql/arcadedb`, `opencypher/bolt`, and
+  `opencypher/n4j`.
+- ArcadeDB `gremlin/gremlin` and `mongo/mongo` are catalog-visible optional
+  runtime surfaces but app-scoped provisioning for them remains disabled by
+  default until explicitly enabled and verified.
 
 ## Namespace Details
 

@@ -18,7 +18,37 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: 1Password Connect LCL Service
+## Current Plan Addendum: Remaining Alpha Backbone Core Services
+
+Goal:
+
+- Publish `seaweedfs` and `arcadedb` as core-registry Service catalog entries.
+- Wire Nephos' default Service provider router to the already-implemented
+  Pulumi Kubernetes workloads for SeaweedFS and ArcadeDB.
+- Keep app-scoped provisioning client implementation out of this slice; catalog
+  entries expose the accepted capability/protocol surfaces and runtime config
+  mappings only.
+
+Non-goals:
+
+- Do not implement live SeaweedFS S3 bucket/user provisioning in this slice.
+- Do not implement live ArcadeDB database/user provisioning in this slice.
+- Do not enable ArcadeDB optional `gremlin/gremlin` or `mongo/mongo` app-scoped
+  binding provisioning by default.
+- Do not change resolved 1Password credential values.
+
+Validation commands:
+
+- `uv run ruff check src/nephos_api/main.py tests/test_main.py`
+- `uv run pytest tests/test_main.py tests/test_pulumi_kubernetes_provider.py -q`
+- `(cd .nephos/registries/core-registry && NEPHOS_SRC=<nephos-src>/src python3 scripts/validate_catalog.py)`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: 1Password Connect LCL Service
 
 Goal:
 

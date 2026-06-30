@@ -315,6 +315,14 @@ def default_provider_deployer_factory(
                 config=kubernetes_config,
                 workload="zitadel-service",
             ),
+            "seaweedfs": PulumiKubernetesProvider(
+                config=kubernetes_config,
+                workload="seaweedfs-service",
+            ),
+            "arcadedb": PulumiKubernetesProvider(
+                config=kubernetes_config,
+                workload="arcadedb-service",
+            ),
             "cloudflared": PulumiKubernetesProvider(
                 config=kubernetes_config,
                 workload="cloudflared-service",
