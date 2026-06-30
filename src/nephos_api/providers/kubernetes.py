@@ -1272,7 +1272,9 @@ def _arcadedb_service(
 
 
 def _ensure_arcadedb_bolt_supported(image: str) -> None:
-    tag = image.rsplit(":", 1)[-1] if ":" in image.rsplit("/", 1)[-1] else ""
+    image_without_digest = image.split("@", 1)[0]
+    image_name = image_without_digest.rsplit("/", 1)[-1]
+    tag = image_name.rsplit(":", 1)[-1] if ":" in image_name else ""
     if not tag or tag == "latest":
         return
     version = _version_tuple(tag)

@@ -749,7 +749,13 @@ def test_arcadedb_service_blocks_images_without_bolt_support() -> None:
         runtime_name="svc-arcadedb",
         namespace="svc-arcadedb",
         workload="arcadedb-service",
-        values={"image": "arcadedata/arcadedb:25.5.1", "rootPassword": "arcade-secret"},
+        values={
+            "image": (
+                "arcadedata/arcadedb:25.5.1@sha256:"
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+            "rootPassword": "arcade-secret",
+        },
     )
 
     try:
