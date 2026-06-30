@@ -18,7 +18,39 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: 1Password LCL Phase 1 Conventions
+## Current Plan Addendum: 1Password Connect LCL Service
+
+Goal:
+
+- Add the first Nephos-managed LCL `onepassword-connect` Service path so local
+  Nephos can install Connect API/sync from operator-owned bootstrap material.
+- Keep desired state reference-only: Connect credentials/token values remain
+  `op://...` refs until deploy-time materialization.
+- Defer the Kubernetes Operator and app-scoped materialization provider to a
+  later slice.
+
+Plan file:
+
+- `docs/plans/2026-06-30-onepassword-connect-lcl-service.md`
+
+Non-goals:
+
+- Do not deploy the 1Password Kubernetes Operator in this slice.
+- Do not implement app-scoped secret materialization from Connect yet.
+- Do not change `dev` or `prd` token/service-account policy.
+
+Validation commands:
+
+- `uv run ruff check src/nephos_api/main.py src/nephos_api/providers/kubernetes.py tests/test_main.py tests/test_pulumi_kubernetes_provider.py`
+- `uv run pytest tests/test_main.py tests/test_pulumi_kubernetes_provider.py -q`
+- `(cd .nephos/registries/core-registry && NEPHOS_SRC=<nephos-src>/src python3 scripts/validate_catalog.py)`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: 1Password LCL Phase 1 Conventions
 
 Goal:
 
