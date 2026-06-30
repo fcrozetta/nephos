@@ -194,6 +194,7 @@ class KubernetesPulumiZitadelProvisioningClient:
             service_name=_zitadel_service_name(context.service_slug),
             remote_port=8080,
             host=self._config.local_bind_address,
+            domain=_provisioning_domain(context),
             kubeconfig=self._config.kubeconfig,
             kube_context=self._config.kube_context,
         )
@@ -669,6 +670,7 @@ class _KubectlPortForward:
         service_name: str,
         remote_port: int,
         host: str,
+        domain: str,
         kubeconfig: Path | None,
         kube_context: str | None,
     ) -> None:
@@ -676,6 +678,7 @@ class _KubectlPortForward:
         self._service_name = service_name
         self._remote_port = remote_port
         self._host = host
+        self._domain = domain
         self._kubeconfig = kubeconfig
         self._kube_context = kube_context
         self._process: subprocess.Popen[str] | None = None
@@ -717,7 +720,11 @@ class _KubectlPortForward:
         except BaseException:
             self.__exit__(None, None, None)
             raise
-        return _ForwardEndpoint(host=self._host, port=self._local_port)
+        return _ForwardEndpoint(
+            host=self._host,
+            port=self._local_port,
+            domain=self._domain,
+        )
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         if self._process is None:

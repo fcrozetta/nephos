@@ -438,14 +438,24 @@ Need to decide:
 
 Question:
 
-What exact secret naming, labeling, rotation, and backup behavior should Nephos use?
+What exact secret naming, labeling, rotation, backup, and 1Password-backed source-of-truth behavior should Nephos use?
 
 Accepted direction:
 
-- Kubernetes Secrets in Phase 1
-- external secret managers deferred
-- future secret managers may be modeled as Services
-- Service-internal/admin secrets live in Service namespaces
+- Kubernetes Secrets remain the Phase 1 runtime materialization mechanism
+- 1Password is the accepted operator-owned source of truth for LCL bootstrap and runtime-support secrets
+- `nephos-lcl`, `nephos-dev`, and `nephos-prd` are separate environment vaults
+- only LCL is currently disposable/repopulate-safe
+- vaults are environment boundaries
+- items are Service/App secret bundles
+- fields are concrete credentials, tokens, connection strings, or files
+- tags/folders are organization only and not security boundaries
+- service account/CLI bootstrap uses the official `OP_SERVICE_ACCOUNT_TOKEN` variable
+- Nephos desired state may store 1Password references such as `op://nephos-lcl/postgres-admin/password` or equivalent structured metadata
+- Nephos desired state, status, logs, and diagnostics must not store or expose resolved secret values
+- Apps do not read directly from 1Password in Phase 1
+- future 1Password Connect/Kubernetes Operator integration should be modeled as a Nephos core Service/capability provider
+- Service-internal/admin secrets live in Service namespaces when materialized into Kubernetes
 - App binding credentials are materialized into App namespaces
 - Apps should not read Service namespace Secrets directly
 - Service manifests declare logical binding outputs, not final consuming Secret names
@@ -459,10 +469,10 @@ Accepted direction:
 
 Need to decide:
 
-- rotation behavior
-- whether/how secrets are included in Nephos state backup
-- future explicit reveal command behavior
-- external secret manager integration model
+- rotation behavior for 1Password-backed and Kubernetes-materialized secrets
+- whether/how 1Password-backed secrets are represented in Nephos backup status
+- future explicit reveal/debug command behavior
+- exact future `onepassword-connect` Service manifest and provider shape
 - non-PostgreSQL Secret key serialization
 - binding credential materialization schemas beyond accepted PostgreSQL logical fields
 

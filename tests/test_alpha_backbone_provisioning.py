@@ -78,7 +78,11 @@ class FakeForward:
         self.kwargs = kwargs
 
     def __enter__(self):
-        return zitadel_module._ForwardEndpoint(host="127.0.0.1", port=23456)
+        return zitadel_module._ForwardEndpoint(
+            host="127.0.0.1",
+            port=23456,
+            domain=self.kwargs.get("domain"),
+        )
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         return None
@@ -446,10 +450,11 @@ def test_kubernetes_zitadel_client_uses_internal_forward_for_localhost_host(
         "service_name": "svc-zitadel-smoke-zitadel",
         "remote_port": 8080,
         "host": "127.0.0.1",
+        "domain": "zitadel-smoke.nephos.localhost",
         "kubeconfig": None,
         "kube_context": "docker-desktop",
     }
-    assert runner.oidc_specs[0].domain == "127.0.0.1"
+    assert runner.oidc_specs[0].domain == "zitadel-smoke.nephos.localhost"
     assert runner.oidc_specs[0].port == 23456
     assert runner.oidc_specs[0].insecure is True
 
@@ -563,6 +568,7 @@ def test_kubectl_port_forward_is_terminated_when_readiness_fails(monkeypatch) ->
         service_name="svc-zitadel-zitadel",
         remote_port=8080,
         host="127.0.0.1",
+        domain="zitadel.nephos.localhost",
         kubeconfig=None,
         kube_context=None,
     )

@@ -18,6 +18,43 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
+## Current Plan Addendum: 1Password LCL Phase 1 Conventions
+
+Goal:
+
+- Make `nephos-lcl` the accepted operator-owned source of truth for local
+  Nephos bootstrap and runtime-support secrets while keeping Kubernetes Secrets
+  as the Phase 1 workload materialization mechanism.
+- Define stable 1Password vault/item/field/reference conventions before adding
+  runtime integration.
+- Resolve `op://...` config values at deploy time so desired state stores refs
+  and runtime providers receive real values only when materializing workloads.
+
+Plan file:
+
+- `docs/plans/2026-06-30-onepassword-lcl-phase1.md`
+
+Decision file:
+
+- `docs/adr/20260630-onepassword-lcl-secrets-source.md`
+
+Non-goals:
+
+- Do not deploy 1Password Connect or the 1Password Kubernetes Operator in this
+  slice.
+- Do not implement runtime reads from 1Password in Nephos code yet.
+- Do not create canonical schema files under `schemas/` or canonical examples
+  under `examples/`.
+- Do not change `dev` or `prd` safety policy; only LCL is disposable.
+
+Validation commands:
+
+- `git diff --check`
+- `uv run ruff check .`
+- `uv run pytest -q`
+
+---
+
 ## Current Plan Addendum: Managed Registry Lanes and Mythos Mail Ingress
 
 Goal:

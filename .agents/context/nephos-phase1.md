@@ -171,7 +171,14 @@ Ingress and secrets:
 - Zitadel login/admin UI are the accepted narrow Service-surface exception
 - stopped Apps keep route intent and may keep runtime ingress
 - remove/destroy remove runtime ingress
-- Kubernetes Secrets for Phase 1
+- Kubernetes Secrets for Phase 1 runtime materialization
+- 1Password is the accepted operator-owned source of truth for LCL bootstrap and runtime-support secrets
+- `nephos-lcl` is the LCL environment vault and may be cleared/repopulated during local rebuilds
+- `nephos-dev` and `nephos-prd` remain separate environment vaults and are not disposable by default
+- vaults are environment boundaries; items are Service/App secret bundles; fields are concrete credentials/files; tags/folders are organization only
+- Nephos desired state stores secret references or metadata, not resolved secret values
+- accepted 1Password reference form is `op://<vault>/<item>/[section/]<field>` or equivalent structured metadata
+- Apps do not read directly from 1Password in Phase 1
 - App binding credentials materialized into App namespaces
 - App binding aliases default to `capability` when `as` is omitted
 - binding aliases are unique per App manifest and installed App instance

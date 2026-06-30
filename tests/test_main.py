@@ -89,6 +89,9 @@ def test_default_provider_deployer_factory_builds_pulumi_provider_deployer(
     )
     assert captured["app_provider"].__class__.__name__ == "RuntimeProviderRouter"
     assert captured["service_provider"].__class__.__name__ == "RuntimeProviderRouter"
+    assert captured["secret_resolver"].__class__.__name__ == (
+        "OnePasswordCliSecretResolver"
+    )
 
 
 def test_default_runtime_factory_provides_apps_api_for_scaling(

@@ -15,6 +15,7 @@ Read these files before changing behavior or public contracts:
 | `.agents/context/` | Architecture context that explains the accepted model. |
 | `docs/adr/` | Architectural Decision Records. Accepted ADRs are durable. |
 | `docs/testing/api-0-0-1-manual.md` | Manual runtime smoke and Kubernetes integration checks. |
+| `docs/plans/2026-06-30-onepassword-lcl-phase1.md` | LCL 1Password vault/item/field/reference conventions. |
 
 ## Repository shape
 

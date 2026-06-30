@@ -18,6 +18,7 @@ from nephos_api.providers.pulumi import (
 from nephos_api.provisioners.base import BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import StaticSecretResolver
 
 
 class RecordingProvider:
@@ -221,6 +222,67 @@ def test_provider_runtime_deployer_maps_service_config_defaults_and_overrides(
         "storageSize": "8Gi",
         "debug": {"enabled": False},
     }
+
+
+def test_provider_runtime_deployer_resolves_onepassword_config_refs(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_provider_service_with_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"storage-size": "op://nephos-lcl/postgres-admin/password"},
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+        secret_resolver=StaticSecretResolver(
+            {"op://nephos-lcl/postgres-admin/password": "resolved-secret"}
+        ),
+    )
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    context = service_provider.deployed[0]
+    assert context.values["storageSize"] == "resolved-secret"
+
+
+def test_provider_runtime_deployer_blocks_onepassword_refs_without_provider(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_provider_service_with_runtime_mappings(catalog_root)
+    repo = _repo(tmp_path)
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"storage-size": "op://nephos-lcl/postgres-admin/password"},
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=RecordingProvider(),
+    )
+
+    try:
+        deployer.deploy(target_type="service_instance", slug="postgres")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_provider_unavailable"
+    else:
+        raise AssertionError("expected missing secret provider to block")
 
 
 def test_provider_runtime_deployer_provisions_service_dependencies(

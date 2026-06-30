@@ -88,11 +88,11 @@ def _short_lived_bootstrap_key_expiration() -> str:
 
 def _backbone_service_config(service_name: str) -> dict[str, object]:
     if service_name == "postgres":
-        return {"admin-password": _generated_local_secret("postgres")}
+        return {"admin-password": "op://nephos-lcl/postgres-admin/password"}
     if service_name == "zitadel":
         return {
-            "admin-password": _generated_local_secret("zitadel-admin"),
-            "master-key": uuid4().hex,
+            "admin-password": "op://nephos-lcl/zitadel-bootstrap/admin_password",
+            "master-key": "op://nephos-lcl/zitadel-bootstrap/master_key",
             "bootstrap-machine-key-expiration": (
                 _short_lived_bootstrap_key_expiration()
             ),
@@ -399,7 +399,11 @@ spec:
     - capability: oidc
       protocol: oidc
       as: identity
-  routes: []
+  routes:
+    - name: web
+      visibility: local
+      target:
+        port: http
   config:
     options: []
   runtime:
@@ -541,6 +545,10 @@ def _wait_for_live_result(
     while time.monotonic() < deadline:
         blocker = _first_blocked_status(api)
         if blocker is not None:
+            if _transient_live_blocker(blocker):
+                _reconcile_blocked_bindings(api)
+                time.sleep(5)
+                continue
             return BackboneSmokeResult(
                 status="blocked",
                 blocker_code=str(blocker["reason"]),
@@ -550,7 +558,11 @@ def _wait_for_live_result(
         app_response = api.get(f"/apps/{app_slug}")
         if app_response.status_code == 200:
             app_status = app_response.json()["status"]
-            if app_status and app_status["reason"] == "runtime_deployed":
+            if (
+                app_status
+                and app_status["reason"] == "runtime_deployed"
+                and _live_bindings_ready(api)
+            ):
                 return BackboneSmokeResult(
                     status="passed",
                     message="Alpha backbone runtime converged.",
@@ -560,9 +572,55 @@ def _wait_for_live_result(
     return BackboneSmokeResult(
         status="blocked",
         blocker_code="backbone_smoke_timeout",
-        message="Timed out waiting for alpha backbone runtime convergence.",
+        message=(
+            "Timed out waiting for alpha backbone runtime convergence. "
+            f"Binding status: {_live_binding_status_summary(api)}"
+        ),
         app_slug=app_slug,
     )
+
+
+def _transient_live_blocker(status: dict[str, object]) -> bool:
+    return (
+        status.get("reason") == "binding_provisioner_unavailable"
+        and status.get("message")
+        == "Zitadel bootstrap machine key is not readable yet."
+    )
+
+
+def _reconcile_blocked_bindings(api: TestClient) -> None:
+    for binding in api.get("/bindings").json()["bindings"]:
+        status = binding.get("status")
+        if isinstance(status, dict) and status.get("reconciliation") == "blocked":
+            api.post(f"/bindings/{binding['id']}/actions/reconcile")
+
+
+def _live_bindings_ready(api) -> bool:
+    expected_aliases = set(EXPECTED_BINDING_SECRET_KEYS)
+    ready_aliases = set()
+    for binding in api.get("/bindings").json()["bindings"]:
+        status = binding.get("status")
+        if isinstance(status, dict) and status.get("reason") == "binding_secret_ready":
+            ready_aliases.add(str(binding["alias"]))
+    return expected_aliases <= ready_aliases
+
+
+def _live_binding_status_summary(api) -> str:
+    parts = []
+    for binding in api.get("/bindings").json()["bindings"]:
+        status = binding.get("status")
+        reason = None
+        reconciliation = None
+        message = None
+        if isinstance(status, dict):
+            reason = status.get("reason")
+            reconciliation = status.get("reconciliation")
+            message = status.get("message")
+        summary = f"{binding['alias']}={reconciliation or 'none'}/{reason or 'none'}"
+        if message:
+            summary = f"{summary} ({message})"
+        parts.append(summary)
+    return ", ".join(parts) or "none"
 
 
 def _verify_live_binding_secrets(*, app_slug: str) -> list[dict[str, object]]:
