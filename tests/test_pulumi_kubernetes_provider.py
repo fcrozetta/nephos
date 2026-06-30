@@ -637,6 +637,7 @@ def test_onepassword_connect_service_materializes_credentials_secret() -> None:
             "credentialsJson": '{"version":"2"}',
             "connectToken": "connect-token",
             "httpPort": 8080,
+            "syncHttpPort": 8081,
         },
     )
 
@@ -659,6 +660,8 @@ def test_onepassword_connect_service_materializes_credentials_secret() -> None:
     assert containers[0]["env"] == [{"name": "OP_HTTP_PORT", "value": "8080"}]
     assert containers[1]["name"] == "connect-sync"
     assert containers[1]["image"] == "1password/connect-sync:1"
+    assert containers[1]["env"] == [{"name": "OP_HTTP_PORT", "value": "8081"}]
+    assert pod_spec["securityContext"] == {"fsGroup": 999}
     assert {"name": "data", "emptyDir": {}} in pod_spec["volumes"]
     assert {
         "name": "credentials",

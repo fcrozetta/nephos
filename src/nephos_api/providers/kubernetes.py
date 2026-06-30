@@ -1058,6 +1058,7 @@ def _onepassword_connect_service(
     credentials_json = _required_string_value(spec.values, "credentialsJson")
     connect_token = _optional_string_value(spec.values, "connectToken")
     http_port = _int_value(spec.values, "httpPort", 8080)
+    sync_http_port = _int_value(spec.values, "syncHttpPort", 8081)
     secret_data = {
         "1password-credentials.json": credentials_json,
         **({"token": connect_token} if connect_token is not None else {}),
@@ -1114,9 +1115,13 @@ def _onepassword_connect_service(
                         {
                             "name": "connect-sync",
                             "image": sync_image,
+                            "env": [
+                                {"name": "OP_HTTP_PORT", "value": str(sync_http_port)}
+                            ],
                             "volumeMounts": shared_mounts,
                         },
                     ],
+                    "securityContext": {"fsGroup": 999},
                     "volumes": [
                         {
                             "name": "credentials",

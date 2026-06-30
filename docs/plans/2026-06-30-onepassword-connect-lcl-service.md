@@ -45,7 +45,9 @@ Core registry repo:
 1. Add a `onepassword-connect` core Service catalog entry with explicit LCL
    credentials/token config refs.
 2. Add a Pulumi Kubernetes workload renderer for a local Connect API/sync
-   Deployment, Service, and Secret.
+   Deployment, Service, and Secret. The API and sync containers must use
+   distinct HTTP ports (`httpPort`, default `8080`; `syncHttpPort`, default
+   `8081`) because both containers share the Pod network namespace.
 3. Wire the provider runtime name into the default Service provider router.
 4. Add focused unit/catalog tests.
 5. Validate Nephos and core-registry catalog loading.
@@ -56,6 +58,9 @@ Core registry repo:
 - Logging or committing resolved credentials/token values.
 - Treating Connect deployment as the same as Kubernetes Operator-backed workload
   Secret materialization; that remains a later slice.
+- Regressing Connect container startup by assigning both API and sync to the
+  same in-pod HTTP port or by mounting the shared data volume without write
+  permission for the `opuser` runtime UID.
 - Using broad tokens beyond `nephos-lcl` in local testing.
 
 ## Validation commands
