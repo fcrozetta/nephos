@@ -16,6 +16,7 @@ from nephos_api.kubernetes_runtime import namespace_name
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import RuntimeSecretResolver, resolve_runtime_secret_value
 
 
 @dataclass(frozen=True)
@@ -213,10 +214,12 @@ class ManifestHelmDeployer:
         repository: DesiredStateRepository,
         helm_runtime: HelmRuntime,
         binding_value_source: BindingValueSource | None = None,
+        secret_resolver: RuntimeSecretResolver | None = None,
     ) -> None:
         self._repository = repository
         self._helm_runtime = helm_runtime
         self._binding_value_source = binding_value_source
+        self._secret_resolver = secret_resolver
 
     def deploy(self, *, target_type: str, slug: str) -> None:
         row = self._instance_row(target_type=target_type, slug=slug)
@@ -292,7 +295,10 @@ class ManifestHelmDeployer:
                     reason="runtime_mapping_source_missing",
                     message=f"Config value {source.name} is not available.",
                 )
-            return config[source.name]
+            return resolve_runtime_secret_value(
+                config[source.name],
+                self._secret_resolver,
+            )
 
         if source.field is None:
             raise RuntimeBlockedError(

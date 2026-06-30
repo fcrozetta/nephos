@@ -9,6 +9,9 @@ from nephos_api.config import Settings
 from nephos_api.dev_backbone import (
     EXPECTED_BINDING_SECRET_KEYS,
     BackboneSmokeResult,
+    _backbone_service_config,
+    _live_bindings_ready,
+    _transient_live_blocker,
     _verify_key_only_binding_report,
     run_backbone_smoke,
     write_alpha_backbone_catalog,
@@ -31,6 +34,13 @@ def test_alpha_backbone_catalog_generator_writes_protocol_aware_entries(
         ("service-account", "jwt"),
     }
     app_entry = loader.get_app("backbone-check")
+    assert app_entry["routes"] == [
+        {
+            "name": "web",
+            "visibility": "local",
+            "target": {"port": "http"},
+        }
+    ]
     assert {
         (requirement["alias"], requirement["capability"], requirement["protocol"])
         for requirement in app_entry["requires"]
@@ -114,6 +124,54 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
     assert manifests["zitadel"]["spec"]["requires"] == [
         {"capability": "sql", "protocol": "postgres", "as": "database"}
     ]
+
+
+def test_alpha_backbone_smoke_uses_onepassword_lcl_secret_refs() -> None:
+    assert _backbone_service_config("postgres") == {
+        "admin-password": "op://nephos-lcl/postgres-admin/password"
+    }
+    zitadel_config = _backbone_service_config("zitadel")
+    assert zitadel_config["admin-password"] == (
+        "op://nephos-lcl/zitadel-bootstrap/admin_password"
+    )
+    assert zitadel_config["master-key"] == (
+        "op://nephos-lcl/zitadel-bootstrap/master_key"
+    )
+    assert isinstance(zitadel_config["bootstrap-machine-key-expiration"], str)
+
+
+def test_alpha_backbone_treats_bootstrap_key_read_as_transient() -> None:
+    assert _transient_live_blocker(
+        {
+            "reason": "binding_provisioner_unavailable",
+            "message": "Zitadel bootstrap machine key is not readable yet.",
+        }
+    )
+    assert not _transient_live_blocker(
+        {
+            "reason": "binding_provisioner_unavailable",
+            "message": "Zitadel Service config is missing required value.",
+        }
+    )
+
+
+def test_alpha_backbone_waits_for_all_binding_secrets() -> None:
+    assert _live_bindings_ready(
+        _FakeBindingsApi(
+            [
+                {"alias": "postgres", "status": {"reason": "binding_secret_ready"}},
+                {"alias": "identity", "status": {"reason": "binding_secret_ready"}},
+            ]
+        )
+    )
+    assert not _live_bindings_ready(
+        _FakeBindingsApi(
+            [
+                {"alias": "postgres", "status": {"reason": "binding_secret_ready"}},
+                {"alias": "identity", "status": {"reason": "pending"}},
+            ]
+        )
+    )
 
 
 def test_backbone_smoke_returns_skip_blocker_without_live_config(
@@ -253,3 +311,20 @@ def _runtime_mapping_pairs(manifest: dict[str, object]) -> set[tuple[str, str]]:
         (mapping["from"]["name"], mapping["to"]["helmValue"])
         for mapping in mappings
     }
+
+
+class _FakeBindingsApi:
+    def __init__(self, bindings: list[dict[str, object]]) -> None:
+        self._bindings = bindings
+
+    def get(self, path: str):
+        assert path == "/bindings"
+        return _FakeResponse({"bindings": self._bindings})
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def json(self) -> dict[str, object]:
+        return self._payload

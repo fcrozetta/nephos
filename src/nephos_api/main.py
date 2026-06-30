@@ -29,6 +29,7 @@ from nephos_api.reconciler import Reconciler, RuntimeAdapter, RuntimeDeployer
 from nephos_api.reconciler_worker import ReconcilerWorker
 from nephos_api.registries import ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
+from nephos_api.secret_refs import OnePasswordCliSecretResolver
 
 RuntimeFactory = Callable[[Settings], RuntimeAdapter]
 DeployerFactory = Callable[[Settings, DesiredStateRepository], RuntimeDeployer]
@@ -328,6 +329,7 @@ def default_provider_deployer_factory(
         service_dependency_provisioner=PostgresAppScopedProvisioner(
             core_v1_api=core_v1_api
         ),
+        secret_resolver=OnePasswordCliSecretResolver(),
     )
 
 

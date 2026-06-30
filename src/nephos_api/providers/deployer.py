@@ -14,6 +14,7 @@ from nephos_api.providers.base import ProviderContext, RuntimeProvider
 from nephos_api.provisioners.base import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import RuntimeSecretResolver, resolve_runtime_secret_value
 
 
 class BindingValueSource(Protocol):
@@ -37,12 +38,14 @@ class ProviderRuntimeDeployer:
         service_provider: RuntimeProvider,
         binding_value_source: BindingValueSource | None = None,
         service_dependency_provisioner: BindingProvisioner | None = None,
+        secret_resolver: RuntimeSecretResolver | None = None,
     ) -> None:
         self._repository = repository
         self._app_provider = app_provider
         self._service_provider = service_provider
         self._binding_value_source = binding_value_source
         self._service_dependency_provisioner = service_dependency_provisioner
+        self._secret_resolver = secret_resolver
 
     def deploy(self, *, target_type: str, slug: str) -> None:
         context = self._context(target_type=target_type, slug=slug)
@@ -327,7 +330,10 @@ class ProviderRuntimeDeployer:
                     reason="runtime_mapping_source_missing",
                     message=f"Config value {source.name} is not available.",
                 )
-            return config[source.name]
+            return resolve_runtime_secret_value(
+                config[source.name],
+                self._secret_resolver,
+            )
 
         if source.field is None:
             raise RuntimeBlockedError(

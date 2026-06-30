@@ -18,6 +18,7 @@ from nephos_api.helm_runtime import (
 )
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import StaticSecretResolver
 
 
 class FakeRunner:
@@ -259,6 +260,39 @@ def test_manifest_helm_deployer_maps_service_config_defaults_and_overrides(
         "image: postgres:16-alpine\n"
         "storageSize: 8Gi\n"
     ]
+
+
+def test_manifest_helm_deployer_resolves_onepassword_config_refs(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    db_path = tmp_path / "nephos.db"
+    manifest_path = _write_service_with_runtime_mappings(catalog_root)
+    migrate_database(db_path=db_path)
+    repo = DesiredStateRepository(db_path)
+    runner = FakeRunner()
+    helm = HelmRuntime(config=HelmRuntimeConfig(), runner=runner, temp_dir=tmp_path)
+    deployer = ManifestHelmDeployer(
+        repository=repo,
+        helm_runtime=helm,
+        secret_resolver=StaticSecretResolver(
+            {"op://nephos-lcl/postgres-admin/password": "resolved-secret"}
+        ),
+    )
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"storage-size": "op://nephos-lcl/postgres-admin/password"},
+        )
+
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    assert "storageSize: resolved-secret\n" in runner.values_content[0]
+    assert "op://nephos-lcl" not in runner.values_content[0]
 
 
 def test_manifest_helm_deployer_deploys_installed_app_chart(
