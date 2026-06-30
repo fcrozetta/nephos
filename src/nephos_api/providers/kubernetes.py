@@ -587,6 +587,7 @@ def _zitadel_service(
             "name": name,
             "namespace": spec.namespace,
             "labels": labels,
+            "annotations": {"pulumi.com/skipAwait": "true"},
         },
         spec={
             "ports": [{"name": "http", "port": 8080, "targetPort": "http"}],
@@ -957,6 +958,7 @@ def _service_ingress(
             "name": name,
             "namespace": namespace,
             "labels": dict(labels),
+            "annotations": {"pulumi.com/skipAwait": "true"},
         },
         spec=spec,
         opts=opts,

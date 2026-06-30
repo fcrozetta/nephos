@@ -455,6 +455,7 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     }
     assert [item["name"] for item in containers] == ["zitadel", "bootstrap-reader"]
     assert bootstrap_pvc["spec"]["resources"]["requests"]["storage"] == "64Mi"
+    assert service["metadata"]["annotations"] == {"pulumi.com/skipAwait": "true"}
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 8080, "targetPort": "http"}
     ]
@@ -462,6 +463,7 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
         "name": "svc-zitadel-zitadel",
         "namespace": "svc-zitadel",
         "labels": service["metadata"]["labels"],
+        "annotations": {"pulumi.com/skipAwait": "true"},
     }
     assert ingress["spec"] == {
         "ingressClassName": "nginx",
