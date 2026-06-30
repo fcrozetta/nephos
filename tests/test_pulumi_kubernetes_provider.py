@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -606,13 +607,32 @@ def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
     env_names = {item["name"] for item in container.get("env", [])}
-    assert secret["string_data"] == {
-        "s3-access-key": "alpha-access",
-        "s3-secret-key": "alpha-secret",
+    pod_spec = stateful_set["spec"]["template"]["spec"]
+    s3_config = json.loads(secret["string_data"]["s3.json"])
+    assert s3_config == {
+        "identities": [
+            {
+                "name": "nephos-admin",
+                "credentials": [
+                    {"accessKey": "alpha-access", "secretKey": "alpha-secret"}
+                ],
+                "actions": ["Admin", "Read", "List", "Tagging", "Write"],
+            }
+        ]
     }
     assert container["image"] == "chrislusf/seaweedfs:3.85"
     assert "WEED_S3_ACCESS_KEY" not in env_names
     assert "WEED_S3_SECRET_KEY" not in env_names
+    assert "-s3.config=/etc/seaweedfs/s3.json" in container["args"]
+    assert {
+        "name": "s3-config",
+        "mountPath": "/etc/seaweedfs",
+        "readOnly": True,
+    } in container["volumeMounts"]
+    assert {
+        "name": "s3-config",
+        "secret": {"secretName": "svc-seaweedfs-seaweedfs"},
+    } in pod_spec["volumes"]
     assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
     assert service["spec"]["ports"] == [
         {"name": "s3", "port": 8333, "targetPort": "s3"}

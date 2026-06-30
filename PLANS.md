@@ -28,6 +28,8 @@ Goal:
 - Keep app-scoped provisioning client implementation out of this slice; catalog
   entries expose the accepted capability/protocol surfaces and runtime config
   mappings only.
+- Record SeaweedFS and ArcadeDB binding-output keys as an accepted ADR before
+  treating them as a public App-side Secret contract.
 
 Non-goals:
 
