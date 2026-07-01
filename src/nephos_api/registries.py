@@ -35,7 +35,7 @@ def _ensure_git_registry(
             f"managed catalog registry path exists but is not a git checkout: {path}"
         )
 
-    path.parent.mkdir(parents=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     try:
         runner(["git", "clone", "--depth", "1", registry.url, str(path)])
     except subprocess.CalledProcessError as exc:
