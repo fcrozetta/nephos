@@ -18,7 +18,39 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: ZITADEL Admin Password Complexity
+## Current Plan Addendum: Managed Registry Fast-Forward Refresh
+
+Goal:
+
+- Refresh existing managed catalog registry git checkouts safely during Nephos
+  startup/init.
+- Keep refresh fast-forward-only by default.
+- Block dirty or divergent managed checkouts with clear operator-facing errors.
+- Preserve `NEPHOS_API_CATALOG_ROOTS` as a replacement escape hatch that skips
+  managed registry synchronization.
+
+Issue:
+
+- `#25 Refresh existing managed catalog registry checkouts safely`
+
+Non-goals:
+
+- Do not change registry lane contents.
+- Do not force-reset or overwrite local managed checkout changes.
+- Do not alter local catalog experiment behavior when `NEPHOS_API_CATALOG_ROOTS`
+  is set.
+
+Validation commands:
+
+- `uv run pytest -q tests/test_registries.py tests/test_config.py tests/test_cli.py tests/test_main.py`
+- `uv run ruff check src/nephos_api/registries.py tests/test_registries.py`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: ZITADEL Admin Password Complexity
 
 Goal:
 

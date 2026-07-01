@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from nephos_api.cli import app
 from nephos_api.dev_backbone import BackboneSmokeResult
 from nephos_api.dev_reference import ReferenceSmokeResult
+from nephos_api.registries import RegistrySyncError
 
 _MIGRATION_ROWS = [("0000_initial",), ("0001_add_binding_protocol",)]
 
@@ -72,6 +73,30 @@ def test_cli_init_applies_migrations_and_creates_internal_domain(
     assert reconciliation_count == 0
     assert len(_registry_sync_calls) == 1
     assert _registry_sync_calls[0].managed_catalog_registries
+
+
+def test_cli_init_reports_managed_registry_sync_errors(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "state" / "nephos.db"
+    runner = CliRunner()
+
+    def fail_sync(_settings) -> None:
+        raise RegistrySyncError(
+            "failed to refresh managed catalog registry core-registry: dirty"
+        )
+
+    monkeypatch.setattr("nephos_api.cli.ensure_managed_catalog_registries", fail_sync)
+
+    result = runner.invoke(
+        app,
+        ["init"],
+        env={"NEPHOS_API_DB_PATH": str(db_path)},
+    )
+
+    assert result.exit_code == 1
+    assert "failed to refresh managed catalog registry core-registry" in result.output
 
 
 def test_cli_init_accepts_custom_internal_domain(tmp_path: Path) -> None:
