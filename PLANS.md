@@ -18,7 +18,37 @@ Do not implement until blocking questions are resolved or explicitly deferred.
 
 ---
 
-## Current Plan Addendum: Remaining Alpha Backbone Core Services
+## Current Plan Addendum: ZITADEL Admin Password Complexity
+
+Goal:
+
+- Validate the resolved ZITADEL `adminPassword` before Kubernetes runtime
+  reconciliation.
+- Return a clear `runtime_config_invalid` blocker when the password cannot
+  satisfy ZITADEL's default bootstrap complexity policy.
+- Prevent the known `start-from-init` CrashLoop path caused by missing password
+  symbols.
+
+Plan file:
+
+- `docs/plans/2026-07-01-zitadel-admin-password-complexity.md`
+
+Non-goals:
+
+- Do not discover or model custom ZITADEL password policies.
+- Do not repair partial Pulumi or database bootstrap state in this slice.
+- Do not change public catalog schemas.
+
+Validation commands:
+
+- `uv run pytest -q tests/test_pulumi_kubernetes_provider.py`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
+## Previous Plan Addendum: Remaining Alpha Backbone Core Services
 
 Goal:
 

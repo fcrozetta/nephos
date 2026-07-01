@@ -520,6 +520,7 @@ def _zitadel_service(
         "root@zitadel.nephos.localhost",
     )
     admin_password = _required_string_value(spec.values, "adminPassword")
+    _validate_zitadel_admin_password(admin_password)
     master_key = _zitadel_master_key(spec.values)
     database_password = _required_string_value(spec.values, "databasePassword")
     database_host = _string_value(spec.values, "databaseHost", "127.0.0.1")
@@ -1395,6 +1396,29 @@ def _bool_value(
     if isinstance(value, str):
         return value.lower() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _validate_zitadel_admin_password(password: str) -> None:
+    missing: list[str] = []
+    if len(password) < 8:
+        missing.append("at least 8 characters")
+    if not any(character.islower() for character in password):
+        missing.append("a lowercase letter")
+    if not any(character.isupper() for character in password):
+        missing.append("an uppercase letter")
+    if not any(character.isdigit() for character in password):
+        missing.append("a digit")
+    if not any(not character.isalnum() for character in password):
+        missing.append("a symbol")
+    if not missing:
+        return
+    raise RuntimeBlockedError(
+        reason="runtime_config_invalid",
+        message=(
+            "Zitadel adminPassword does not satisfy the default password "
+            f"complexity policy; missing {', '.join(missing)}."
+        ),
+    )
 
 
 def _zitadel_master_key(values: Mapping[str, object]) -> str:
