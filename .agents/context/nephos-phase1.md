@@ -106,8 +106,15 @@ Catalog and packaging:
 - Helm charts do not define Nephos Service behavior
 - App requirements and Service provisions match by `capability + protocol`
 - PostgreSQL provides `sql/postgres`
-- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, `opencypher/n4j`, optional `gremlin/gremlin`, and optional `mongo/mongo` when enabled
 - SeaweedFS provides `object-storage/s3`
+- ArcadeDB provides `sql/arcadedb`, `opencypher/bolt`, `opencypher/n4j`, optional `gremlin/gremlin`, and optional `mongo/mongo` when enabled
+- SeaweedFS and ArcadeDB are published through `core-registry` as alpha
+  backbone core Service catalog entries
+- ArcadeDB optional `gremlin/gremlin` and `mongo/mongo` are catalog-visible
+  runtime surfaces but app-scoped provisioning remains disabled by default until
+  explicitly enabled and verified
+- ArcadeDB `opencypher/bolt` requires ArcadeDB 26.2.1 or newer, Bolt plugin
+  startup, and port 7687 exposure before the runtime can be reported deployed
 - Zitadel provides `oidc/oidc` and `service-account/jwt`
 
 Services:

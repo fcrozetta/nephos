@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -977,6 +978,10 @@ def _seaweedfs_service(
     image = _string_value(spec.values, "image", "chrislusf/seaweedfs:3.85")
     access_key = _required_string_value(spec.values, "s3AccessKey")
     secret_key = _required_string_value(spec.values, "s3SecretKey")
+    s3_config_json = _seaweedfs_s3_config_json(
+        access_key=access_key,
+        secret_key=secret_key,
+    )
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -985,10 +990,7 @@ def _seaweedfs_service(
             "labels": labels,
         },
         type="Opaque",
-        string_data={
-            "s3-access-key": access_key,
-            "s3-secret-key": secret_key,
-        },
+        string_data={"s3.json": s3_config_json},
         opts=opts,
     )
     k8s.core.v1.Service(
@@ -1026,21 +1028,47 @@ def _seaweedfs_service(
                                 "server",
                                 "-s3",
                                 "-s3.port=8333",
+                                "-s3.config=/etc/seaweedfs/s3.json",
                                 "-dir=/data",
                             ],
                             "ports": [
                                 {"name": "s3", "containerPort": 8333}
                             ],
                             "volumeMounts": [
-                                {"name": "data", "mountPath": "/data"}
+                                {"name": "data", "mountPath": "/data"},
+                                {
+                                    "name": "s3-config",
+                                    "mountPath": "/etc/seaweedfs",
+                                    "readOnly": True,
+                                },
                             ],
                         }
-                    ]
+                    ],
+                    "volumes": [
+                        {"name": "s3-config", "secret": {"secretName": name}}
+                    ],
                 },
             },
             "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
         },
         opts=opts,
+    )
+
+
+def _seaweedfs_s3_config_json(*, access_key: str, secret_key: str) -> str:
+    return json.dumps(
+        {
+            "identities": [
+                {
+                    "name": "nephos-admin",
+                    "credentials": [
+                        {"accessKey": access_key, "secretKey": secret_key}
+                    ],
+                    "actions": ["Admin", "Read", "List", "Tagging", "Write"],
+                }
+            ]
+        },
+        separators=(",", ":"),
     )
 
 
@@ -1145,22 +1173,29 @@ def _arcadedb_service(
     name = f"{spec.runtime_name}-arcadedb"
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
-    image = _string_value(spec.values, "image", "arcadedata/arcadedb:25.5.1")
+    image = _string_value(spec.values, "image", "arcadedata/arcadedb:26.5.1")
+    _ensure_arcadedb_bolt_supported(image)
     root_password = _required_string_value(spec.values, "rootPassword")
+    server_plugins = ["Bolt:com.arcadedb.bolt.BoltProtocolPlugin"]
     ports = [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},
+        {"name": "bolt", "port": 7687, "targetPort": "bolt"},
     ]
     container_ports = [
         {"name": "http", "containerPort": 2480},
         {"name": "binary", "containerPort": 2424},
+        {"name": "bolt", "containerPort": 7687},
     ]
     if _bool_value(spec.values, "enableGremlin", False):
+        server_plugins.append("GremlinServer:com.arcadedb.server.gremlin.GremlinServerPlugin")
         ports.append({"name": "gremlin", "port": 8182, "targetPort": "gremlin"})
         container_ports.append({"name": "gremlin", "containerPort": 8182})
     if _bool_value(spec.values, "enableMongo", False):
+        server_plugins.append("MongoDB:com.arcadedb.mongo.MongoDBProtocolPlugin")
         ports.append({"name": "mongo", "port": 27017, "targetPort": "mongo"})
         container_ports.append({"name": "mongo", "containerPort": 27017})
+    server_plugins_value = ",".join(server_plugins)
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -1207,7 +1242,9 @@ def _arcadedb_service(
                                     "/run/secrets/arcadedb/root-password)\"\n"
                                     "exec /opt/arcadedb/bin/server.sh "
                                     "\"-Darcadedb.server.rootPassword="
-                                    "${root_password}\""
+                                    "${root_password}\" "
+                                    "\"-Darcadedb.server.plugins="
+                                    f"{server_plugins_value}\""
                                 )
                             ],
                             "ports": container_ports,
@@ -1236,6 +1273,45 @@ def _arcadedb_service(
         },
         opts=opts,
     )
+
+
+def _ensure_arcadedb_bolt_supported(image: str) -> None:
+    image_without_digest = image.split("@", 1)[0]
+    image_name = image_without_digest.rsplit("/", 1)[-1]
+    tag = image_name.rsplit(":", 1)[-1] if ":" in image_name else ""
+    if not tag:
+        if "@" in image:
+            raise RuntimeBlockedError(
+                reason="runtime_config_unsupported",
+                message=(
+                    "ArcadeDB opencypher/bolt requires a versioned image tag "
+                    "when pinning by digest."
+                ),
+            )
+        return
+    if tag == "latest":
+        return
+    version = _version_tuple(tag)
+    if version is None or version >= (26, 2, 1):
+        return
+    raise RuntimeBlockedError(
+        reason="runtime_config_unsupported",
+        message=(
+            "ArcadeDB opencypher/bolt requires ArcadeDB image version 26.2.1 "
+            "or newer."
+        ),
+    )
+
+
+def _version_tuple(tag: str) -> tuple[int, int, int] | None:
+    parts = tag.split("-", 1)[0].split(".")
+    if not parts or not all(part.isdigit() for part in parts[:3]):
+        return None
+    padded = [int(part) for part in parts[:3]]
+    while len(padded) < 3:
+        padded.append(0)
+    major, minor, patch = padded[:3]
+    return (major, minor, patch)
 
 
 def _string_value(

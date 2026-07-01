@@ -129,9 +129,10 @@ Service provider dispatch must select provisioning behavior by
 
 PostgreSQL provisioning remains the first concrete `sql/postgres` provider path.
 
-SeaweedFS, ArcadeDB, and Zitadel binding output fields are not finalized by this
-ADR. They require implementation plans or follow-up ADR/context updates before
-canonical schemas or examples are promoted.
+SeaweedFS and ArcadeDB binding output fields are finalized by
+`20260630-alpha-backbone-binding-output-contracts.md`. Zitadel binding output
+fields are not finalized by this ADR and require implementation plans or
+follow-up ADR/context updates before canonical schemas or examples are promoted.
 
 The Phase 1 "no Service admin routes through Nephos ingress" line is narrowed:
 generic Service admin routes are still out of scope, but Zitadel Service

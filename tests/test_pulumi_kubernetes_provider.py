@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -606,13 +607,32 @@ def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
     env_names = {item["name"] for item in container.get("env", [])}
-    assert secret["string_data"] == {
-        "s3-access-key": "alpha-access",
-        "s3-secret-key": "alpha-secret",
+    pod_spec = stateful_set["spec"]["template"]["spec"]
+    s3_config = json.loads(secret["string_data"]["s3.json"])
+    assert s3_config == {
+        "identities": [
+            {
+                "name": "nephos-admin",
+                "credentials": [
+                    {"accessKey": "alpha-access", "secretKey": "alpha-secret"}
+                ],
+                "actions": ["Admin", "Read", "List", "Tagging", "Write"],
+            }
+        ]
     }
     assert container["image"] == "chrislusf/seaweedfs:3.85"
     assert "WEED_S3_ACCESS_KEY" not in env_names
     assert "WEED_S3_SECRET_KEY" not in env_names
+    assert "-s3.config=/etc/seaweedfs/s3.json" in container["args"]
+    assert {
+        "name": "s3-config",
+        "mountPath": "/etc/seaweedfs",
+        "readOnly": True,
+    } in container["volumeMounts"]
+    assert {
+        "name": "s3-config",
+        "secret": {"secretName": "svc-seaweedfs-seaweedfs"},
+    } in pod_spec["volumes"]
     assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
     assert service["spec"]["ports"] == [
         {"name": "s3", "port": 8333, "targetPort": "s3"}
@@ -682,7 +702,7 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
         namespace="svc-arcadedb",
         workload="arcadedb-service",
         values={
-            "image": "arcadedata/arcadedb:25.5.1",
+            "image": "arcadedata/arcadedb:26.5.1",
             "storageSize": "3Gi",
             "rootPassword": "arcade-secret",
             "enableGremlin": True,
@@ -697,16 +717,84 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
     service = k8s.service.calls[0]
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     assert secret["string_data"] == {"root-password": "arcade-secret"}
-    assert container["image"] == "arcadedata/arcadedb:25.5.1"
+    assert container["image"] == "arcadedata/arcadedb:26.5.1"
     assert container["command"] == ["/bin/sh", "-ec"]
     assert "root_password=\"$(cat /run/secrets/arcadedb/root-password)\"" in (
         container["args"][0]
     )
     assert "-Darcadedb.server.rootPassword=${root_password}" in container["args"][0]
+    assert (
+        "-Darcadedb.server.plugins="
+        "Bolt:com.arcadedb.bolt.BoltProtocolPlugin,"
+        "GremlinServer:com.arcadedb.server.gremlin.GremlinServerPlugin,"
+        "MongoDB:com.arcadedb.mongo.MongoDBProtocolPlugin"
+    ) in container["args"][0]
     assert "rootPasswordFile" not in container["args"][0]
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},
+        {"name": "bolt", "port": 7687, "targetPort": "bolt"},
         {"name": "gremlin", "port": 8182, "targetPort": "gremlin"},
         {"name": "mongo", "port": 27017, "targetPort": "mongo"},
     ]
+    assert {"name": "bolt", "containerPort": 7687} in container["ports"]
+
+
+def test_arcadedb_service_blocks_digest_only_images() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-arcadedb",
+        work_dir=Path("/tmp/workspaces/svc-arcadedb"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-arcadedb",
+        namespace="svc-arcadedb",
+        workload="arcadedb-service",
+        values={
+            "image": (
+                "arcadedata/arcadedb@sha256:"
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+            "rootPassword": "arcade-secret",
+        },
+    )
+
+    try:
+        _arcadedb_service(spec, k8s=k8s, opts=None)
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "runtime_config_unsupported"
+        assert "versioned image tag" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected digest-only ArcadeDB image block")
+
+
+def test_arcadedb_service_blocks_images_without_bolt_support() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-arcadedb",
+        work_dir=Path("/tmp/workspaces/svc-arcadedb"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-arcadedb",
+        namespace="svc-arcadedb",
+        workload="arcadedb-service",
+        values={
+            "image": (
+                "arcadedata/arcadedb:25.5.1@sha256:"
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+            "rootPassword": "arcade-secret",
+        },
+    )
+
+    try:
+        _arcadedb_service(spec, k8s=k8s, opts=None)
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "runtime_config_unsupported"
+        assert "26.2.1" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected ArcadeDB image version block")
