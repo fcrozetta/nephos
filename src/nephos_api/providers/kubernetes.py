@@ -1176,6 +1176,7 @@ def _arcadedb_service(
     image = _string_value(spec.values, "image", "arcadedata/arcadedb:26.5.1")
     _ensure_arcadedb_bolt_supported(image)
     root_password = _required_string_value(spec.values, "rootPassword")
+    server_plugins = ["Bolt:com.arcadedb.bolt.BoltProtocolPlugin"]
     ports = [
         {"name": "http", "port": 2480, "targetPort": "http"},
         {"name": "binary", "port": 2424, "targetPort": "binary"},
@@ -1187,11 +1188,14 @@ def _arcadedb_service(
         {"name": "bolt", "containerPort": 7687},
     ]
     if _bool_value(spec.values, "enableGremlin", False):
+        server_plugins.append("GremlinServer:com.arcadedb.server.gremlin.GremlinServerPlugin")
         ports.append({"name": "gremlin", "port": 8182, "targetPort": "gremlin"})
         container_ports.append({"name": "gremlin", "containerPort": 8182})
     if _bool_value(spec.values, "enableMongo", False):
+        server_plugins.append("MongoDB:com.arcadedb.mongo.MongoDBProtocolPlugin")
         ports.append({"name": "mongo", "port": 27017, "targetPort": "mongo"})
         container_ports.append({"name": "mongo", "containerPort": 27017})
+    server_plugins_value = ",".join(server_plugins)
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -1240,7 +1244,7 @@ def _arcadedb_service(
                                     "\"-Darcadedb.server.rootPassword="
                                     "${root_password}\" "
                                     "\"-Darcadedb.server.plugins="
-                                    "Bolt:com.arcadedb.bolt.BoltProtocolPlugin\""
+                                    f"{server_plugins_value}\""
                                 )
                             ],
                             "ports": container_ports,

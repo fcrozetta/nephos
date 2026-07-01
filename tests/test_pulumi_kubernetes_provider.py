@@ -723,9 +723,12 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
         container["args"][0]
     )
     assert "-Darcadedb.server.rootPassword=${root_password}" in container["args"][0]
-    assert "-Darcadedb.server.plugins=Bolt:com.arcadedb.bolt.BoltProtocolPlugin" in (
-        container["args"][0]
-    )
+    assert (
+        "-Darcadedb.server.plugins="
+        "Bolt:com.arcadedb.bolt.BoltProtocolPlugin,"
+        "GremlinServer:com.arcadedb.server.gremlin.GremlinServerPlugin,"
+        "MongoDB:com.arcadedb.mongo.MongoDBProtocolPlugin"
+    ) in container["args"][0]
     assert "rootPasswordFile" not in container["args"][0]
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 2480, "targetPort": "http"},
