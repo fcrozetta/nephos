@@ -350,7 +350,7 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
         values={
             "image": "ghcr.io/zitadel/zitadel:v2.58.0",
             "adminUsername": "root@zitadel.localhost",
-            "adminPassword": "local-secret",
+            "adminPassword": "Local-secret1!",
             "masterKey": "0123456789abcdef0123456789abcdef",
             "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
             "databasePort": 5432,
@@ -391,7 +391,7 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     env = {item["name"]: item for item in container["env"]}
     assert secret["string_data"] == {
         "admin-username": "root@zitadel.localhost",
-        "admin-password": "local-secret",
+        "admin-password": "Local-secret1!",
         "master-key": "0123456789abcdef0123456789abcdef",
         "database-password": "db-secret",
         "database-admin-password": "db-secret",
@@ -504,7 +504,7 @@ def test_zitadel_service_can_use_external_postgres() -> None:
         namespace="svc-zitadel",
         workload="zitadel-service",
         values={
-            "adminPassword": "local-secret",
+            "adminPassword": "Local-secret1!",
             "masterKey": "0123456789abcdef0123456789abcdef",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
             "embeddedPostgres": False,
@@ -554,6 +554,36 @@ def test_zitadel_service_can_use_external_postgres() -> None:
     }
 
 
+def test_zitadel_service_blocks_admin_password_without_symbol() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-zitadel",
+        work_dir=Path("/tmp/workspaces/svc-zitadel"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-zitadel",
+        namespace="svc-zitadel",
+        workload="zitadel-service",
+        values={
+            "adminPassword": "LocalSecret1",
+            "masterKey": "0123456789abcdef0123456789abcdef",
+            "databasePassword": "db-secret",
+            "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
+        },
+    )
+
+    try:
+        _zitadel_service(spec, k8s=k8s, opts=None)
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "runtime_config_invalid"
+        assert "adminPassword" in str(exc)
+        assert "a symbol" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected Zitadel adminPassword complexity block")
+
+
 def test_zitadel_service_omits_ingress_by_default() -> None:
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
@@ -567,7 +597,7 @@ def test_zitadel_service_omits_ingress_by_default() -> None:
         namespace="svc-zitadel",
         workload="zitadel-service",
         values={
-            "adminPassword": "local-secret",
+            "adminPassword": "Local-secret1!",
             "masterKey": "0123456789abcdef0123456789abcdef",
             "databasePassword": "db-secret",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
