@@ -1279,7 +1279,17 @@ def _ensure_arcadedb_bolt_supported(image: str) -> None:
     image_without_digest = image.split("@", 1)[0]
     image_name = image_without_digest.rsplit("/", 1)[-1]
     tag = image_name.rsplit(":", 1)[-1] if ":" in image_name else ""
-    if not tag or tag == "latest":
+    if not tag:
+        if "@" in image:
+            raise RuntimeBlockedError(
+                reason="runtime_config_unsupported",
+                message=(
+                    "ArcadeDB opencypher/bolt requires a versioned image tag "
+                    "when pinning by digest."
+                ),
+            )
+        return
+    if tag == "latest":
         return
     version = _version_tuple(tag)
     if version is None or version >= (26, 2, 1):

@@ -740,6 +740,36 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
     assert {"name": "bolt", "containerPort": 7687} in container["ports"]
 
 
+def test_arcadedb_service_blocks_digest_only_images() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-arcadedb",
+        work_dir=Path("/tmp/workspaces/svc-arcadedb"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-arcadedb",
+        namespace="svc-arcadedb",
+        workload="arcadedb-service",
+        values={
+            "image": (
+                "arcadedata/arcadedb@sha256:"
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+            "rootPassword": "arcade-secret",
+        },
+    )
+
+    try:
+        _arcadedb_service(spec, k8s=k8s, opts=None)
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "runtime_config_unsupported"
+        assert "versioned image tag" in str(exc)
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected digest-only ArcadeDB image block")
+
+
 def test_arcadedb_service_blocks_images_without_bolt_support() -> None:
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
