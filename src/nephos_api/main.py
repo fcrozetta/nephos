@@ -386,6 +386,7 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
         KubernetesPulumiZitadelProvisioningClient,
         KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
+        SecretResolvingBindingProvisioner,
         ZitadelAppScopedProvisioner,
     )
 
@@ -401,11 +402,14 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
             kube_context=settings.kube_context,
         ),
     )
-    return CompositeBindingProvisioner(
-        [
-            PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
-            ZitadelAppScopedProvisioner(client=zitadel_client),
-        ]
+    return SecretResolvingBindingProvisioner(
+        CompositeBindingProvisioner(
+            [
+                PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
+                ZitadelAppScopedProvisioner(client=zitadel_client),
+            ]
+        ),
+        resolver=OnePasswordCliSecretResolver(),
     )
 
 

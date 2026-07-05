@@ -13,6 +13,7 @@ from nephos_api.provisioners import (
     PulumiZitadelProvisioningClient,
     SeaweedFSProvisioningClient,
     SeaweedFSS3Provisioner,
+    SecretResolvingBindingProvisioner,
     ZitadelAppScopedProvisioner,
     ZitadelProvisioningClient,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "PostgresPsqlRunner",
     "PulumiZitadelProvisionerConfig",
     "PulumiZitadelProvisioningClient",
+    "SecretResolvingBindingProvisioner",
     "SeaweedFSProvisioningClient",
     "SeaweedFSS3Provisioner",
     "ZitadelAppScopedProvisioner",

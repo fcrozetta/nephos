@@ -10,9 +10,11 @@ from nephos_api.provisioning import (
     PulumiZitadelProvisionerConfig,
     PulumiZitadelProvisioningClient,
     SeaweedFSS3Provisioner,
+    SecretResolvingBindingProvisioner,
     ZitadelAppScopedProvisioner,
 )
 from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import StaticSecretResolver
 
 
 class FakeZitadelClient:
@@ -748,4 +750,84 @@ def _context(
         service_config=service_config,
         app_routes=app_routes,
         platform_domains=platform_domains,
+    )
+
+
+class _RecordingProvisioner:
+    def __init__(self) -> None:
+        self.contexts: list[BindingProvisioningContext] = []
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str]:
+        self.contexts.append(context)
+        return {"issuerUrl": str((context.service_config or {})["external-host"])}
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        self.contexts.append(context)
+
+
+def test_secret_resolving_provisioner_resolves_op_refs_in_service_config() -> None:
+    inner = _RecordingProvisioner()
+    provisioner = SecretResolvingBindingProvisioner(
+        inner,
+        resolver=StaticSecretResolver(
+            {
+                "op://nephos-lcl/zitadel-bootstrap/external_host": (
+                    "zitadel.nephos.localhost"
+                )
+            }
+        ),
+    )
+    context = _context(
+        service_slug="zitadel",
+        alias="identity",
+        capability="oidc",
+        protocol="oidc",
+        service_config={
+            "external-host": "op://nephos-lcl/zitadel-bootstrap/external_host",
+            "external-port": 80,
+            "provisioning-transport": "port-forward",
+        },
+    )
+
+    values = provisioner.provision_binding(context)
+
+    resolved_config = inner.contexts[0].service_config
+    # op:// reference is resolved before the inner provisioner sees it.
+    assert resolved_config["external-host"] == "zitadel.nephos.localhost"
+    # Non-secret values pass through unchanged.
+    assert resolved_config["external-port"] == 80
+    assert resolved_config["provisioning-transport"] == "port-forward"
+    assert values == {"issuerUrl": "zitadel.nephos.localhost"}
+
+
+def test_secret_resolving_provisioner_resolves_on_deprovision() -> None:
+    inner = _RecordingProvisioner()
+    provisioner = SecretResolvingBindingProvisioner(
+        inner,
+        resolver=StaticSecretResolver(
+            {
+                "op://nephos-lcl/zitadel-bootstrap/external_host": (
+                    "zitadel.nephos.localhost"
+                )
+            }
+        ),
+    )
+    context = _context(
+        service_slug="zitadel",
+        alias="identity",
+        capability="oidc",
+        protocol="oidc",
+        service_config={
+            "external-host": "op://nephos-lcl/zitadel-bootstrap/external_host"
+        },
+    )
+
+    provisioner.deprovision_binding(context)
+
+    assert (
+        inner.contexts[0].service_config["external-host"]
+        == "zitadel.nephos.localhost"
     )

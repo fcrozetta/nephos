@@ -1,5 +1,41 @@
 # Nephos Planning Rules
 
+---
+
+## Current Plan Addendum: Resolve op:// refs on the binding-provisioning path
+
+Goal:
+
+- Resolve `op://...` references in Service config before they reach binding
+  provisioners, matching the runtime-deploy path which already resolves refs
+  through the deployer's `RuntimeSecretResolver`.
+
+Current understanding:
+
+- `reconciler._reconcile_binding_request` calls `provisioner.provision_binding`
+  with raw `manifest_config_values` (no resolution).
+- The binding provisioner wired in `main.default_postgres_provisioner_factory`
+  had no resolver, so provisioning-relevant config stored as `op://` refs (e.g.
+  Zitadel `external-host`, which the LCL convention documents as
+  `op://nephos-lcl/zitadel-bootstrap/external_host`) reached provisioners
+  unresolved and would break the derived OIDC issuer URL.
+
+Change:
+
+- Add `SecretResolvingBindingProvisioner` wrapper (resolves `op://` values in
+  `context.service_config` before delegating) and wrap the composite
+  provisioner with `OnePasswordCliSecretResolver` in the factory.
+- No public API/schema/lifecycle change; internal runtime correctness fix.
+
+Validation commands:
+
+- `uv run pytest tests/test_alpha_backbone_provisioning.py -q`
+- `uv run ruff check .`
+- `uv run pytest -q`
+- `git diff --check`
+
+---
+
 Use a plan for any task that changes architecture, public interfaces, schemas, lifecycle semantics, runtime behavior, or app/service catalog behavior.
 
 A plan must include:
