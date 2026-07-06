@@ -831,3 +831,49 @@ def test_secret_resolving_provisioner_resolves_on_deprovision() -> None:
         inner.contexts[0].service_config["external-host"]
         == "zitadel.nephos.localhost"
     )
+
+
+class _NoConfigProvisioner:
+    """Mimics a provisioner (e.g. Postgres) that never reads service_config."""
+
+    def __init__(self) -> None:
+        self.contexts: list[BindingProvisioningContext] = []
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str]:
+        self.contexts.append(context)
+        return {"ok": "true"}
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        self.contexts.append(context)
+
+
+def test_secret_resolving_provisioner_does_not_resolve_unread_refs() -> None:
+    # Resolver knows nothing, so resolving ANY op:// ref would raise.
+    inner = _NoConfigProvisioner()
+    provisioner = SecretResolvingBindingProvisioner(
+        inner,
+        resolver=StaticSecretResolver({}),
+    )
+    context = _context(
+        service_slug="postgres",
+        alias="db",
+        capability="sql",
+        protocol="postgres",
+        service_config={
+            # Unrelated ref the matched provisioner never reads; eager resolution
+            # would block here even though the value is not needed.
+            "admin-password": "op://nephos-lcl/postgres-admin/password",
+        },
+    )
+
+    # Must not raise: the provisioner never reads admin-password.
+    values = provisioner.provision_binding(context)
+    assert values == {"ok": "true"}
+
+    # The ref is only resolved on demand — reading it now raises (proving it was
+    # never eagerly resolved during provisioning).
+    with pytest.raises(RuntimeBlockedError):
+        _ = inner.contexts[0].service_config["admin-password"]
