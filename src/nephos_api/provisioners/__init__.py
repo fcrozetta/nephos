@@ -8,7 +8,10 @@ from nephos_api.provisioners.postgres import (
     PostgresAppScopedProvisioner,
     PostgresPsqlRunner,
 )
-from nephos_api.provisioners.registry import CompositeBindingProvisioner
+from nephos_api.provisioners.registry import (
+    CompositeBindingProvisioner,
+    SecretResolvingBindingProvisioner,
+)
 from nephos_api.provisioners.seaweedfs import (
     SeaweedFSProvisioningClient,
     SeaweedFSS3Provisioner,
@@ -35,6 +38,7 @@ __all__ = [
     "PostgresPsqlRunner",
     "PulumiZitadelProvisionerConfig",
     "PulumiZitadelProvisioningClient",
+    "SecretResolvingBindingProvisioner",
     "SeaweedFSProvisioningClient",
     "SeaweedFSS3Provisioner",
     "ZitadelAppScopedProvisioner",

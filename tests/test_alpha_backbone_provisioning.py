@@ -10,9 +10,11 @@ from nephos_api.provisioning import (
     PulumiZitadelProvisionerConfig,
     PulumiZitadelProvisioningClient,
     SeaweedFSS3Provisioner,
+    SecretResolvingBindingProvisioner,
     ZitadelAppScopedProvisioner,
 )
 from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import StaticSecretResolver
 
 
 class FakeZitadelClient:
@@ -749,3 +751,129 @@ def _context(
         app_routes=app_routes,
         platform_domains=platform_domains,
     )
+
+
+class _RecordingProvisioner:
+    def __init__(self) -> None:
+        self.contexts: list[BindingProvisioningContext] = []
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str]:
+        self.contexts.append(context)
+        return {"issuerUrl": str((context.service_config or {})["external-host"])}
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        self.contexts.append(context)
+
+
+def test_secret_resolving_provisioner_resolves_op_refs_in_service_config() -> None:
+    inner = _RecordingProvisioner()
+    provisioner = SecretResolvingBindingProvisioner(
+        inner,
+        resolver=StaticSecretResolver(
+            {
+                "op://nephos-lcl/zitadel-bootstrap/external_host": (
+                    "zitadel.nephos.localhost"
+                )
+            }
+        ),
+    )
+    context = _context(
+        service_slug="zitadel",
+        alias="identity",
+        capability="oidc",
+        protocol="oidc",
+        service_config={
+            "external-host": "op://nephos-lcl/zitadel-bootstrap/external_host",
+            "external-port": 80,
+            "provisioning-transport": "port-forward",
+        },
+    )
+
+    values = provisioner.provision_binding(context)
+
+    resolved_config = inner.contexts[0].service_config
+    # op:// reference is resolved before the inner provisioner sees it.
+    assert resolved_config["external-host"] == "zitadel.nephos.localhost"
+    # Non-secret values pass through unchanged.
+    assert resolved_config["external-port"] == 80
+    assert resolved_config["provisioning-transport"] == "port-forward"
+    assert values == {"issuerUrl": "zitadel.nephos.localhost"}
+
+
+def test_secret_resolving_provisioner_resolves_on_deprovision() -> None:
+    inner = _RecordingProvisioner()
+    provisioner = SecretResolvingBindingProvisioner(
+        inner,
+        resolver=StaticSecretResolver(
+            {
+                "op://nephos-lcl/zitadel-bootstrap/external_host": (
+                    "zitadel.nephos.localhost"
+                )
+            }
+        ),
+    )
+    context = _context(
+        service_slug="zitadel",
+        alias="identity",
+        capability="oidc",
+        protocol="oidc",
+        service_config={
+            "external-host": "op://nephos-lcl/zitadel-bootstrap/external_host"
+        },
+    )
+
+    provisioner.deprovision_binding(context)
+
+    assert (
+        inner.contexts[0].service_config["external-host"]
+        == "zitadel.nephos.localhost"
+    )
+
+
+class _NoConfigProvisioner:
+    """Mimics a provisioner (e.g. Postgres) that never reads service_config."""
+
+    def __init__(self) -> None:
+        self.contexts: list[BindingProvisioningContext] = []
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str]:
+        self.contexts.append(context)
+        return {"ok": "true"}
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        self.contexts.append(context)
+
+
+def test_secret_resolving_provisioner_does_not_resolve_unread_refs() -> None:
+    # Resolver knows nothing, so resolving ANY op:// ref would raise.
+    inner = _NoConfigProvisioner()
+    provisioner = SecretResolvingBindingProvisioner(
+        inner,
+        resolver=StaticSecretResolver({}),
+    )
+    context = _context(
+        service_slug="postgres",
+        alias="db",
+        capability="sql",
+        protocol="postgres",
+        service_config={
+            # Unrelated ref the matched provisioner never reads; eager resolution
+            # would block here even though the value is not needed.
+            "admin-password": "op://nephos-lcl/postgres-admin/password",
+        },
+    )
+
+    # Must not raise: the provisioner never reads admin-password.
+    values = provisioner.provision_binding(context)
+    assert values == {"ok": "true"}
+
+    # The ref is only resolved on demand — reading it now raises (proving it was
+    # never eagerly resolved during provisioning).
+    with pytest.raises(RuntimeBlockedError):
+        _ = inner.contexts[0].service_config["admin-password"]
