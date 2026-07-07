@@ -67,6 +67,22 @@ def _refresh_git_registry(
                 f"{registry.name} has local changes; refusing to refresh "
                 f"{registry.path}"
             )
+        ahead = runner(
+            [
+                "git",
+                "-C",
+                str(registry.path),
+                "rev-list",
+                "--count",
+                "@{upstream}..HEAD",
+            ]
+        )
+        if ahead.stdout.strip() not in ("", "0"):
+            raise RegistrySyncError(
+                "managed catalog registry "
+                f"{registry.name} has local commits ahead of upstream; "
+                f"refusing to refresh {registry.path}"
+            )
         runner(["git", "-C", str(registry.path), "pull", "--ff-only"])
     except RegistrySyncError:
         raise

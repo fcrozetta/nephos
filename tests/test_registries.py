@@ -101,8 +101,31 @@ def test_ensure_managed_catalog_registries_refreshes_existing_checkout(
 
     assert commands == [
         ["git", "-C", str(registry.path), "status", "--porcelain"],
+        ["git", "-C", str(registry.path), "rev-list", "--count", "@{upstream}..HEAD"],
         ["git", "-C", str(registry.path), "pull", "--ff-only"],
     ]
+
+
+def test_ensure_managed_catalog_registries_blocks_ahead_checkout(
+    tmp_path: Path,
+) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+    (registry.path / ".git").mkdir(parents=True)
+
+    def fake_runner(command):
+        tail = list(command)[-3:]
+        if tail == ["rev-list", "--count", "@{upstream}..HEAD"]:
+            return subprocess.CompletedProcess(command, 0, "1\n", "")
+        if list(command)[-2:] == ["status", "--porcelain"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        raise AssertionError("ahead checkouts should not be pulled")
+
+    with pytest.raises(RegistrySyncError, match="local commits ahead"):
+        ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)
 
 
 def test_ensure_managed_catalog_registries_blocks_dirty_checkout(
@@ -137,6 +160,8 @@ def test_ensure_managed_catalog_registries_blocks_divergent_checkout(
     def fake_runner(command):
         if list(command)[-2:] == ["status", "--porcelain"]:
             return subprocess.CompletedProcess(command, 0, "", "")
+        if list(command)[-3:] == ["rev-list", "--count", "@{upstream}..HEAD"]:
+            return subprocess.CompletedProcess(command, 0, "0\n", "")
         raise subprocess.CalledProcessError(
             128,
             command,
