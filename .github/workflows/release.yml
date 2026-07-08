@@ -1,0 +1,43 @@
+name: release
+
+# Triggered by a plain semver tag (X.Y.Z, no `v` prefix). The committed
+# pyproject version stays 0.0.0; this workflow stamps the tag version at
+# build time and attaches the wheel + sdist to the GitHub Release.
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: sync (committed 0.0.0)
+        run: uv sync
+
+      - name: lint + test
+        run: |
+          uv run ruff check
+          uv run pytest -q -m "not kubernetes"
+
+      - name: stamp version from tag
+        run: uv version "${GITHUB_REF_NAME}"
+
+      - name: build wheel + sdist
+        run: uv build
+
+      - name: github release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          # 0.x is treated as pre-release for this project.
+          prerelease: ${{ startsWith(github.ref_name, '0.') }}
