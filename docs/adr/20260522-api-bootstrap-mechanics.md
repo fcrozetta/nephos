@@ -120,6 +120,22 @@ Use one managed first-party registry as the initial catalog dependency set.
 Nephos clones that registry locally during `init`/`serve` when the checkout is
 missing.
 
+When the managed checkout already exists, Nephos refreshes it during
+`init`/`serve` with a fast-forward-only `git pull` rather than treating any
+existing path as valid. This keeps managed catalog manifests current instead of
+silently running against a stale checkout.
+
+Nephos refuses to refresh and fails startup when a managed checkout is not a
+clean, upstream-tracking fast-forward. It rejects the checkout when it:
+
+- has uncommitted working-tree changes,
+- has local commits ahead of its upstream, or
+- has diverged such that a fast-forward is not possible.
+
+Operators who need local catalog edits must use the `NEPHOS_API_CATALOG_ROOTS`
+escape hatch, which replaces the managed dependency set and skips managed
+registry synchronization. Managed checkouts are not an editing surface.
+
 The default managed registry URL is:
 
 ```text
@@ -256,6 +272,10 @@ SQLite setup must enable foreign keys, WAL mode, and a 5000 ms busy timeout.
 Catalog loading defaults to the managed core-registry checkout as source
 `default`. `NEPHOS_API_CATALOG_ROOTS` is an escape hatch that replaces that
 managed dependency set when configured.
+
+Bootstrap must refresh existing managed checkouts fast-forward-only and fail
+startup on dirty, ahead, or divergent managed checkouts rather than running
+against a stale or locally modified catalog.
 
 Catalog source identifier behavior is refined by [Catalog Source Identity and Errors](20260522-catalog-source-identity-and-errors.md).
 
