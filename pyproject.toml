@@ -1,6 +1,6 @@
 [project]
 name = "nephos-api"
-version = "0.1.0"
+version = "0.0.0"
 description = "Nephos backend control plane API"
 readme = "README.md"
 requires-python = ">=3.12"
