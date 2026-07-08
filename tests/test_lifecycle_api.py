@@ -24,14 +24,20 @@ def _client_with_installed_app(tmp_path: Path) -> TestClient:
         )
     )
     client = TestClient(app)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
-    assert client.post(
-        "/apps",
-        json={"catalogRef": {"kind": "App", "name": "paperless"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/apps",
+            json={"catalogRef": {"kind": "App", "name": "paperless"}},
+        ).status_code
+        == 202
+    )
     return client
 
 
@@ -49,10 +55,13 @@ def _client_with_installed_service(tmp_path: Path) -> TestClient:
         )
     )
     client = TestClient(app)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     return client
 
 
@@ -207,9 +216,10 @@ def test_service_repeated_destroy_with_dependents_is_idempotent_without_force(
 
     assert destroyed.status_code == 202
     assert repeated.status_code == 202
-    assert repeated.json()["resource"]["deleteRequestedAt"] == destroyed.json()[
-        "resource"
-    ]["deleteRequestedAt"]
+    assert (
+        repeated.json()["resource"]["deleteRequestedAt"]
+        == destroyed.json()["resource"]["deleteRequestedAt"]
+    )
 
 
 def test_destroy_requires_confirmation_and_keeps_desired_state_row(
@@ -234,9 +244,10 @@ def test_destroy_requires_confirmation_and_keeps_desired_state_row(
 
     detail = client.get("/apps/paperless")
     assert detail.status_code == 200
-    assert detail.json()["deleteRequestedAt"] == destroyed.json()["resource"][
-        "deleteRequestedAt"
-    ]
+    assert (
+        detail.json()["deleteRequestedAt"]
+        == destroyed.json()["resource"]["deleteRequestedAt"]
+    )
 
 
 def test_app_destroy_request_blocks_later_lifecycle_mutations(
@@ -264,13 +275,15 @@ def test_app_destroy_request_blocks_later_lifecycle_mutations(
         "slug": "paperless",
     }
     assert repeated_destroy.status_code == 202
-    assert repeated_destroy.json()["resource"]["deleteRequestedAt"] == destroyed.json()[
-        "resource"
-    ]["deleteRequestedAt"]
+    assert (
+        repeated_destroy.json()["resource"]["deleteRequestedAt"]
+        == destroyed.json()["resource"]["deleteRequestedAt"]
+    )
     assert detail.json()["lifecycle"] == "running"
-    assert detail.json()["deleteRequestedAt"] == destroyed.json()["resource"][
-        "deleteRequestedAt"
-    ]
+    assert (
+        detail.json()["deleteRequestedAt"]
+        == destroyed.json()["resource"]["deleteRequestedAt"]
+    )
 
 
 def test_service_destroy_request_blocks_later_lifecycle_mutations(
@@ -298,13 +311,15 @@ def test_service_destroy_request_blocks_later_lifecycle_mutations(
         "slug": "postgres",
     }
     assert repeated_destroy.status_code == 202
-    assert repeated_destroy.json()["resource"]["deleteRequestedAt"] == destroyed.json()[
-        "resource"
-    ]["deleteRequestedAt"]
+    assert (
+        repeated_destroy.json()["resource"]["deleteRequestedAt"]
+        == destroyed.json()["resource"]["deleteRequestedAt"]
+    )
     assert detail.json()["lifecycle"] == "running"
-    assert detail.json()["deleteRequestedAt"] == destroyed.json()["resource"][
-        "deleteRequestedAt"
-    ]
+    assert (
+        detail.json()["deleteRequestedAt"]
+        == destroyed.json()["resource"]["deleteRequestedAt"]
+    )
 
 
 def test_service_remove_with_dependents_requires_force(tmp_path: Path) -> None:

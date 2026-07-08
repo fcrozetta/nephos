@@ -123,14 +123,20 @@ def test_set_default_platform_domain_action_updates_default(
     tmp_path: Path,
 ) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "local", "domain": "nephos.local", "default": True},
-    ).status_code == 202
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "public", "domain": "nephos.example", "default": False},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.local", "default": True},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "public", "domain": "nephos.example", "default": False},
+        ).status_code
+        == 202
+    )
 
     response = client.post("/platform/config/domains/public/actions/set-default")
 
@@ -147,14 +153,20 @@ def test_remove_non_default_platform_domain_action_deletes_domain(
     tmp_path: Path,
 ) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "local", "domain": "nephos.local", "default": True},
-    ).status_code == 202
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "public", "domain": "nephos.example", "default": False},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.local", "default": True},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "public", "domain": "nephos.example", "default": False},
+        ).status_code
+        == 202
+    )
 
     response = client.post("/platform/config/domains/public/actions/remove")
 
@@ -168,14 +180,20 @@ def test_remove_non_default_platform_domain_action_deletes_domain(
 
 def test_remove_default_platform_domain_is_blocked(tmp_path: Path) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "local", "domain": "nephos.local", "default": True},
-    ).status_code == 202
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "public", "domain": "nephos.example", "default": False},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.local", "default": True},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "public", "domain": "nephos.example", "default": False},
+        ).status_code
+        == 202
+    )
 
     response = client.post("/platform/config/domains/local/actions/remove")
 

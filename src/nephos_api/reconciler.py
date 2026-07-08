@@ -175,10 +175,7 @@ class Reconciler:
             )
         if lifecycle == "removed":
             if self._deployer is None:
-                message = (
-                    "No runtime handler is implemented for "
-                    f"{target_type} remove."
-                )
+                message = f"No runtime handler is implemented for {target_type} remove."
                 self._mark_blocked(
                     request,
                     reason="runtime_handler_missing",
@@ -1012,7 +1009,6 @@ def _service_production_readiness_evidence(slug: str) -> dict[str, object]:
     }
 
 
-
 def _target_slug(request: dict[str, object]) -> str:
     snapshot = json.loads(str(request["target_snapshot_json"]))
     slug = snapshot.get("slug")
@@ -1087,8 +1083,7 @@ def _binding_output_values(row: dict[str, object]) -> dict[str, str] | None:
     if not isinstance(values, dict):
         return None
     if not all(
-        isinstance(key, str) and isinstance(value, str)
-        for key, value in values.items()
+        isinstance(key, str) and isinstance(value, str) for key, value in values.items()
     ):
         return None
     return values

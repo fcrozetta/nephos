@@ -662,7 +662,7 @@ def _app_ingress(
                     ),
                 )
                 for domain in domains
-            ]
+            ],
         ),
     )
 

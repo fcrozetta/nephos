@@ -255,10 +255,7 @@ def test_manifest_helm_deployer_maps_service_config_defaults_and_overrides(
     deployer.deploy(target_type="service_instance", slug="postgres")
 
     assert runner.values_content == [
-        "debug:\n"
-        "  enabled: false\n"
-        "image: postgres:16-alpine\n"
-        "storageSize: 8Gi\n"
+        "debug:\n  enabled: false\nimage: postgres:16-alpine\nstorageSize: 8Gi\n"
     ]
 
 

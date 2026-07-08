@@ -308,8 +308,7 @@ def _config_option_names(manifest: dict[str, object]) -> set[str]:
 def _runtime_mapping_pairs(manifest: dict[str, object]) -> set[tuple[str, str]]:
     mappings = manifest["spec"]["runtime"]["values"]["mappings"]
     return {
-        (mapping["from"]["name"], mapping["to"]["helmValue"])
-        for mapping in mappings
+        (mapping["from"]["name"], mapping["to"]["helmValue"]) for mapping in mappings
     }
 
 

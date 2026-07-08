@@ -134,7 +134,6 @@ def test_environment_overrides_dotenv(tmp_path: Path) -> None:
     assert settings.db_path == tmp_path / ".nephos" / "from-environment.db"
 
 
-
 def test_configured_catalog_roots_are_the_complete_catalog_dependency_set(
     tmp_path: Path,
 ) -> None:

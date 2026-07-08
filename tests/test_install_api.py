@@ -194,8 +194,7 @@ def test_install_app_rejects_instance_name_that_exceeds_namespace_limit(
         "error": {
             "code": "runtime_namespace_name_invalid",
             "message": (
-                "App instance name is not valid for the generated "
-                "Kubernetes namespace."
+                "App instance name is not valid for the generated Kubernetes namespace."
             ),
             "details": {
                 "instanceName": slug,
@@ -315,14 +314,20 @@ def test_install_app_uses_explicit_binding_provider_selection(
     write_service(catalog_root, name="postgres-main")
     write_service(catalog_root, name="postgres-lab")
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres-main"}},
-    ).status_code == 202
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres-lab"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres-main"}},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres-lab"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -364,14 +369,20 @@ def test_install_app_matches_binding_provider_by_capability_and_protocol(
         alias="arcadedb",
     )
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -401,10 +412,13 @@ def test_install_app_matches_opencypher_bolt_provider(tmp_path: Path) -> None:
         alias=None,
     )
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -432,10 +446,13 @@ def test_install_app_rejects_explicit_provider_with_wrong_protocol(
         alias="arcadedb",
     )
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -454,8 +471,7 @@ def test_install_app_rejects_explicit_provider_with_wrong_protocol(
         "error": {
             "code": "binding_provider_ineligible",
             "message": (
-                "Selected binding provider does not expose the required "
-                "capability."
+                "Selected binding provider does not expose the required capability."
             ),
             "details": {
                 "alias": "database",
@@ -496,10 +512,13 @@ def test_install_app_does_not_auto_bind_removed_service_provider(
     tmp_path: Path,
 ) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     removed = client.post("/services/postgres/actions/remove", json={})
 
     response = client.post(
@@ -526,10 +545,13 @@ def test_install_app_rejects_removed_binding_provider_selection(
     tmp_path: Path,
 ) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     removed = client.post("/services/postgres/actions/remove", json={})
 
     response = client.post(
@@ -565,10 +587,13 @@ def test_install_app_rejects_pending_destroy_binding_provider_selection(
     tmp_path: Path,
 ) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     destroyed = client.post(
         "/services/postgres/actions/destroy",
         json={"confirm": "destroy postgres"},
@@ -639,10 +664,13 @@ def test_install_app_rejects_ineligible_explicit_binding_provider(
     write_app(catalog_root)
     write_service(catalog_root, name="redis", capability="redis", version="7")
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "redis"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "redis"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -661,8 +689,7 @@ def test_install_app_rejects_ineligible_explicit_binding_provider(
         "error": {
             "code": "binding_provider_ineligible",
             "message": (
-                "Selected binding provider does not expose the required "
-                "capability."
+                "Selected binding provider does not expose the required capability."
             ),
             "details": {
                 "alias": "database",
@@ -708,10 +735,13 @@ def test_install_app_rejects_unknown_config_keys(tmp_path: Path) -> None:
     _write_configured_app(catalog_root)
     write_service(catalog_root)
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -738,10 +768,13 @@ def test_install_app_rejects_missing_required_config(tmp_path: Path) -> None:
     _write_configured_app(catalog_root)
     write_service(catalog_root)
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -763,10 +796,13 @@ def test_install_app_rejects_invalid_config_value_type(tmp_path: Path) -> None:
     _write_configured_app(catalog_root)
     write_service(catalog_root)
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -797,10 +833,13 @@ def test_install_app_rejects_invalid_enum_config_value(tmp_path: Path) -> None:
     _write_configured_app(catalog_root)
     write_service(catalog_root)
     client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -888,10 +927,13 @@ def test_install_app_persists_only_config_overrides(tmp_path: Path) -> None:
     write_service(catalog_root)
     db_path = tmp_path / "nephos.db"
     client = _client_with_catalog_roots(db_path, (catalog_root,))
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
 
     response = client.post(
         "/apps",
@@ -1020,10 +1062,13 @@ def test_install_service_rejects_invalid_enum_config_value(tmp_path: Path) -> No
 
 def test_service_stop_with_dependents_requires_force(tmp_path: Path) -> None:
     client = _client(tmp_path)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     app = client.post(
         "/apps",
         json={"catalogRef": {"kind": "App", "name": "paperless"}},

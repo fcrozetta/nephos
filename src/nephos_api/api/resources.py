@@ -657,15 +657,15 @@ def _matching_provider_rows(
         catalog_name = str(service_row["catalog_name"])
         catalog_source_id = str(service_row["catalog_source_id"])
         service_catalog = _catalog_or_404(
-            lambda catalog_name=catalog_name,
-            catalog_source_id=catalog_source_id: loader.get_service(
-                catalog_name,
-                source=catalog_source_id,
+            lambda catalog_name=catalog_name, catalog_source_id=catalog_source_id: (
+                loader.get_service(
+                    catalog_name,
+                    source=catalog_source_id,
+                )
             ),
         )
         if any(
-            provided["capability"] == capability
-            and provided["protocol"] == protocol
+            provided["capability"] == capability and provided["protocol"] == protocol
             for provided in service_catalog["provides"]
         ):
             eligible.append(service_row)
@@ -794,10 +794,7 @@ def _validate_manifest_config(
                 },
             )
         if expected_type == "enum":
-            allowed_values = [
-                enum_value["value"]
-                for enum_value in option.values or []
-            ]
+            allowed_values = [enum_value["value"] for enum_value in option.values or []]
             if value not in allowed_values:
                 raise NephosError(
                     status_code=400,
@@ -901,8 +898,7 @@ def _route_snapshots(
                     else None
                 ),
                 "aliases": [
-                    f"http://{host_prefix}.{domain.domain}"
-                    for domain in alias_domains
+                    f"http://{host_prefix}.{domain.domain}" for domain in alias_domains
                 ],
                 "status": route_status,
             }
@@ -930,8 +926,7 @@ def _catalog_source_path(
     settings = request.app.state.settings
     roots = settings.catalog_roots
     source_ids = settings.catalog_source_ids or tuple(
-        "default" if index == 0 else f"local-{index}"
-        for index in range(len(roots))
+        "default" if index == 0 else f"local-{index}" for index in range(len(roots))
     )
     source_roots = dict(zip(source_ids, roots, strict=True))
     try:
@@ -1000,10 +995,7 @@ def _reject_lifecycle_mutation_after_destroy_requested(
     action: str,
     row: dict[str, object],
 ) -> None:
-    if (
-        action not in {"start", "stop", "remove"}
-        or row["delete_requested_at"] is None
-    ):
+    if action not in {"start", "stop", "remove"} or row["delete_requested_at"] is None:
         return
     raise NephosError(
         status_code=409,

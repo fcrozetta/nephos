@@ -27,9 +27,7 @@ class PlatformDomainCreate(BaseModel):
 def list_platform_domains(request: Request) -> dict[str, list[dict[str, Any]]]:
     repo = _repo(request)
     return {
-        "domains": [
-            _domain_payload(domain) for domain in repo.list_platform_domains()
-        ]
+        "domains": [_domain_payload(domain) for domain in repo.list_platform_domains()]
     }
 
 

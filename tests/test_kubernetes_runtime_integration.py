@@ -118,17 +118,18 @@ def test_kubernetes_reference_flow_converges_provider_runtime_and_binding_secret
             binding_id = created_app.json()["resource"]["bindings"][0]["id"]
             route = api.get(f"/apps/{app_slug}").json()["routes"][0]
             assert (
-                route["canonicalUrl"]
-                == f"http://{app_slug}.{settings.internal_domain}"
+                route["canonicalUrl"] == f"http://{app_slug}.{settings.internal_domain}"
             )
 
             _eventually(
-                lambda: _resource_status_reason(api, f"/services/{service_slug}")
-                == "runtime_deployed"
-                and _resource_status_reason(api, f"/apps/{app_slug}")
-                == "runtime_deployed"
-                and _resource_status_reason(api, f"/bindings/{binding_id}")
-                == "binding_secret_ready",
+                lambda: (
+                    _resource_status_reason(api, f"/services/{service_slug}")
+                    == "runtime_deployed"
+                    and _resource_status_reason(api, f"/apps/{app_slug}")
+                    == "runtime_deployed"
+                    and _resource_status_reason(api, f"/bindings/{binding_id}")
+                    == "binding_secret_ready"
+                ),
                 timeout_seconds=180,
             )
             _assert_ingress_host(
@@ -146,8 +147,10 @@ def test_kubernetes_reference_flow_converges_provider_runtime_and_binding_secret
             )
             assert public_domain.status_code == 202
             _eventually(
-                lambda: f"{app_slug}.nephos.example"
-                in _ingress_hosts(settings, app_slug, "nephos-route-web"),
+                lambda: (
+                    f"{app_slug}.nephos.example"
+                    in _ingress_hosts(settings, app_slug, "nephos-route-web")
+                ),
                 timeout_seconds=180,
             )
             route = api.get(f"/apps/{app_slug}").json()["routes"][0]
@@ -161,8 +164,10 @@ def test_kubernetes_reference_flow_converges_provider_runtime_and_binding_secret
             stop = api.post(f"/apps/{app_slug}/actions/stop", json={})
             assert stop.status_code == 202
             _eventually(
-                lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                == "runtime_stopped",
+                lambda: (
+                    _resource_status_reason(api, f"/apps/{app_slug}")
+                    == "runtime_stopped"
+                ),
                 timeout_seconds=60,
             )
             stopped_reconcile = api.post(
@@ -171,24 +176,30 @@ def test_kubernetes_reference_flow_converges_provider_runtime_and_binding_secret
             )
             assert stopped_reconcile.status_code == 202
             _eventually(
-                lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                == "runtime_stopped",
+                lambda: (
+                    _resource_status_reason(api, f"/apps/{app_slug}")
+                    == "runtime_stopped"
+                ),
                 timeout_seconds=60,
             )
 
             start = api.post(f"/apps/{app_slug}/actions/start", json={})
             assert start.status_code == 202
             _eventually(
-                lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                == "runtime_deployed",
+                lambda: (
+                    _resource_status_reason(api, f"/apps/{app_slug}")
+                    == "runtime_deployed"
+                ),
                 timeout_seconds=180,
             )
 
             remove = api.post(f"/apps/{app_slug}/actions/remove", json={})
             assert remove.status_code == 202
             _eventually(
-                lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                == "runtime_removed",
+                lambda: (
+                    _resource_status_reason(api, f"/apps/{app_slug}")
+                    == "runtime_removed"
+                ),
                 timeout_seconds=120,
             )
             _assert_ingress_absent(settings, app_slug, "nephos-route-web")
@@ -198,8 +209,10 @@ def test_kubernetes_reference_flow_converges_provider_runtime_and_binding_secret
             )
             assert removed_reconcile.status_code == 202
             _eventually(
-                lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                == "runtime_removed",
+                lambda: (
+                    _resource_status_reason(api, f"/apps/{app_slug}")
+                    == "runtime_removed"
+                ),
                 timeout_seconds=120,
             )
             _assert_ingress_absent(settings, app_slug, "nephos-route-web")

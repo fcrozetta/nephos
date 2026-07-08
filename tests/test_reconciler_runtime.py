@@ -1561,8 +1561,7 @@ def test_runtime_blocker_marks_request_blocked_and_writes_status(
         )
 
     assert (
-        Reconciler(repo, runtime=runtime, deployer=BlockingDeployer()).run_once()
-        == 1
+        Reconciler(repo, runtime=runtime, deployer=BlockingDeployer()).run_once() == 1
     )
 
     with sqlite3.connect(repo.db_path) as connection:

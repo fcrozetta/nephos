@@ -28,10 +28,13 @@ def _client_with_binding(tmp_path: Path) -> tuple[TestClient, str]:
         )
     )
     client = TestClient(app)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     app_response = client.post(
         "/apps",
         json={"catalogRef": {"kind": "App", "name": "paperless"}},

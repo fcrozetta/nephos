@@ -130,11 +130,7 @@ def _pulumi_program(spec: PulumiKubernetesWorkloadSpec) -> None:
         provider_kwargs["kubeconfig"] = spec.kubeconfig.read_text()
     if spec.kube_context is not None:
         provider_kwargs["context"] = spec.kube_context
-    provider = (
-        k8s.Provider("k8s", **provider_kwargs)
-        if provider_kwargs
-        else None
-    )
+    provider = k8s.Provider("k8s", **provider_kwargs) if provider_kwargs else None
     opts = pulumi.ResourceOptions(provider=provider) if provider is not None else None
     workload_program(spec, k8s=k8s, opts=opts)
 
@@ -310,9 +306,7 @@ def _postgres_service(
                         {
                             "name": "postgresql",
                             "image": image,
-                            "ports": [
-                                {"name": "postgresql", "containerPort": 5432}
-                            ],
+                            "ports": [{"name": "postgresql", "containerPort": 5432}],
                             "env": [
                                 {
                                     "name": "POSTGRES_PASSWORD",
@@ -447,9 +441,7 @@ def _cloudflared_service(
                                 "/etc/cloudflared/config/config.yml",
                                 "run",
                             ],
-                            "ports": [
-                                {"name": "metrics", "containerPort": 2000}
-                            ],
+                            "ports": [{"name": "metrics", "containerPort": 2000}],
                             "readinessProbe": {
                                 "httpGet": {"path": "/ready", "port": 2000},
                                 "initialDelaySeconds": 5,
@@ -631,9 +623,7 @@ def _zitadel_service(
                                 "start-from-init",
                                 "--masterkeyFromEnv",
                             ],
-                            "ports": [
-                                {"name": "http", "containerPort": 8080}
-                            ],
+                            "ports": [{"name": "http", "containerPort": 8080}],
                             "env": [
                                 {
                                     "name": "ZITADEL_EXTERNALDOMAIN",
@@ -664,8 +654,7 @@ def _zitadel_service(
                                 },
                                 {
                                     "name": (
-                                        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_"
-                                        "MACHINE_NAME"
+                                        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME"
                                     ),
                                     "value": bootstrap_machine_name,
                                 },
@@ -1032,9 +1021,7 @@ def _seaweedfs_service(
                                 "-s3.config=/etc/seaweedfs/s3.json",
                                 "-dir=/data",
                             ],
-                            "ports": [
-                                {"name": "s3", "containerPort": 8333}
-                            ],
+                            "ports": [{"name": "s3", "containerPort": 8333}],
                             "volumeMounts": [
                                 {"name": "data", "mountPath": "/data"},
                                 {
@@ -1045,9 +1032,7 @@ def _seaweedfs_service(
                             ],
                         }
                     ],
-                    "volumes": [
-                        {"name": "s3-config", "secret": {"secretName": name}}
-                    ],
+                    "volumes": [{"name": "s3-config", "secret": {"secretName": name}}],
                 },
             },
             "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
@@ -1062,9 +1047,7 @@ def _seaweedfs_s3_config_json(*, access_key: str, secret_key: str) -> str:
             "identities": [
                 {
                     "name": "nephos-admin",
-                    "credentials": [
-                        {"accessKey": access_key, "secretKey": secret_key}
-                    ],
+                    "credentials": [{"accessKey": access_key, "secretKey": secret_key}],
                     "actions": ["Admin", "Read", "List", "Tagging", "Write"],
                 }
             ]
@@ -1189,7 +1172,9 @@ def _arcadedb_service(
         {"name": "bolt", "containerPort": 7687},
     ]
     if _bool_value(spec.values, "enableGremlin", False):
-        server_plugins.append("GremlinServer:com.arcadedb.server.gremlin.GremlinServerPlugin")
+        server_plugins.append(
+            "GremlinServer:com.arcadedb.server.gremlin.GremlinServerPlugin"
+        )
         ports.append({"name": "gremlin", "port": 8182, "targetPort": "gremlin"})
         container_ports.append({"name": "gremlin", "containerPort": 8182})
     if _bool_value(spec.values, "enableMongo", False):
@@ -1239,13 +1224,13 @@ def _arcadedb_service(
                             "command": ["/bin/sh", "-ec"],
                             "args": [
                                 (
-                                    "root_password=\"$(cat "
-                                    "/run/secrets/arcadedb/root-password)\"\n"
+                                    'root_password="$(cat '
+                                    '/run/secrets/arcadedb/root-password)"\n'
                                     "exec /opt/arcadedb/bin/server.sh "
-                                    "\"-Darcadedb.server.rootPassword="
-                                    "${root_password}\" "
-                                    "\"-Darcadedb.server.plugins="
-                                    f"{server_plugins_value}\""
+                                    '"-Darcadedb.server.rootPassword='
+                                    '${root_password}" '
+                                    '"-Darcadedb.server.plugins='
+                                    f'{server_plugins_value}"'
                                 )
                             ],
                             "ports": container_ports,
@@ -1298,8 +1283,7 @@ def _ensure_arcadedb_bolt_supported(image: str) -> None:
     raise RuntimeBlockedError(
         reason="runtime_config_unsupported",
         message=(
-            "ArcadeDB opencypher/bolt requires ArcadeDB image version 26.2.1 "
-            "or newer."
+            "ArcadeDB opencypher/bolt requires ArcadeDB image version 26.2.1 or newer."
         ),
     )
 

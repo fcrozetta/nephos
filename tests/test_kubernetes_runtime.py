@@ -481,12 +481,15 @@ def test_runtime_deletes_owned_binding_secret() -> None:
         values={"uri": "postgresql://example"},
     )
 
-    assert runtime.delete_binding_secret_if_owned(
-        app_slug="paperless",
-        service_slug="postgres",
-        alias="database",
-        capability="postgres",
-    ) is True
+    assert (
+        runtime.delete_binding_secret_if_owned(
+            app_slug="paperless",
+            service_slug="postgres",
+            alias="database",
+            capability="postgres",
+        )
+        is True
+    )
 
     assert api.deleted_secrets == [("app-paperless", "nephos-bind-database")]
     assert ("app-paperless", "nephos-bind-database") not in api.secrets
@@ -497,12 +500,15 @@ def test_runtime_delete_binding_secret_returns_false_when_secret_is_absent() -> 
     runtime = KubernetesRuntime(api)
     runtime.ensure_namespace("app_instance", "paperless")
 
-    assert runtime.delete_binding_secret_if_owned(
-        app_slug="paperless",
-        service_slug="postgres",
-        alias="database",
-        capability="postgres",
-    ) is False
+    assert (
+        runtime.delete_binding_secret_if_owned(
+            app_slug="paperless",
+            service_slug="postgres",
+            alias="database",
+            capability="postgres",
+        )
+        is False
+    )
 
 
 def test_runtime_refuses_to_delete_unowned_binding_secret() -> None:

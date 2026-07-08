@@ -828,8 +828,7 @@ def test_secret_resolving_provisioner_resolves_on_deprovision() -> None:
     provisioner.deprovision_binding(context)
 
     assert (
-        inner.contexts[0].service_config["external-host"]
-        == "zitadel.nephos.localhost"
+        inner.contexts[0].service_config["external-host"] == "zitadel.nephos.localhost"
     )
 
 

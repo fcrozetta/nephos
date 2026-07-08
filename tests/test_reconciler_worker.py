@@ -172,9 +172,7 @@ def test_api_lifespan_worker_reconciles_created_service_request(
         )
         assert response.status_code == 202
 
-        _eventually(
-            lambda: _service_status_reason(client) == "runtime_namespace_ready"
-        )
+        _eventually(lambda: _service_status_reason(client) == "runtime_namespace_ready")
 
     assert runtime.namespaces == [("service_instance", "postgres")]
 
@@ -298,7 +296,6 @@ def test_service_runtime_status_includes_production_readiness_evidence(
     assert checks["provisioning"]["issuerHostPolicy"] == "same-host-private-path"
 
 
-
 def test_api_lifespan_worker_reconciles_app_flow_until_provisioning_output_block(
     tmp_path: Path,
 ) -> None:
@@ -321,14 +318,20 @@ def test_api_lifespan_worker_reconciles_app_flow_until_provisioning_output_block
     )
 
     with TestClient(app) as client:
-        assert client.post(
-            "/platform/config/domains",
-            json={"name": "local", "domain": "nephos.local", "default": True},
-        ).status_code == 202
-        assert client.post(
-            "/services",
-            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-        ).status_code == 202
+        assert (
+            client.post(
+                "/platform/config/domains",
+                json={"name": "local", "domain": "nephos.local", "default": True},
+            ).status_code
+            == 202
+        )
+        assert (
+            client.post(
+                "/services",
+                json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+            ).status_code
+            == 202
+        )
         response = client.post(
             "/apps",
             json={"catalogRef": {"kind": "App", "name": "paperless"}},
@@ -337,10 +340,12 @@ def test_api_lifespan_worker_reconciles_app_flow_until_provisioning_output_block
         binding_id = response.json()["resource"]["bindings"][0]["id"]
 
         _eventually(
-            lambda: _service_status_reason(client) == "runtime_namespace_ready"
-            and _app_status_reason(client) == "runtime_namespace_ready"
-            and _binding_status_reason(client, binding_id)
-            == "binding_output_unavailable"
+            lambda: (
+                _service_status_reason(client) == "runtime_namespace_ready"
+                and _app_status_reason(client) == "runtime_namespace_ready"
+                and _binding_status_reason(client, binding_id)
+                == "binding_output_unavailable"
+            )
         )
 
     assert ("service_instance", "postgres") in runtime.namespaces
@@ -384,14 +389,20 @@ def test_api_lifespan_worker_uses_provisioner_factory_for_binding(
     )
 
     with TestClient(app) as client:
-        assert client.post(
-            "/platform/config/domains",
-            json={"name": "local", "domain": "nephos.local", "default": True},
-        ).status_code == 202
-        assert client.post(
-            "/services",
-            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-        ).status_code == 202
+        assert (
+            client.post(
+                "/platform/config/domains",
+                json={"name": "local", "domain": "nephos.local", "default": True},
+            ).status_code
+            == 202
+        )
+        assert (
+            client.post(
+                "/services",
+                json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+            ).status_code
+            == 202
+        )
         response = client.post(
             "/apps",
             json={"catalogRef": {"kind": "App", "name": "paperless"}},
@@ -400,8 +411,7 @@ def test_api_lifespan_worker_uses_provisioner_factory_for_binding(
         binding_id = response.json()["resource"]["bindings"][0]["id"]
 
         _eventually(
-            lambda: _binding_status_reason(client, binding_id)
-            == "binding_secret_ready"
+            lambda: _binding_status_reason(client, binding_id) == "binding_secret_ready"
         )
 
     assert runtime.binding_secrets[0]["values"] == values
@@ -444,14 +454,20 @@ def test_api_lifespan_worker_uses_lazy_provisioner_for_app_destroy_deprovision(
     )
 
     with TestClient(app) as client:
-        assert client.post(
-            "/platform/config/domains",
-            json={"name": "local", "domain": "nephos.local", "default": True},
-        ).status_code == 202
-        assert client.post(
-            "/services",
-            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-        ).status_code == 202
+        assert (
+            client.post(
+                "/platform/config/domains",
+                json={"name": "local", "domain": "nephos.local", "default": True},
+            ).status_code
+            == 202
+        )
+        assert (
+            client.post(
+                "/services",
+                json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+            ).status_code
+            == 202
+        )
         response = client.post(
             "/apps",
             json={"catalogRef": {"kind": "App", "name": "paperless"}},
@@ -459,8 +475,7 @@ def test_api_lifespan_worker_uses_lazy_provisioner_for_app_destroy_deprovision(
         assert response.status_code == 202
         binding_id = response.json()["resource"]["bindings"][0]["id"]
         _eventually(
-            lambda: _binding_status_reason(client, binding_id)
-            == "binding_secret_ready"
+            lambda: _binding_status_reason(client, binding_id) == "binding_secret_ready"
         )
 
         destroy = client.post(
