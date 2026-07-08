@@ -418,8 +418,7 @@ def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     if not isinstance(values, dict):
         return None
     if not all(
-        isinstance(key, str) and isinstance(value, str)
-        for key, value in values.items()
+        isinstance(key, str) and isinstance(value, str) for key, value in values.items()
     ):
         return None
     return values

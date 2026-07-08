@@ -234,10 +234,13 @@ def test_catalog_loader_accepts_named_source_ids(tmp_path: Path) -> None:
         loader.get_service("postgres", source="core-registry")["source"]
         == "core-registry"
     )
-    assert loader.get_service(
-        "mythos-mail-ingress",
-        source="mythos-registry",
-    )["source"] == "mythos-registry"
+    assert (
+        loader.get_service(
+            "mythos-mail-ingress",
+            source="mythos-registry",
+        )["source"]
+        == "mythos-registry"
+    )
 
 
 def test_catalog_loader_rejects_source_id_count_mismatch(tmp_path: Path) -> None:

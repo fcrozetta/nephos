@@ -27,9 +27,9 @@ def test_repository_transaction_rolls_back_on_error(tmp_path: Path) -> None:
         raise RuntimeError("boom")
 
     with sqlite3.connect(repo.db_path) as connection:
-        count = connection.execute(
-            "SELECT count(*) FROM service_instances"
-        ).fetchone()[0]
+        count = connection.execute("SELECT count(*) FROM service_instances").fetchone()[
+            0
+        ]
     assert count == 0
 
 
@@ -67,9 +67,7 @@ def test_create_service_instance_and_reconciliation_request(tmp_path: Path) -> N
             "FROM reconciliation_requests"
         ).fetchall()
     assert service_rows == [("postgres", 1)]
-    assert request_rows == [
-        ("service_instance", service.id, 1, "install", "pending")
-    ]
+    assert request_rows == [("service_instance", service.id, 1, "install", "pending")]
 
 
 def test_create_app_binding_platform_domain_and_status(tmp_path: Path) -> None:

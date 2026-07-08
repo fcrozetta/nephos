@@ -306,11 +306,7 @@ class ManifestHelmDeployer:
                 message=f"Binding {source.name} field is not specified.",
             )
         binding = next(
-            (
-                item
-                for item in bindings
-                if item["alias"] == source.name
-            ),
+            (item for item in bindings if item["alias"] == source.name),
             None,
         )
         if binding is None:
@@ -330,9 +326,7 @@ class ManifestHelmDeployer:
         if values is None or source.field not in values:
             raise RuntimeBlockedError(
                 reason="runtime_mapping_source_missing",
-                message=(
-                    f"Binding {source.name}.{source.field} is not available."
-                ),
+                message=(f"Binding {source.name}.{source.field} is not available."),
             )
         return values[source.field]
 
@@ -379,8 +373,7 @@ def _binding_output_values(binding: dict[str, object]) -> dict[str, str] | None:
     if not isinstance(values, dict):
         return None
     if not all(
-        isinstance(key, str) and isinstance(value, str)
-        for key, value in values.items()
+        isinstance(key, str) and isinstance(value, str) for key, value in values.items()
     ):
         return None
     return values

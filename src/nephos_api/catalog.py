@@ -553,10 +553,7 @@ def _validate_config_options(
                 f"for {option.name!r}"
             )
         if option.type_ == "enum":
-            allowed_values = [
-                enum_value["value"]
-                for enum_value in option.values or []
-            ]
+            allowed_values = [enum_value["value"] for enum_value in option.values or []]
             if not allowed_values:
                 raise CatalogValidationError(
                     f"invalid {kind} manifest {path}: enum config values "
@@ -639,7 +636,8 @@ def _app_summary(
             {
                 "capability": requirement.capability,
                 "protocol": requirement.protocol,
-                "alias": requirement.alias or _default_capability_alias(
+                "alias": requirement.alias
+                or _default_capability_alias(
                     requirement.capability,
                     requirement.protocol,
                 ),
@@ -664,10 +662,11 @@ def _service_summary(
     source_id: str,
     digest: str,
 ) -> dict[str, Any]:
-    output_targets = [
-        output.target
-        for output in manifest.spec.bindings.outputs
-    ] if manifest.spec.bindings else []
+    output_targets = (
+        [output.target for output in manifest.spec.bindings.outputs]
+        if manifest.spec.bindings
+        else []
+    )
     return {
         "kind": "Service",
         "name": manifest.metadata.name,
@@ -680,7 +679,8 @@ def _service_summary(
             {
                 "capability": requirement.capability,
                 "protocol": requirement.protocol,
-                "alias": requirement.alias or _default_capability_alias(
+                "alias": requirement.alias
+                or _default_capability_alias(
                     requirement.capability,
                     requirement.protocol,
                 ),
@@ -692,7 +692,8 @@ def _service_summary(
             {
                 "capability": provided.capability,
                 "protocol": provided.protocol,
-                "alias": provided.alias or _default_capability_alias(
+                "alias": provided.alias
+                or _default_capability_alias(
                     provided.capability,
                     provided.protocol,
                 ),

@@ -31,18 +31,27 @@ def test_app_routes_include_canonical_url_and_aliases_from_platform_domains(
     tmp_path: Path,
 ) -> None:
     client, _repo = _client_and_repo(tmp_path)
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "local", "domain": "nephos.local", "default": True},
-    ).status_code == 202
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "public", "domain": "nephos.example", "default": False},
-    ).status_code == 202
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.local", "default": True},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "public", "domain": "nephos.example", "default": False},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     created = client.post(
         "/apps",
         json={"catalogRef": {"kind": "App", "name": "paperless"}},
@@ -65,14 +74,20 @@ def test_app_route_entries_include_compact_runtime_status(
     tmp_path: Path,
 ) -> None:
     client, repo = _client_and_repo(tmp_path)
-    assert client.post(
-        "/platform/config/domains",
-        json={"name": "local", "domain": "nephos.local", "default": True},
-    ).status_code == 202
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.local", "default": True},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     app = client.post(
         "/apps",
         json={"catalogRef": {"kind": "App", "name": "paperless"}},
@@ -116,10 +131,13 @@ def test_service_read_includes_latest_status_snapshot(tmp_path: Path) -> None:
 
 def test_binding_read_includes_latest_status_snapshot(tmp_path: Path) -> None:
     client, repo = _client_and_repo(tmp_path)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     app = client.post(
         "/apps",
         json={"catalogRef": {"kind": "App", "name": "paperless"}},
@@ -143,10 +161,13 @@ def test_app_and_service_nested_binding_entries_include_compact_status(
     tmp_path: Path,
 ) -> None:
     client, repo = _client_and_repo(tmp_path)
-    assert client.post(
-        "/services",
-        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
     app = client.post(
         "/apps",
         json={"catalogRef": {"kind": "App", "name": "paperless"}},

@@ -485,9 +485,7 @@ def test_postgres_provisioner_deprovisions_database_user_and_secret() -> None:
     assert "DROP DATABASE IF EXISTS" in runner.calls[0]["sql"]
     assert "DROP ROLE IF EXISTS" in runner.calls[0]["sql"]
     assert "nephos_paperless_database" in runner.calls[0]["sql"]
-    assert core.deleted_secrets == [
-        ("svc-postgres", "nephos-pg-paperless-database")
-    ]
+    assert core.deleted_secrets == [("svc-postgres", "nephos-pg-paperless-database")]
 
 
 def test_postgres_deprovision_is_idempotent_when_secret_is_missing() -> None:

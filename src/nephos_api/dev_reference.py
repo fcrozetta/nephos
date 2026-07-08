@@ -88,12 +88,14 @@ def run_reference_smoke(
                 binding_id = created_app.json()["resource"]["bindings"][0]["id"]
                 log("waiting for runtime convergence")
                 _eventually(
-                    lambda: _resource_status_reason(api, f"/services/{service_slug}")
-                    == "runtime_deployed"
-                    and _resource_status_reason(api, f"/bindings/{binding_id}")
-                    == "binding_secret_ready"
-                    and _resource_status_reason(api, f"/apps/{app_slug}")
-                    == "runtime_deployed",
+                    lambda: (
+                        _resource_status_reason(api, f"/services/{service_slug}")
+                        == "runtime_deployed"
+                        and _resource_status_reason(api, f"/bindings/{binding_id}")
+                        == "binding_secret_ready"
+                        and _resource_status_reason(api, f"/apps/{app_slug}")
+                        == "runtime_deployed"
+                    ),
                     timeout_seconds=timeout_seconds,
                 )
                 route = api.get(f"/apps/{app_slug}").json()["routes"][0]
@@ -105,8 +107,10 @@ def run_reference_smoke(
                     "app stop",
                 )
                 _eventually(
-                    lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                    == "runtime_stopped",
+                    lambda: (
+                        _resource_status_reason(api, f"/apps/{app_slug}")
+                        == "runtime_stopped"
+                    ),
                     timeout_seconds=60,
                 )
                 _assert_accepted(
@@ -114,8 +118,10 @@ def run_reference_smoke(
                     "app start",
                 )
                 _eventually(
-                    lambda: _resource_status_reason(api, f"/apps/{app_slug}")
-                    == "runtime_deployed",
+                    lambda: (
+                        _resource_status_reason(api, f"/apps/{app_slug}")
+                        == "runtime_deployed"
+                    ),
                     timeout_seconds=timeout_seconds,
                 )
                 log("destroying reference App and Service")
@@ -265,7 +271,9 @@ def _ensure_platform_domain(api, *, domain: str, name_hint: str) -> None:
         if existing["default"]:
             return
         _assert_accepted(
-            api.post(f"/platform/config/domains/{existing['name']}/actions/set-default"),
+            api.post(
+                f"/platform/config/domains/{existing['name']}/actions/set-default"
+            ),
             "platform domain default",
         )
         return

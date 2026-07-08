@@ -145,13 +145,11 @@ def dev_backbone_smoke(
         return
     if result.status == "skipped":
         typer.echo(
-            "Alpha backbone smoke skipped: "
-            f"{result.blocker_code}: {result.message}"
+            f"Alpha backbone smoke skipped: {result.blocker_code}: {result.message}"
         )
         return
     typer.echo(
-        "Alpha backbone smoke blocked: "
-        f"{result.blocker_code}: {result.message}",
+        f"Alpha backbone smoke blocked: {result.blocker_code}: {result.message}",
         err=True,
     )
     raise typer.Exit(2)

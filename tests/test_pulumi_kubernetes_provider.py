@@ -154,7 +154,6 @@ def test_pulumi_kubernetes_program_blocks_unknown_workload() -> None:
         raise AssertionError("expected unknown workload to block")
 
 
-
 def test_postgres_service_uses_persistent_volume_claim_template() -> None:
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
@@ -226,8 +225,8 @@ def test_postgres_service_can_bootstrap_zitadel_database() -> None:
     init_sql = secret["string_data"]["010-nephos-zitadel.sql"]
     assert secret["string_data"]["postgres-password"] == "admin-secret"
     assert secret["string_data"]["zitadel-password"] == "zitadel-secret"
-    assert "CREATE ROLE \"zitadel\"" in init_sql
-    assert "CREATE DATABASE \"zitadel\" OWNER \"zitadel\"" in init_sql
+    assert 'CREATE ROLE "zitadel"' in init_sql
+    assert 'CREATE DATABASE "zitadel" OWNER "zitadel"' in init_sql
     assert k8s.config_map.calls == []
     assert container["image"] == "postgres:16-alpine"
     assert {
@@ -327,9 +326,7 @@ def test_cloudflared_service_uses_secret_reference_and_configured_route() -> Non
             "name": "credentials",
             "secret": {
                 "secretName": "nephos-cloudflared-credentials",
-                "items": [
-                    {"key": "credentials.json", "path": "credentials.json"}
-                ],
+                "items": [{"key": "credentials.json", "path": "credentials.json"}],
             },
         },
     ]
@@ -412,9 +409,10 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
         "Nephos Bot"
     )
     assert env["ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE"]["value"] == "1"
-    assert env[
-        "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE"
-    ]["value"] == "2037-01-01T00:00:00Z"
+    assert (
+        env["ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE"]["value"]
+        == "2037-01-01T00:00:00Z"
+    )
     assert container["volumeMounts"] == [
         {"name": "bootstrap", "mountPath": "/var/lib/zitadel-bootstrap"}
     ]
@@ -749,8 +747,9 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
     assert secret["string_data"] == {"root-password": "arcade-secret"}
     assert container["image"] == "arcadedata/arcadedb:26.5.1"
     assert container["command"] == ["/bin/sh", "-ec"]
-    assert "root_password=\"$(cat /run/secrets/arcadedb/root-password)\"" in (
-        container["args"][0]
+    assert (
+        'root_password="$(cat /run/secrets/arcadedb/root-password)"'
+        in (container["args"][0])
     )
     assert "-Darcadedb.server.rootPassword=${root_password}" in container["args"][0]
     assert (

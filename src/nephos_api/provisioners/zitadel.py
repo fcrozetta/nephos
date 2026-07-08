@@ -589,9 +589,7 @@ def _should_use_internal_forward(context: BindingProvisioningContext) -> bool:
                 "issuer-endpoint, or port-forward."
             ),
         )
-    return domain in {"localhost", "127.0.0.1", "::1"} or domain.endswith(
-        ".localhost"
-    )
+    return domain in {"localhost", "127.0.0.1", "::1"} or domain.endswith(".localhost")
 
 
 def _issuer_url(context: BindingProvisioningContext) -> str:
@@ -832,9 +830,7 @@ def _route_base_urls(context: BindingProvisioningContext) -> tuple[str, ...]:
     urls = []
     for index, route in enumerate(context.app_routes):
         host_prefix = (
-            context.app_slug
-            if index == 0
-            else f"{route['name']}.{context.app_slug}"
+            context.app_slug if index == 0 else f"{route['name']}.{context.app_slug}"
         )
         urls.append(f"{scheme}://{host_prefix}.{default_domain}")
     return tuple(urls)

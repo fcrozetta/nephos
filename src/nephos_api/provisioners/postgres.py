@@ -50,7 +50,7 @@ class KubernetesPsqlRunner:
             "NEPHOS_SQL\n"
             "rc=$?\n"
             f"printf '\\n{marker}:%s\\n' \"$rc\"\n"
-            "exit \"$rc\""
+            'exit "$rc"'
         )
         response = stream.stream(
             core_v1_api.connect_get_namespaced_pod_exec,
@@ -260,9 +260,7 @@ def _postgres_runtime(service_slug: str) -> _PostgresRuntime:
 
 
 def _is_postgres_binding(context: BindingProvisioningContext) -> bool:
-    return (
-        context.capability == "postgres" and context.protocol is None
-    ) or (
+    return (context.capability == "postgres" and context.protocol is None) or (
         context.capability == "sql" and context.protocol == "postgres"
     )
 
@@ -352,9 +350,7 @@ def _assert_owned_credential_secret(
     name: str,
 ) -> None:
     if secret.metadata is None:
-        raise KubernetesRuntimeSafetyError(
-            f"refusing to use unowned Secret {name}"
-        )
+        raise KubernetesRuntimeSafetyError(f"refusing to use unowned Secret {name}")
     labels = secret.metadata.labels or {}
     expected = binding_secret_labels(
         app_slug=context.app_slug,
@@ -403,6 +399,7 @@ def _binding_values(
 
 def _is_service_dependency_context(context: BindingProvisioningContext) -> bool:
     return context.binding_id.startswith("service-")
+
 
 def _provision_database_sql(credentials: dict[str, str]) -> str:
     database = credentials["database"]

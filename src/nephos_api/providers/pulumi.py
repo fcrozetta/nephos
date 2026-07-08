@@ -117,9 +117,8 @@ def _ensure_pulumi_cli() -> None:
 
 
 def _ensure_pulumi_local_backend_passphrase() -> None:
-    if (
-        not os.environ.get("PULUMI_CONFIG_PASSPHRASE")
-        and not os.environ.get("PULUMI_CONFIG_PASSPHRASE_FILE")
+    if not os.environ.get("PULUMI_CONFIG_PASSPHRASE") and not os.environ.get(
+        "PULUMI_CONFIG_PASSPHRASE_FILE"
     ):
         raise RuntimeBlockedError(
             reason="pulumi_passphrase_missing",
@@ -189,11 +188,7 @@ def _pulumi_program(spec: PulumiHelmReleaseSpec) -> None:
         provider_kwargs["kubeconfig"] = spec.kubeconfig.read_text()
     if spec.kube_context is not None:
         provider_kwargs["context"] = spec.kube_context
-    provider = (
-        k8s.Provider("k8s", **provider_kwargs)
-        if provider_kwargs
-        else None
-    )
+    provider = k8s.Provider("k8s", **provider_kwargs) if provider_kwargs else None
     opts = pulumi.ResourceOptions(provider=provider) if provider is not None else None
     release = _pulumi_release_config(spec)
     Release(

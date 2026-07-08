@@ -210,6 +210,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
         ],
     )
 
+
 def _run_non_live_backbone_flow(
     *,
     settings: Settings,
@@ -478,9 +479,7 @@ def _write_service(
         },
     }
     if binding_outputs:
-        spec["bindings"] = {
-            "outputs": [{"name": "connection", "target": "app-secret"}]
-        }
+        spec["bindings"] = {"outputs": [{"name": "connection", "target": "app-secret"}]}
     manifest = {
         "apiVersion": "nephos.pro/v1alpha1",
         "kind": "Service",
@@ -491,6 +490,7 @@ def _write_service(
         "spec": spec,
     }
     path.write_text(yaml.safe_dump(manifest, sort_keys=False).strip())
+
 
 def _smoke_settings(
     settings: Settings,
@@ -510,8 +510,7 @@ def _smoke_settings(
 
 def _live_smoke_requested(env: Mapping[str, str]) -> bool:
     return bool(
-        env.get("PULUMI_CONFIG_PASSPHRASE")
-        or env.get("PULUMI_CONFIG_PASSPHRASE_FILE")
+        env.get("PULUMI_CONFIG_PASSPHRASE") or env.get("PULUMI_CONFIG_PASSPHRASE_FILE")
     )
 
 

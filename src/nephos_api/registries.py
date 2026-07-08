@@ -58,9 +58,7 @@ def _refresh_git_registry(
     runner: CommandRunner,
 ) -> None:
     try:
-        status = runner(
-            ["git", "-C", str(registry.path), "status", "--porcelain"]
-        )
+        status = runner(["git", "-C", str(registry.path), "status", "--porcelain"])
         if status.stdout.strip():
             raise RegistrySyncError(
                 "managed catalog registry "

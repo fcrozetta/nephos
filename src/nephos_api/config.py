@@ -6,7 +6,9 @@ from pathlib import Path
 
 DEFAULT_CORE_REGISTRY_URL = "https://git.fcrozetta.app/nephos/core-registry.git"
 DEFAULT_MYTHOS_REGISTRY_URL = "https://git.fcrozetta.app/nephos/mythos-registry.git"
-DEFAULT_COMMUNITY_REGISTRY_URL = "https://git.fcrozetta.app/nephos/community-registry.git"
+DEFAULT_COMMUNITY_REGISTRY_URL = (
+    "https://git.fcrozetta.app/nephos/community-registry.git"
+)
 
 
 @dataclass(frozen=True)
@@ -83,9 +85,7 @@ def load_environment(
 ) -> dict[str, str]:
     base_path = Path.cwd() if cwd is None else cwd
     dotenv_values = (
-        {}
-        if environ is not None and cwd is None
-        else _read_dotenv(base_path / ".env")
+        {} if environ is not None and cwd is None else _read_dotenv(base_path / ".env")
     )
     process_env = os.environ if environ is None else environ
     env = {**dotenv_values, **dict(process_env)}
