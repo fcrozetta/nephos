@@ -15,10 +15,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8
 
       - name: sync (committed 0.0.0)
         run: uv sync
@@ -35,9 +35,11 @@ jobs:
         run: uv build
 
       - name: github release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
           generate_release_notes: true
           # 0.x is treated as pre-release for this project.
           prerelease: ${{ startsWith(github.ref_name, '0.') }}
