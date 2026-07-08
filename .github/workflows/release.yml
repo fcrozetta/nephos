@@ -41,5 +41,6 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
           generate_release_notes: true
-          # 0.x is treated as pre-release for this project.
-          prerelease: ${{ startsWith(github.ref_name, '0.') }}
+          # Optional: mark 0.x tags as pre-release. Disabled for now, so plain
+          # X.Y.Z tags publish as full releases. Uncomment to re-enable.
+          # prerelease: ${{ startsWith(github.ref_name, '0.') }}
