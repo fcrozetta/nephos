@@ -769,6 +769,34 @@ def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
     assert {"name": "bolt", "containerPort": 7687} in container["ports"]
 
 
+def test_arcadedb_service_uses_image_server_sh_path() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-arcadedb",
+        work_dir=Path("/tmp/workspaces/svc-arcadedb"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-arcadedb",
+        namespace="svc-arcadedb",
+        workload="arcadedb-service",
+        values={
+            "image": "arcadedata/arcadedb:26.5.1",
+            "rootPassword": "arcade-secret",
+        },
+    )
+
+    _arcadedb_service(spec, k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    entrypoint = container["args"][0]
+    # The arcadedata/arcadedb image ships server.sh under /home/arcadedb/bin,
+    # not /opt/arcadedb; the wrong path exits 127 and CrashLoops.
+    assert "exec /home/arcadedb/bin/server.sh " in entrypoint
+    assert "/opt/arcadedb" not in entrypoint
+
+
 def test_arcadedb_service_blocks_digest_only_images() -> None:
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
