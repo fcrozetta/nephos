@@ -90,7 +90,7 @@ def test_default_provider_deployer_factory_builds_pulumi_provider_deployer(
     assert captured["app_provider"].__class__.__name__ == "RuntimeProviderRouter"
     assert captured["service_provider"].__class__.__name__ == "RuntimeProviderRouter"
     service_runtimes = captured["service_provider"]._provider_runtimes
-    assert {"seaweedfs", "arcadedb", "onepassword-connect"}.issubset(service_runtimes)
+    assert {"seaweedfs", "arcadedb"}.issubset(service_runtimes)
     assert captured["secret_resolver"].__class__.__name__ == (
         "OnePasswordCliSecretResolver"
     )

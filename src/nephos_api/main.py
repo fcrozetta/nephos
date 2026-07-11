@@ -327,10 +327,6 @@ def default_provider_deployer_factory(
                 config=kubernetes_config,
                 workload="cloudflared-service",
             ),
-            "onepassword-connect": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="onepassword-connect-service",
-            ),
         },
     )
     return ProviderRuntimeDeployer(
