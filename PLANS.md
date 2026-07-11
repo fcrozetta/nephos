@@ -2,6 +2,90 @@
 
 ---
 
+## Current Plan Addendum: Guard managed registry refresh against remote-URL drift
+
+Issue:
+
+- `#35 managed registry refresh pulls from checkout upstream, not configured registry.url`
+
+Goal:
+
+- Before refreshing an existing managed catalog checkout, validate that its
+  `origin` remote URL matches the configured `registry.url`, and fail fast on
+  mismatch so Nephos never silently refreshes or runs catalogs from a drifted or
+  foreign remote while reporting success for the configured registry.
+
+Current understanding:
+
+- `_refresh_git_registry` runs `git pull --ff-only` with no remote/refspec, so
+  it follows the checkout's `@{upstream}` tracking branch, whose remote URL lives
+  in `.git/config`, not `registry.url`.
+- The existing ahead check (`rev-list --count @{upstream}..HEAD`) also measures
+  against `@{upstream}`, so a drifted remote makes both the ahead guard and the
+  pull measure against the wrong repository.
+- Drift vectors: (1) `NEPHOS_API_CORE_REGISTRY_URL` changes while the checkout
+  path is reused; (2) hand-edited `.nephos/registries/<name>/.git/config`.
+- `git clone <url>` writes `remote.origin.url` byte-for-byte, so a clean managed
+  checkout always matches `registry.url` exactly; any difference is real drift.
+- The refresh/fail contract is documented only in the ADR
+  `docs/adr/20260522-api-bootstrap-mechanics.md` (rejection list), not in
+  `.agents/context/`.
+
+Decision (Fer, 2026-07-11):
+
+- Fail fast on remote-URL mismatch. Do not auto re-point or re-clone.
+
+Non-goals:
+
+- Do not auto re-point (`git remote set-url`) or re-clone on mismatch.
+- Do not handle branch/upstream re-wiring drift (`@{upstream}` pointing at a
+  different branch or a non-`origin` remote); record it as an open question.
+- Do not change clone behavior or the `NEPHOS_API_CATALOG_ROOTS` escape hatch.
+- Do not normalize URLs; exact string comparison is intended.
+
+Files likely to change:
+
+- `src/nephos_api/registries.py`
+- `tests/test_registries.py`
+- `docs/adr/20260522-api-bootstrap-mechanics.md` (refresh/fail rejection list)
+
+Proposed steps:
+
+1. Add the remote-URL guard as the first check in `_refresh_git_registry`,
+   before the dirty/ahead checks: run `git -C <path> remote get-url origin`,
+   compare exactly to `registry.url`, raise `RegistrySyncError` on mismatch.
+2. Update `test_registries.py`: extend the existing refresh command-sequence
+   test and add a mismatch rejection test.
+3. Add the remote-URL mismatch case to the ADR refresh/fail rejection list.
+
+Risks:
+
+- False-positive failures if URL comparison were normalized inconsistently;
+  mitigated by intentional exact-match semantics against the clone-written URL.
+- Missing the `origin` remote (deleted) surfaces as a wrapped refresh failure,
+  which is acceptable fail-safe behavior.
+
+Validation commands:
+
+- `uv run pytest -q tests/test_registries.py`
+- `uv run ruff check src/nephos_api/registries.py tests/test_registries.py`
+- `uv run ruff check .`
+- `uv run pytest -m "not kubernetes"`
+- `git diff --check`
+
+Rollback notes:
+
+- Revert this slice as a single commit; it is an internal startup-safety guard
+  with no public API/schema/lifecycle change.
+
+Open questions:
+
+- Whether to later add opt-in re-clone/re-point for URL changes if fail-fast
+  ergonomics become annoying (deferred; single-user context today).
+- Branch/upstream re-wiring drift beyond `origin` URL mismatch.
+
+---
+
 ## Current Plan Addendum: Resolve op:// refs on the binding-provisioning path
 
 Goal:

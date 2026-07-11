@@ -92,6 +92,8 @@ def test_ensure_managed_catalog_registries_refreshes_existing_checkout(
 
     def fake_runner(command):
         commands.append(list(command))
+        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+            return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     ensure_managed_catalog_registries(
@@ -100,6 +102,7 @@ def test_ensure_managed_catalog_registries_refreshes_existing_checkout(
     )
 
     assert commands == [
+        ["git", "-C", str(registry.path), "remote", "get-url", "origin"],
         ["git", "-C", str(registry.path), "status", "--porcelain"],
         ["git", "-C", str(registry.path), "rev-list", "--count", "@{upstream}..HEAD"],
         ["git", "-C", str(registry.path), "pull", "--ff-only"],
@@ -118,6 +121,8 @@ def test_ensure_managed_catalog_registries_blocks_ahead_checkout(
 
     def fake_runner(command):
         tail = list(command)[-3:]
+        if tail == ["remote", "get-url", "origin"]:
+            return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         if tail == ["rev-list", "--count", "@{upstream}..HEAD"]:
             return subprocess.CompletedProcess(command, 0, "1\n", "")
         if list(command)[-2:] == ["status", "--porcelain"]:
@@ -139,6 +144,8 @@ def test_ensure_managed_catalog_registries_blocks_dirty_checkout(
     (registry.path / ".git").mkdir(parents=True)
 
     def fake_runner(command):
+        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+            return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         if list(command)[-2:] == ["status", "--porcelain"]:
             return subprocess.CompletedProcess(command, 0, " M service.yaml\n", "")
         raise AssertionError("dirty checkouts should not be pulled")
@@ -158,6 +165,8 @@ def test_ensure_managed_catalog_registries_blocks_divergent_checkout(
     (registry.path / ".git").mkdir(parents=True)
 
     def fake_runner(command):
+        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+            return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         if list(command)[-2:] == ["status", "--porcelain"]:
             return subprocess.CompletedProcess(command, 0, "", "")
         if list(command)[-3:] == ["rev-list", "--count", "@{upstream}..HEAD"]:
@@ -169,6 +178,27 @@ def test_ensure_managed_catalog_registries_blocks_divergent_checkout(
         )
 
     with pytest.raises(RegistrySyncError, match="fast-forward"):
+        ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)
+
+
+def test_ensure_managed_catalog_registries_blocks_remote_url_mismatch(
+    tmp_path: Path,
+) -> None:
+    registry = ManagedCatalogRegistry(
+        name="core-registry",
+        url="https://example.test/core-registry.git",
+        path=tmp_path / ".nephos" / "registries" / "core-registry",
+    )
+    (registry.path / ".git").mkdir(parents=True)
+
+    def fake_runner(command):
+        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+            return subprocess.CompletedProcess(
+                command, 0, "https://example.test/foreign-registry.git\n", ""
+            )
+        raise AssertionError("mismatched-remote checkouts should not be refreshed")
+
+    with pytest.raises(RegistrySyncError, match="does not match configured"):
         ensure_managed_catalog_registries(_settings(registry), runner=fake_runner)
 
 

@@ -126,11 +126,21 @@ existing path as valid. This keeps managed catalog manifests current instead of
 silently running against a stale checkout.
 
 Nephos refuses to refresh and fails startup when a managed checkout is not a
-clean, upstream-tracking fast-forward. It rejects the checkout when it:
+clean, fast-forwardable checkout of the configured registry. It rejects the
+checkout when it:
 
+- has an `origin` remote URL that does not match the configured `registry.url`,
 - has uncommitted working-tree changes,
 - has local commits ahead of its upstream, or
 - has diverged such that a fast-forward is not possible.
+
+The remote-URL check runs first. `git pull --ff-only` and the ahead check both
+follow the checkout's own upstream, so a drifted `origin` would let Nephos
+refresh from a foreign remote while reporting success for the configured
+registry; validating `origin` against the configured URL first is what makes the
+remaining guards meaningful. On mismatch Nephos fails fast rather than auto
+re-pointing or re-cloning; operators repair the checkout or use the
+`NEPHOS_API_CATALOG_ROOTS` escape hatch themselves.
 
 Operators who need local catalog edits must use the `NEPHOS_API_CATALOG_ROOTS`
 escape hatch, which replaces the managed dependency set and skips managed
