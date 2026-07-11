@@ -58,6 +58,39 @@ def _refresh_git_registry(
     runner: CommandRunner,
 ) -> None:
     try:
+        # A managed checkout must track the configured registry.url. `git pull
+        # --ff-only` (and the ahead check below) follow the checkout's own
+        # @{upstream}, so a drifted origin would silently refresh from a foreign
+        # remote while reporting success. `git clone` writes origin byte-for-byte,
+        # so an exact mismatch is real drift, not spelling noise. Fail fast.
+        # ! Read the raw stored values with `config --get-all`, not
+        # ! `git remote get-url`: the latter expands url.<base>.insteadOf rewrites
+        # ! (e.g. https -> ssh) and returns only the first URL. Require exactly
+        # ! one origin url equal to registry.url. A remote may hold multiple urls
+        # ! (`set-url --add`), where `git fetch` uses the first while a scalar
+        # ! `config --get` read returns the last, so anything but a single
+        # ! matching url leaves the fetch source ambiguous or drifted.
+        remote = runner(
+            [
+                "git",
+                "-C",
+                str(registry.path),
+                "config",
+                "--get-all",
+                "remote.origin.url",
+            ]
+        )
+        actual_urls = [
+            line.strip() for line in remote.stdout.splitlines() if line.strip()
+        ]
+        if actual_urls != [registry.url]:
+            found = ", ".join(repr(url) for url in actual_urls) or "none"
+            raise RegistrySyncError(
+                "managed catalog registry "
+                f"{registry.name} origin remote(s) {found} do not match configured "
+                f"registry url {registry.url!r} (expected exactly one matching "
+                f"origin url); refusing to refresh {registry.path}"
+            )
         status = runner(["git", "-C", str(registry.path), "status", "--porcelain"])
         if status.stdout.strip():
             raise RegistrySyncError(
