@@ -1226,7 +1226,7 @@ def _arcadedb_service(
                                 (
                                     'root_password="$(cat '
                                     '/run/secrets/arcadedb/root-password)"\n'
-                                    "exec /opt/arcadedb/bin/server.sh "
+                                    "exec /home/arcadedb/bin/server.sh "
                                     '"-Darcadedb.server.rootPassword='
                                     '${root_password}" '
                                     '"-Darcadedb.server.plugins='
