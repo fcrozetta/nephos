@@ -63,8 +63,11 @@ def _refresh_git_registry(
         # @{upstream}, so a drifted origin would silently refresh from a foreign
         # remote while reporting success. `git clone` writes origin byte-for-byte,
         # so an exact mismatch is real drift, not spelling noise. Fail fast.
+        # ! Read the stored config value, not `git remote get-url`: the latter
+        # ! expands url.<base>.insteadOf rewrites (e.g. https -> ssh), which would
+        # ! falsely reject a valid checkout cloned from the configured URL.
         remote = runner(
-            ["git", "-C", str(registry.path), "remote", "get-url", "origin"]
+            ["git", "-C", str(registry.path), "config", "--get", "remote.origin.url"]
         )
         actual_url = remote.stdout.strip()
         if actual_url != registry.url:

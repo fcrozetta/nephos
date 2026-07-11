@@ -92,7 +92,7 @@ def test_ensure_managed_catalog_registries_refreshes_existing_checkout(
 
     def fake_runner(command):
         commands.append(list(command))
-        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+        if list(command)[-3:] == ["config", "--get", "remote.origin.url"]:
             return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -102,7 +102,7 @@ def test_ensure_managed_catalog_registries_refreshes_existing_checkout(
     )
 
     assert commands == [
-        ["git", "-C", str(registry.path), "remote", "get-url", "origin"],
+        ["git", "-C", str(registry.path), "config", "--get", "remote.origin.url"],
         ["git", "-C", str(registry.path), "status", "--porcelain"],
         ["git", "-C", str(registry.path), "rev-list", "--count", "@{upstream}..HEAD"],
         ["git", "-C", str(registry.path), "pull", "--ff-only"],
@@ -121,7 +121,7 @@ def test_ensure_managed_catalog_registries_blocks_ahead_checkout(
 
     def fake_runner(command):
         tail = list(command)[-3:]
-        if tail == ["remote", "get-url", "origin"]:
+        if tail == ["config", "--get", "remote.origin.url"]:
             return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         if tail == ["rev-list", "--count", "@{upstream}..HEAD"]:
             return subprocess.CompletedProcess(command, 0, "1\n", "")
@@ -144,7 +144,7 @@ def test_ensure_managed_catalog_registries_blocks_dirty_checkout(
     (registry.path / ".git").mkdir(parents=True)
 
     def fake_runner(command):
-        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+        if list(command)[-3:] == ["config", "--get", "remote.origin.url"]:
             return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         if list(command)[-2:] == ["status", "--porcelain"]:
             return subprocess.CompletedProcess(command, 0, " M service.yaml\n", "")
@@ -165,7 +165,7 @@ def test_ensure_managed_catalog_registries_blocks_divergent_checkout(
     (registry.path / ".git").mkdir(parents=True)
 
     def fake_runner(command):
-        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+        if list(command)[-3:] == ["config", "--get", "remote.origin.url"]:
             return subprocess.CompletedProcess(command, 0, f"{registry.url}\n", "")
         if list(command)[-2:] == ["status", "--porcelain"]:
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -192,7 +192,7 @@ def test_ensure_managed_catalog_registries_blocks_remote_url_mismatch(
     (registry.path / ".git").mkdir(parents=True)
 
     def fake_runner(command):
-        if list(command)[-3:] == ["remote", "get-url", "origin"]:
+        if list(command)[-3:] == ["config", "--get", "remote.origin.url"]:
             return subprocess.CompletedProcess(
                 command, 0, "https://example.test/foreign-registry.git\n", ""
             )
