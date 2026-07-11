@@ -29,7 +29,12 @@ from nephos_api.reconciler import Reconciler, RuntimeAdapter, RuntimeDeployer
 from nephos_api.reconciler_worker import ReconcilerWorker
 from nephos_api.registries import ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
-from nephos_api.secret_refs import OnePasswordCliSecretResolver
+from nephos_api.secret_refs import (
+    BaoSecretResolver,
+    OnePasswordCliSecretResolver,
+    RuntimeSecretResolver,
+    SchemeRoutingSecretResolver,
+)
 
 RuntimeFactory = Callable[[Settings], RuntimeAdapter]
 DeployerFactory = Callable[[Settings, DesiredStateRepository], RuntimeDeployer]
@@ -304,30 +309,40 @@ def default_provider_deployer_factory(
             ),
         },
     )
+    service_runtimes: dict[str, PulumiKubernetesProvider] = {
+        "postgres": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="postgres-service",
+        ),
+        "zitadel": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="zitadel-service",
+        ),
+        "seaweedfs": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="seaweedfs-service",
+        ),
+        "arcadedb": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="arcadedb-service",
+        ),
+        "cloudflared": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="cloudflared-service",
+        ),
+    }
+    # ! dev-mode openbao is insecure (static root token, in-memory) and is only
+    # ! registered in LCL with an explicit opt-in. Anywhere else an openbao
+    # ! install blocks as unknown runtime until the persistent, sealed Phase 2
+    # ! provider exists.
+    if settings.env == "lcl" and settings.allow_dev_mode_openbao:
+        service_runtimes["openbao"] = PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="openbao-service",
+        )
     service_provider = RuntimeProviderRouter(
         helm_provider=PulumiHelmProvider(config=pulumi_config),
-        provider_runtimes={
-            "postgres": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="postgres-service",
-            ),
-            "zitadel": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="zitadel-service",
-            ),
-            "seaweedfs": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="seaweedfs-service",
-            ),
-            "arcadedb": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="arcadedb-service",
-            ),
-            "cloudflared": PulumiKubernetesProvider(
-                config=kubernetes_config,
-                workload="cloudflared-service",
-            ),
-        },
+        provider_runtimes=service_runtimes,
     )
     return ProviderRuntimeDeployer(
         repository=repository,
@@ -337,8 +352,23 @@ def default_provider_deployer_factory(
         service_dependency_provisioner=PostgresAppScopedProvisioner(
             core_v1_api=core_v1_api
         ),
-        secret_resolver=OnePasswordCliSecretResolver(),
+        secret_resolver=_build_secret_resolver(settings),
     )
+
+
+def _build_secret_resolver(settings: Settings) -> RuntimeSecretResolver:
+    # op:// resolves through the 1Password CLI. bao:// resolves through OpenBao
+    # when a deploy-time address/token is configured, so references can migrate
+    # off 1Password incrementally.
+    resolvers: dict[str, RuntimeSecretResolver] = {
+        "op://": OnePasswordCliSecretResolver(),
+    }
+    if settings.bao_address and settings.bao_token:
+        resolvers["bao://"] = BaoSecretResolver(
+            address=settings.bao_address,
+            token=settings.bao_token,
+        )
+    return SchemeRoutingSecretResolver(resolvers)
 
 
 def _pulumi_helm_provider_config(settings: Settings) -> PulumiHelmProviderConfig:
@@ -405,7 +435,7 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
                 ZitadelAppScopedProvisioner(client=zitadel_client),
             ]
         ),
-        resolver=OnePasswordCliSecretResolver(),
+        resolver=_build_secret_resolver(settings),
     )
 
 

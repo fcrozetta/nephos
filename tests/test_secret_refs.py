@@ -1,8 +1,13 @@
+import io
+import json
 import subprocess
+import urllib.request
 
 from nephos_api.runtime_errors import RuntimeBlockedError
 from nephos_api.secret_refs import (
+    BaoSecretResolver,
     OnePasswordCliSecretResolver,
+    SchemeRoutingSecretResolver,
     StaticSecretResolver,
     is_secret_reference,
     resolve_runtime_secret_value,
@@ -69,3 +74,69 @@ def test_onepassword_cli_secret_resolver_sanitizes_failed_reads(monkeypatch) -> 
         assert "sensitive stderr" not in str(exc)
     else:
         raise AssertionError("expected failed op read to block")
+
+
+def test_is_secret_reference_recognizes_bao_scheme() -> None:
+    assert is_secret_reference("bao://secret/nephos-lcl/arcadedb-root/password")
+    assert is_secret_reference("op://nephos-lcl/postgres-admin/password")
+    assert not is_secret_reference("vault://x/y")
+
+
+def test_bao_resolver_parses_mount_path_field() -> None:
+    assert BaoSecretResolver._parse(
+        "bao://secret/nephos-lcl/arcadedb-root/password"
+    ) == ("secret", "nephos-lcl/arcadedb-root", "password")
+
+
+def test_bao_resolver_rejects_short_reference() -> None:
+    try:
+        BaoSecretResolver(address="http://x", token="t").resolve("bao://secret/only")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_unavailable"
+    else:
+        raise AssertionError("expected malformed bao reference to block")
+
+
+def test_bao_resolver_reads_kv_v2_field(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["token"] = request.get_header("X-vault-token")
+        body = json.dumps({"data": {"data": {"password": "from-bao"}}}).encode()
+        return io.BytesIO(body)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    resolved = BaoSecretResolver(
+        address="http://openbao:8200/", token="root-token"
+    ).resolve("bao://secret/nephos-lcl/arcadedb-root/password")
+
+    assert resolved == "from-bao"
+    assert captured["url"] == (
+        "http://openbao:8200/v1/secret/data/nephos-lcl/arcadedb-root"
+    )
+    assert captured["token"] == "root-token"
+
+
+def test_scheme_routing_resolver_dispatches_by_scheme() -> None:
+    resolver = SchemeRoutingSecretResolver(
+        {
+            "op://": StaticSecretResolver({"op://a/b/c": "op-value"}),
+            "bao://": StaticSecretResolver({"bao://m/p/f": "bao-value"}),
+        }
+    )
+
+    assert resolver.resolve("op://a/b/c") == "op-value"
+    assert resolver.resolve("bao://m/p/f") == "bao-value"
+
+
+def test_scheme_routing_resolver_blocks_unknown_scheme() -> None:
+    resolver = SchemeRoutingSecretResolver({"op://": StaticSecretResolver({})})
+
+    try:
+        resolver.resolve("bao://m/p/f")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_provider_unavailable"
+    else:
+        raise AssertionError("expected unrouted scheme to block")

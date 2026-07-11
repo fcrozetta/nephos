@@ -1369,6 +1369,85 @@ def _labels(spec: PulumiKubernetesWorkloadSpec) -> dict[str, str]:
     }
 
 
+def _openbao_service(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    # ! DEV MODE ONLY. Runs `bao server -dev`: in-memory storage, auto-unsealed,
+    # ! with a static root token. This is insecure by design and must never run
+    # ! outside LCL; the API refuses to register this provider unless the
+    # ! environment is `lcl`. A later phase replaces this with a persistent,
+    # ! sealed, Kubernetes-auth OpenBao before openbao can serve non-LCL secrets.
+    name = f"{spec.runtime_name}-openbao"
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    image = _string_value(spec.values, "image", "openbao/openbao:2.4.1")
+    # Static dev-mode token, LCL-only by construction (see the gate in main.py).
+    # Phase 2 replaces dev mode with init/unseal + a Kubernetes auth method.
+    dev_root_token = _string_value(spec.values, "devRootToken", "root")
+    http_port = _int_value(spec.values, "httpPort", 8200)
+    k8s.core.v1.Secret(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        type="Opaque",
+        string_data={"dev-root-token": dev_root_token},
+        opts=opts,
+    )
+    k8s.core.v1.Service(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        spec={
+            "ports": [{"name": "http", "port": http_port, "targetPort": "http"}],
+            "selector": selector,
+        },
+        opts=opts,
+    )
+    k8s.apps.v1.Deployment(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        spec={
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "openbao",
+                            "image": image,
+                            "args": ["server", "-dev"],
+                            "env": [
+                                {
+                                    "name": "BAO_DEV_ROOT_TOKEN_ID",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "dev-root-token",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "BAO_DEV_LISTEN_ADDRESS",
+                                    "value": f"0.0.0.0:{http_port}",
+                                },
+                            ],
+                            "ports": [{"name": "http", "containerPort": http_port}],
+                            "readinessProbe": {
+                                "httpGet": {"path": "/v1/sys/health", "port": "http"},
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 5,
+                            },
+                        }
+                    ],
+                },
+            },
+        },
+        opts=opts,
+    )
+
+
 _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "reference-app": _reference_app,
     "postgres-service": _postgres_service,
@@ -1376,4 +1455,5 @@ _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "zitadel-service": _zitadel_service,
     "seaweedfs-service": _seaweedfs_service,
     "arcadedb-service": _arcadedb_service,
+    "openbao-service": _openbao_service,
 }

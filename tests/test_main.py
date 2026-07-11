@@ -79,6 +79,8 @@ def test_default_provider_deployer_factory_builds_pulumi_provider_deployer(
             catalog_roots=(),
             kubeconfig=None,
             kube_context=None,
+            env="lcl",
+            allow_dev_mode_openbao=True,
         ),
         DesiredStateRepository(tmp_path / "nephos.db"),
     )
@@ -91,9 +93,54 @@ def test_default_provider_deployer_factory_builds_pulumi_provider_deployer(
     assert captured["service_provider"].__class__.__name__ == "RuntimeProviderRouter"
     service_runtimes = captured["service_provider"]._provider_runtimes
     assert {"seaweedfs", "arcadedb"}.issubset(service_runtimes)
+    # lcl + explicit opt-in registers the dev-mode openbao provider.
+    assert "openbao" in service_runtimes
     assert captured["secret_resolver"].__class__.__name__ == (
-        "OnePasswordCliSecretResolver"
+        "SchemeRoutingSecretResolver"
     )
+
+
+def test_default_provider_deployer_factory_gates_dev_openbao_to_lcl(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    captured = {}
+
+    class FakeCoreV1Api:
+        pass
+
+    class FakeProviderDeployer:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("kubernetes.client.CoreV1Api", FakeCoreV1Api)
+    monkeypatch.setattr(
+        "nephos_api.main.load_kubernetes_config",
+        lambda _settings: None,
+    )
+    monkeypatch.setattr(
+        "nephos_api.main.ProviderRuntimeDeployer",
+        FakeProviderDeployer,
+    )
+
+    def _build(**settings_kwargs):
+        captured.clear()
+        default_provider_deployer_factory(
+            Settings(
+                db_path=tmp_path / "nephos.db",
+                catalog_roots=(),
+                kubeconfig=None,
+                kube_context=None,
+                **settings_kwargs,
+            ),
+            DesiredStateRepository(tmp_path / "nephos.db"),
+        )
+        return captured["service_provider"]._provider_runtimes
+
+    # Outside LCL, dev-mode openbao must not be registered.
+    assert "openbao" not in _build(env="prd", allow_dev_mode_openbao=True)
+    # In LCL without the explicit opt-in, it must not be registered either.
+    assert "openbao" not in _build(env="lcl", allow_dev_mode_openbao=False)
 
 
 def test_default_runtime_factory_provides_apps_api_for_scaling(
