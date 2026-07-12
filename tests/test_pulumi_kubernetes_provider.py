@@ -9,6 +9,8 @@ from nephos_api.providers.kubernetes import (
     PulumiKubernetesWorkloadSpec,
     _arcadedb_service,
     _cloudflared_service,
+    _openbao_persistent_service,
+    _openbao_service,
     _postgres_service,
     _pulumi_program,
     _seaweedfs_service,
@@ -804,3 +806,71 @@ def test_arcadedb_service_blocks_images_without_bolt_support() -> None:
         assert "26.2.1" in str(exc)
     else:  # pragma: no cover - assertion guard
         raise AssertionError("expected ArcadeDB image version block")
+
+
+def test_openbao_service_runs_dev_mode_with_secret_token() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-openbao",
+        work_dir=Path("/tmp/workspaces/svc-openbao"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-openbao",
+        namespace="svc-openbao",
+        workload="openbao-service",
+        values={},
+    )
+
+    _openbao_service(spec, k8s=k8s, opts=None)
+
+    secret = cast(dict[str, Any], k8s.secret.calls[0])
+    service = cast(dict[str, Any], k8s.service.calls[0])
+    deployment = cast(dict[str, Any], k8s.deployment.calls[0])
+    container = deployment["spec"]["template"]["spec"]["containers"][0]
+    assert secret["string_data"] == {"dev-root-token": "root"}
+    assert service["spec"]["ports"] == [
+        {"name": "http", "port": 8200, "targetPort": "http"}
+    ]
+    assert container["args"] == ["server", "-dev"]
+    token_env = next(
+        e for e in container["env"] if e["name"] == "BAO_DEV_ROOT_TOKEN_ID"
+    )
+    assert token_env["valueFrom"]["secretKeyRef"]["key"] == "dev-root-token"
+    listen_env = next(
+        e for e in container["env"] if e["name"] == "BAO_DEV_LISTEN_ADDRESS"
+    )
+    assert listen_env["value"] == "0.0.0.0:8200"
+
+
+def test_openbao_persistent_service_is_statefulset_with_unseal_sidecar() -> None:
+    k8s = RecordingKubernetes()
+    spec = PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-openbao",
+        work_dir=Path("/tmp/workspaces/svc-openbao"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-openbao",
+        namespace="svc-openbao",
+        workload="openbao-persistent-service",
+        values={},
+    )
+
+    _openbao_persistent_service(spec, k8s=k8s, opts=None)
+
+    sts = cast(dict[str, Any], k8s.stateful_set.calls[0])["spec"]
+    pod = sts["template"]["spec"]
+    # Persistent = PVC-backed, not the dev-mode in-memory Deployment.
+    assert "volumeClaimTemplates" in sts
+    assert pod["securityContext"] == {"fsGroup": 1000}
+    containers = {c["name"]: c for c in pod["containers"]}
+    assert set(containers) == {"openbao", "unseal"}
+    assert containers["openbao"]["args"] == ["server"]
+    # The unseal sidecar mounts the managed key Secret optionally (absent on the
+    # first boot before init creates it).
+    volume = pod["volumes"][0]
+    assert volume["secret"]["optional"] is True
+    assert k8s.deployment.calls == []

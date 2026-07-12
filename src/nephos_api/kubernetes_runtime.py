@@ -466,6 +466,45 @@ class KubernetesSecretBindingValueSource:
         }
 
 
+class KubernetesSecretBaoTokenProvider:
+    """Read OpenBao's access token from the Nephos-managed init Secret so the
+    bao:// resolver authenticates with the live init token rather than a static
+    dev token. Returns None (not an error) when the Secret is absent, so a
+    ChainedBaoTokenProvider can fall back."""
+
+    def __init__(
+        self,
+        core_v1_api: client.CoreV1Api,
+        *,
+        namespace: str,
+        secret_name: str = "openbao-init",
+        token_key: str = "root-token",
+    ) -> None:
+        self._core_v1_api = core_v1_api
+        self._namespace = namespace
+        self._secret_name = secret_name
+        self._token_key = token_key
+
+    def get_token(self) -> str | None:
+        try:
+            secret = self._core_v1_api.read_namespaced_secret(
+                name=self._secret_name, namespace=self._namespace
+            )
+        except ApiException as exc:
+            if exc.status == 404:
+                return None
+            raise
+        labels = (secret.metadata.labels or {}) if secret.metadata else {}
+        if labels.get(MANAGED_BY_LABEL) != "nephos":
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to read unowned Secret {self._namespace}/{self._secret_name}"
+            )
+        raw = (secret.data or {}).get(self._token_key)
+        if not raw:
+            return None
+        return base64.b64decode(raw).decode()
+
+
 def namespace_name(resource_type: ResourceType, slug: str) -> str:
     validate_machine_identifier(slug)
     prefix = "app" if resource_type == "app_instance" else "svc"

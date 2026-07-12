@@ -30,6 +30,20 @@ class Settings:
         default_factory=tuple
     )
     catalog_source_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Environment identity (lcl | dev | prd). Defaults fail-closed to prd so that
+    # LCL-only behavior (e.g. the insecure dev-mode openbao provider) is never
+    # enabled unless the environment is explicitly declared lcl.
+    env: str = "prd"
+    # Second, explicit opt-in for the dev-mode openbao provider. Even in lcl it
+    # stays off unless set, because dev mode ships a static root token.
+    allow_dev_mode_openbao: bool = False
+    # Deploy-time OpenBao access for the bao:// secret resolver.
+    bao_address: str | None = None
+    bao_token: str | None = None
+    # Persistent (non-dev) openbao core service: StatefulSet + PVC + auto
+    # init/unseal. When enabled it supersedes the dev-mode provider.
+    openbao_persistent: bool = False
+    bao_kv_mount: str = "secret"
 
 
 def load_settings(
@@ -75,6 +89,12 @@ def load_settings(
         ingress_class=env.get("NEPHOS_API_INGRESS_CLASS") or None,
         managed_catalog_registries=managed_catalog_registries,
         catalog_source_ids=catalog_source_ids,
+        env=env.get("NEPHOS_API_ENV", "prd").strip().lower() or "prd",
+        allow_dev_mode_openbao=env.get("NEPHOS_API_ALLOW_DEV_MODE_OPENBAO") == "1",
+        bao_address=env.get("NEPHOS_API_BAO_ADDR") or None,
+        bao_token=env.get("NEPHOS_API_BAO_TOKEN") or None,
+        openbao_persistent=env.get("NEPHOS_API_OPENBAO_PERSISTENT") == "1",
+        bao_kv_mount=env.get("NEPHOS_API_BAO_KV_MOUNT") or "secret",
     )
 
 

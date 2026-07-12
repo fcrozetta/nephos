@@ -1,8 +1,15 @@
+import io
+import json
 import subprocess
+import urllib.request
 
 from nephos_api.runtime_errors import RuntimeBlockedError
 from nephos_api.secret_refs import (
+    BaoSecretResolver,
+    ChainedBaoTokenProvider,
     OnePasswordCliSecretResolver,
+    SchemeRoutingSecretResolver,
+    StaticBaoTokenProvider,
     StaticSecretResolver,
     is_secret_reference,
     resolve_runtime_secret_value,
@@ -69,3 +76,97 @@ def test_onepassword_cli_secret_resolver_sanitizes_failed_reads(monkeypatch) -> 
         assert "sensitive stderr" not in str(exc)
     else:
         raise AssertionError("expected failed op read to block")
+
+
+def test_is_secret_reference_recognizes_bao_scheme() -> None:
+    assert is_secret_reference("bao://secret/nephos-lcl/arcadedb-root/password")
+    assert is_secret_reference("op://nephos-lcl/postgres-admin/password")
+    assert not is_secret_reference("vault://x/y")
+
+
+def test_bao_resolver_parses_mount_path_field() -> None:
+    assert BaoSecretResolver._parse(
+        "bao://secret/nephos-lcl/arcadedb-root/password"
+    ) == ("secret", "nephos-lcl/arcadedb-root", "password")
+
+
+def test_bao_resolver_rejects_short_reference() -> None:
+    try:
+        BaoSecretResolver.from_static(address="http://x", token="t").resolve(
+            "bao://secret/only"
+        )
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_unavailable"
+    else:
+        raise AssertionError("expected malformed bao reference to block")
+
+
+def test_bao_resolver_reads_kv_v2_field(monkeypatch) -> None:
+    captured = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["token"] = request.get_header("X-vault-token")
+        body = json.dumps({"data": {"data": {"password": "from-bao"}}}).encode()
+        return io.BytesIO(body)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    resolved = BaoSecretResolver.from_static(
+        address="http://openbao:8200/", token="root-token"
+    ).resolve("bao://secret/nephos-lcl/arcadedb-root/password")
+
+    assert resolved == "from-bao"
+    assert captured["url"] == (
+        "http://openbao:8200/v1/secret/data/nephos-lcl/arcadedb-root"
+    )
+    assert captured["token"] == "root-token"
+
+
+def test_scheme_routing_resolver_dispatches_by_scheme() -> None:
+    resolver = SchemeRoutingSecretResolver(
+        {
+            "op://": StaticSecretResolver({"op://a/b/c": "op-value"}),
+            "bao://": StaticSecretResolver({"bao://m/p/f": "bao-value"}),
+        }
+    )
+
+    assert resolver.resolve("op://a/b/c") == "op-value"
+    assert resolver.resolve("bao://m/p/f") == "bao-value"
+
+
+def test_scheme_routing_resolver_blocks_unknown_scheme() -> None:
+    resolver = SchemeRoutingSecretResolver({"op://": StaticSecretResolver({})})
+
+    try:
+        resolver.resolve("bao://m/p/f")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_provider_unavailable"
+    else:
+        raise AssertionError("expected unrouted scheme to block")
+
+
+def test_static_bao_token_provider_returns_none_for_empty() -> None:
+    assert StaticBaoTokenProvider("t").get_token() == "t"
+    assert StaticBaoTokenProvider("").get_token() is None
+    assert StaticBaoTokenProvider(None).get_token() is None
+
+
+def test_chained_bao_token_provider_prefers_first_available() -> None:
+    chain = ChainedBaoTokenProvider(
+        (StaticBaoTokenProvider(None), StaticBaoTokenProvider("live"))
+    )
+    assert chain.get_token() == "live"
+    assert ChainedBaoTokenProvider(()).get_token() is None
+
+
+def test_bao_resolver_blocks_when_no_token_available() -> None:
+    resolver = BaoSecretResolver(
+        address="http://x", token_provider=StaticBaoTokenProvider(None)
+    )
+    try:
+        resolver.resolve("bao://secret/nephos-lcl/arcadedb-root/password")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_provider_unavailable"
+    else:
+        raise AssertionError("expected missing bao token to block")
