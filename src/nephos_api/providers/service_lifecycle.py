@@ -64,6 +64,9 @@ class KubernetesBaoExecRunner:
             core_v1_api.connect_get_namespaced_pod_exec,
             pod_name,
             namespace,
+            # The pod also runs an "unseal" sidecar, so exec must target the
+            # main openbao container explicitly or the API rejects it (400).
+            container="openbao",
             command=["sh", "-lc", script],
             stderr=True,
             stdin=False,
