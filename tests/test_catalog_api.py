@@ -34,6 +34,56 @@ def test_catalog_api_lists_apps_and_services(tmp_path: Path) -> None:
     assert services.json()["services"][0]["name"] == "postgres"
 
 
+def test_catalog_api_exposes_config_options_schema(tmp_path: Path) -> None:
+    root = tmp_path / "default"
+    path = root / "services" / "widget" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: widget
+  displayName: Widget
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: admin-password
+        type: string
+        required: true
+        label: Admin password
+      - name: mode
+        type: enum
+        default: standalone
+        values:
+          - value: standalone
+          - value: replica
+  provisioning:
+    mode: app-scoped-resource
+  operations: []
+  runtime:
+    type: provider
+    provider:
+      name: widget
+""".strip()
+    )
+    client = _client((root,))
+
+    response = client.get("/catalog/services/widget")
+
+    assert response.status_code == 200
+    options = {o["name"]: o for o in response.json()["config"]["options"]}
+    assert options["admin-password"]["type"] == "string"
+    assert options["admin-password"]["required"] is True
+    assert options["mode"]["type"] == "enum"
+    assert options["mode"]["default"] == "standalone"
+    assert options["mode"]["values"] == [{"value": "standalone"}, {"value": "replica"}]
+
+
 def test_catalog_api_returns_selected_detail(tmp_path: Path) -> None:
     default_root = tmp_path / "default"
     local_root = tmp_path / "local"

@@ -618,6 +618,23 @@ def _validate_route_target_port(*, path: Path, route: AppRoute) -> None:
         )
 
 
+def _config_options_summary(options: list[ConfigOption]) -> list[dict[str, Any]]:
+    # Exposes the config schema so clients (e.g. nephos-console) can render a
+    # typed install form instead of a blind config blob.
+    return [
+        {
+            "name": option.name,
+            "type": option.type_,
+            "label": option.label,
+            "description": option.description,
+            "default": option.default,
+            "required": option.required,
+            "values": option.values,
+        }
+        for option in options
+    ]
+
+
 def _app_summary(
     manifest: AppManifest,
     *,
@@ -653,6 +670,7 @@ def _app_summary(
             }
             for route in manifest.spec.routes
         ],
+        "config": {"options": _config_options_summary(manifest.spec.config.options)},
     }
 
 
@@ -702,6 +720,7 @@ def _service_summary(
             }
             for provided in manifest.spec.provides
         ],
+        "config": {"options": _config_options_summary(manifest.spec.config.options)},
     }
 
 

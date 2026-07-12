@@ -47,6 +47,7 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
                     "target": {"port": "http"},
                 }
             ],
+            "config": {"options": []},
         }
     ]
     assert apps[0]["manifestDigest"].startswith("sha256:")
@@ -69,6 +70,7 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
                     "bindingOutputTargets": ["app-secret"],
                 }
             ],
+            "config": {"options": []},
         }
     ]
 
