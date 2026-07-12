@@ -74,22 +74,65 @@ class OnePasswordCliSecretResolver:
         return resolved
 
 
+class BaoTokenProvider(Protocol):
+    def get_token(self) -> str | None: ...
+
+
+@dataclass(frozen=True)
+class StaticBaoTokenProvider:
+    token: str | None
+
+    def get_token(self) -> str | None:
+        return self.token or None
+
+
+@dataclass(frozen=True)
+class ChainedBaoTokenProvider:
+    """Return the first available token. Ordered k8s-first so a live init token
+    wins over a stale static dev token."""
+
+    providers: tuple[BaoTokenProvider, ...]
+
+    def get_token(self) -> str | None:
+        for provider in self.providers:
+            token = provider.get_token()
+            if token:
+                return token
+        return None
+
+
 @dataclass(frozen=True)
 class BaoSecretResolver:
     """Resolve `bao://<mount>/<path.../<field>` references from an OpenBao KV v2
-    store over HTTP. Phase 1 authenticates with a static token; a later phase
-    replaces this with a Kubernetes auth method."""
+    store over HTTP. The access token is fetched at resolve time from a
+    BaoTokenProvider (Kubernetes-managed init token, or a static dev token)."""
 
     address: str
-    token: str
+    token_provider: BaoTokenProvider
     timeout_seconds: float = 30.0
+
+    @classmethod
+    def from_static(
+        cls, *, address: str, token: str, timeout_seconds: float = 30.0
+    ) -> "BaoSecretResolver":
+        return cls(
+            address=address,
+            token_provider=StaticBaoTokenProvider(token),
+            timeout_seconds=timeout_seconds,
+        )
 
     def resolve(self, reference: str) -> str:
         mount, path, field = self._parse(reference)
+        token = self.token_provider.get_token()
+        if not token:
+            raise RuntimeBlockedError(
+                reason="secret_ref_provider_unavailable",
+                message="No OpenBao token is available to resolve secret references.",
+            )
         url = f"{self.address.rstrip('/')}/v1/{mount}/data/{path}"
         request = urllib.request.Request(
             url,
-            headers={"X-Vault-Token": self.token},
+            headers={"X-Vault-Token": token},
             method="GET",
         )
         try:

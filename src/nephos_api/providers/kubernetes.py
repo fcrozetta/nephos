@@ -1448,6 +1448,88 @@ def _openbao_service(
     )
 
 
+def _openbao_persistent_service(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    # Persistent (non-dev) OpenBao: a StatefulSet with a file storage backend on
+    # a PVC. It boots SEALED and uninitialized; the openbao lifecycle provisioner
+    # runs init/unseal/mount via pod exec after this deploys. The readiness probe
+    # accepts sealed/uninitialized as Ready so the Pulumi rollout-await returns
+    # (otherwise it would hang forever waiting to unseal something not yet up).
+    name = f"{spec.runtime_name}-openbao"
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    image = _string_value(spec.values, "image", "openbao/openbao:2.4.1")
+    http_port = _int_value(spec.values, "httpPort", 8200)
+    local_config = (
+        'storage "file" { path = "/openbao/data" }\n'
+        f'listener "tcp" {{ address = "0.0.0.0:{http_port}" tls_disable = 1 }}\n'
+        "disable_mlock = true\n"
+        f'api_addr = "http://127.0.0.1:{http_port}"\n'
+    )
+    k8s.core.v1.Service(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        spec={
+            "ports": [{"name": "http", "port": http_port, "targetPort": "http"}],
+            "selector": selector,
+        },
+        opts=opts,
+    )
+    k8s.apps.v1.StatefulSet(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        spec={
+            "serviceName": name,
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    # OpenBao runs as uid=100/gid=1000; fsGroup makes the PVC
+                    # writable so the file storage backend can persist.
+                    "securityContext": {"fsGroup": 1000},
+                    "containers": [
+                        {
+                            "name": "openbao",
+                            "image": image,
+                            "args": ["server"],
+                            "env": [
+                                {"name": "BAO_LOCAL_CONFIG", "value": local_config},
+                            ],
+                            "ports": [{"name": "http", "containerPort": http_port}],
+                            "volumeMounts": [
+                                {"name": "data", "mountPath": "/openbao/data"},
+                            ],
+                            "startupProbe": {
+                                "tcpSocket": {"port": "http"},
+                                "periodSeconds": 3,
+                                "failureThreshold": 20,
+                            },
+                            "readinessProbe": {
+                                "httpGet": {
+                                    "path": (
+                                        "/v1/sys/health"
+                                        "?standbyok=true&sealedcode=200&uninitcode=200"
+                                    ),
+                                    "port": "http",
+                                },
+                                "initialDelaySeconds": 3,
+                                "periodSeconds": 5,
+                            },
+                        }
+                    ],
+                },
+            },
+            "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
+        },
+        opts=opts,
+    )
+
+
 _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "reference-app": _reference_app,
     "postgres-service": _postgres_service,
@@ -1456,4 +1538,5 @@ _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "seaweedfs-service": _seaweedfs_service,
     "arcadedb-service": _arcadedb_service,
     "openbao-service": _openbao_service,
+    "openbao-persistent-service": _openbao_persistent_service,
 }

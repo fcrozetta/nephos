@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from contextlib import suppress
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import yaml
+
+if TYPE_CHECKING:
+    from nephos_api.providers.service_lifecycle import ServiceLifecycleProvisioner
 
 from nephos_api.catalog import AppManifest, RuntimeMapping, ServiceManifest
 from nephos_api.helm_runtime import runtime_name, set_helm_value
@@ -39,6 +42,7 @@ class ProviderRuntimeDeployer:
         binding_value_source: BindingValueSource | None = None,
         service_dependency_provisioner: BindingProvisioner | None = None,
         secret_resolver: RuntimeSecretResolver | None = None,
+        service_lifecycle: ServiceLifecycleProvisioner | None = None,
     ) -> None:
         self._repository = repository
         self._app_provider = app_provider
@@ -46,10 +50,19 @@ class ProviderRuntimeDeployer:
         self._binding_value_source = binding_value_source
         self._service_dependency_provisioner = service_dependency_provisioner
         self._secret_resolver = secret_resolver
+        self._service_lifecycle = service_lifecycle
 
     def deploy(self, *, target_type: str, slug: str) -> None:
         context = self._context(target_type=target_type, slug=slug)
         self._provider_for(target_type).deploy(context)
+        # After a persistent openbao StatefulSet deploys (and its pod is Ready
+        # while sealed), run its self-lifecycle: init, unseal, ensure KV mount.
+        if (
+            target_type == "service_instance"
+            and self._service_lifecycle is not None
+            and context.provider_name == "openbao"
+        ):
+            self._service_lifecycle.reconcile(context)
 
     def uninstall(self, *, target_type: str, slug: str) -> None:
         row = self._instance_row(target_type=target_type, slug=slug)

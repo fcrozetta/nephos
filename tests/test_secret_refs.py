@@ -6,8 +6,10 @@ import urllib.request
 from nephos_api.runtime_errors import RuntimeBlockedError
 from nephos_api.secret_refs import (
     BaoSecretResolver,
+    ChainedBaoTokenProvider,
     OnePasswordCliSecretResolver,
     SchemeRoutingSecretResolver,
+    StaticBaoTokenProvider,
     StaticSecretResolver,
     is_secret_reference,
     resolve_runtime_secret_value,
@@ -90,7 +92,9 @@ def test_bao_resolver_parses_mount_path_field() -> None:
 
 def test_bao_resolver_rejects_short_reference() -> None:
     try:
-        BaoSecretResolver(address="http://x", token="t").resolve("bao://secret/only")
+        BaoSecretResolver.from_static(address="http://x", token="t").resolve(
+            "bao://secret/only"
+        )
     except RuntimeBlockedError as exc:
         assert exc.reason == "secret_ref_unavailable"
     else:
@@ -108,7 +112,7 @@ def test_bao_resolver_reads_kv_v2_field(monkeypatch) -> None:
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    resolved = BaoSecretResolver(
+    resolved = BaoSecretResolver.from_static(
         address="http://openbao:8200/", token="root-token"
     ).resolve("bao://secret/nephos-lcl/arcadedb-root/password")
 
@@ -140,3 +144,29 @@ def test_scheme_routing_resolver_blocks_unknown_scheme() -> None:
         assert exc.reason == "secret_ref_provider_unavailable"
     else:
         raise AssertionError("expected unrouted scheme to block")
+
+
+def test_static_bao_token_provider_returns_none_for_empty() -> None:
+    assert StaticBaoTokenProvider("t").get_token() == "t"
+    assert StaticBaoTokenProvider("").get_token() is None
+    assert StaticBaoTokenProvider(None).get_token() is None
+
+
+def test_chained_bao_token_provider_prefers_first_available() -> None:
+    chain = ChainedBaoTokenProvider(
+        (StaticBaoTokenProvider(None), StaticBaoTokenProvider("live"))
+    )
+    assert chain.get_token() == "live"
+    assert ChainedBaoTokenProvider(()).get_token() is None
+
+
+def test_bao_resolver_blocks_when_no_token_available() -> None:
+    resolver = BaoSecretResolver(
+        address="http://x", token_provider=StaticBaoTokenProvider(None)
+    )
+    try:
+        resolver.resolve("bao://secret/nephos-lcl/arcadedb-root/password")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_provider_unavailable"
+    else:
+        raise AssertionError("expected missing bao token to block")
