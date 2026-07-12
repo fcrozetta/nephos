@@ -137,3 +137,16 @@ def _b64(value: str) -> str:
     import base64
 
     return base64.b64encode(value.encode()).decode()
+
+
+def test_bao_shell_script_invokes_bao_with_env_and_token() -> None:
+    from nephos_api.providers.service_lifecycle import _bao_shell_script
+
+    script = _bao_shell_script(["status", "-format=json"], None)
+    # Regression guard: the command must actually invoke the `bao` binary.
+    assert "bao status -format=json" in script
+    assert 'BAO_ADDR="http://127.0.0.1:8200"' in script
+    assert "NEPHOS_EXIT" in script
+
+    with_token = _bao_shell_script(["secrets", "list"], "tok-123")
+    assert "BAO_TOKEN=tok-123 bao secrets list" in with_token

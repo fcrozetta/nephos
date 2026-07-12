@@ -59,13 +59,7 @@ class KubernetesBaoExecRunner:
         argv: list[str],
         token: str | None = None,
     ) -> tuple[str, str, int]:
-        env = 'BAO_ADDR="http://127.0.0.1:8200" '
-        if token:
-            env += f"BAO_TOKEN={shlex.quote(token)} "
-        command = env + " ".join(shlex.quote(arg) for arg in argv)
-        script = (
-            f'{command}\nrc=$?\nprintf \'\\n{_EXIT_MARKER}:%s\\n\' "$rc"\nexit "$rc"'
-        )
+        script = _bao_shell_script(argv, token)
         response = stream.stream(
             core_v1_api.connect_get_namespaced_pod_exec,
             pod_name,
@@ -288,6 +282,14 @@ class KubernetesOpenBaoLifecycle:
             raise KubernetesRuntimeSafetyError(
                 f"refusing to use unowned namespace {namespace}"
             )
+
+
+def _bao_shell_script(argv: list[str], token: str | None) -> str:
+    env = 'BAO_ADDR="http://127.0.0.1:8200" '
+    if token:
+        env += f"BAO_TOKEN={shlex.quote(token)} "
+    command = env + "bao " + " ".join(shlex.quote(arg) for arg in argv)
+    return f'{command}\nrc=$?\nprintf \'\\n{_EXIT_MARKER}:%s\\n\' "$rc"\nexit "$rc"'
 
 
 def _exit_code(text: str) -> int | None:
