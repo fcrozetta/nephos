@@ -1470,6 +1470,20 @@ def _openbao_persistent_service(
         "disable_mlock = true\n"
         f'api_addr = "http://127.0.0.1:{http_port}"\n'
     )
+    # A sidecar self-heals the seal on pod restart using the Nephos-managed
+    # unseal key, mounted optionally (absent on the first boot, before the
+    # lifecycle initializes the store and creates the Secret). This removes the
+    # need for a manual reconcile to re-unseal after a restart.
+    unseal_loop = (
+        "while true; do\n"
+        "  if [ -s /var/run/openbao-init/unseal-key ]; then\n"
+        f"    BAO_ADDR=http://127.0.0.1:{http_port} bao status >/dev/null 2>&1 || \\\n"
+        f"    BAO_ADDR=http://127.0.0.1:{http_port} bao operator unseal "
+        '"$(cat /var/run/openbao-init/unseal-key)" >/dev/null 2>&1 || true\n'
+        "  fi\n"
+        "  sleep 10\n"
+        "done\n"
+    )
     k8s.core.v1.Service(
         name,
         metadata={"name": name, "namespace": spec.namespace, "labels": labels},
@@ -1519,6 +1533,27 @@ def _openbao_persistent_service(
                                 },
                                 "initialDelaySeconds": 3,
                                 "periodSeconds": 5,
+                            },
+                        },
+                        {
+                            "name": "unseal",
+                            "image": image,
+                            "command": ["sh", "-c", unseal_loop],
+                            "volumeMounts": [
+                                {
+                                    "name": "openbao-init",
+                                    "mountPath": "/var/run/openbao-init",
+                                    "readOnly": True,
+                                }
+                            ],
+                        },
+                    ],
+                    "volumes": [
+                        {
+                            "name": "openbao-init",
+                            "secret": {
+                                "secretName": "openbao-init",
+                                "optional": True,
                             },
                         }
                     ],
