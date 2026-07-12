@@ -1014,3 +1014,13 @@ Need to decide:
 - expected status outputs
 - exact CLI command spelling for root domain operations
 - data preservation checks
+
+## OpenBao Secret Backend Follow-ups
+
+Deferred by [OpenBao as an In-Cluster Secret Backend](../../docs/adr/20260712-openbao-secret-backend.md):
+
+- Kubernetes auth method for Nephos instead of the managed root token
+- Configurable / multi-instance OpenBao (instance slug, init Secret name, namespace) instead of the fixed single-instance `openbao` assumption
+- Migrate the backbone (postgres, zitadel) to `bao://` safely: seed the current value in place, then switch install config, since catalog `service.yaml` is schema and not instance config
+- Promote the OpenBao catalog entry from community-registry to core-registry once the provider stabilizes
+- Production key custody: KMS auto-unseal and off-cluster backup of unseal keys and KV data, since in LCL the managed Secret and PVC are the sole source of truth

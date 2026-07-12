@@ -344,10 +344,10 @@ def default_provider_deployer_factory(
             config=kubernetes_config,
             workload="openbao-persistent-service",
         )
+        # The init Secret name/keys are fixed constants shared by the lifecycle,
+        # the unseal sidecar, and the token provider, so they cannot diverge.
         openbao_lifecycle = KubernetesOpenBaoLifecycle(
             core_v1_api=core_v1_api,
-            secret_name=settings.bao_token_secret_name,
-            root_token_key=settings.bao_token_secret_key,
             kv_mount=settings.bao_kv_mount,
         )
     elif settings.env == "lcl" and settings.allow_dev_mode_openbao:
@@ -391,11 +391,12 @@ def _build_secret_resolver(
             )
 
             token_providers.append(
+                # NOTE: openbao must be installed under the slug "openbao"
+                # (single-instance Phase 2 constraint, see the OpenBao ADR); the
+                # init Secret name/key are the shared fixed constants.
                 KubernetesSecretBaoTokenProvider(
                     core_v1_api,
                     namespace=namespace_name("service_instance", "openbao"),
-                    secret_name=settings.bao_token_secret_name,
-                    token_key=settings.bao_token_secret_key,
                 )
             )
         if settings.bao_token:

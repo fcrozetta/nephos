@@ -43,10 +43,6 @@ class Settings:
     # Persistent (non-dev) openbao core service: StatefulSet + PVC + auto
     # init/unseal. When enabled it supersedes the dev-mode provider.
     openbao_persistent: bool = False
-    # Nephos-managed Secret (in the openbao namespace) that holds the init unseal
-    # keys and root token; the bao:// resolver reads its token from here.
-    bao_token_secret_name: str = "openbao-init"
-    bao_token_secret_key: str = "root-token"
     bao_kv_mount: str = "secret"
 
 
@@ -98,10 +94,6 @@ def load_settings(
         bao_address=env.get("NEPHOS_API_BAO_ADDR") or None,
         bao_token=env.get("NEPHOS_API_BAO_TOKEN") or None,
         openbao_persistent=env.get("NEPHOS_API_OPENBAO_PERSISTENT") == "1",
-        bao_token_secret_name=(
-            env.get("NEPHOS_API_BAO_TOKEN_SECRET_NAME") or "openbao-init"
-        ),
-        bao_token_secret_key=env.get("NEPHOS_API_BAO_TOKEN_SECRET_KEY") or "root-token",
         bao_kv_mount=env.get("NEPHOS_API_BAO_KV_MOUNT") or "secret",
     )
 
