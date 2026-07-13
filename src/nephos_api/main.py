@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from nephos_api import __version__
+from nephos_api.api.auth import router as auth_router
 from nephos_api.api.bindings import router as bindings_router
 from nephos_api.api.catalog import router as catalog_router
 from nephos_api.api.platform import router as platform_router
@@ -74,6 +75,7 @@ def create_app(
         provisioner is not None or provisioner_factory is not None
     )
     app.add_exception_handler(NephosError, nephos_error_response)
+    app.include_router(auth_router)
     app.include_router(bindings_router)
     app.include_router(catalog_router)
     app.include_router(platform_router)

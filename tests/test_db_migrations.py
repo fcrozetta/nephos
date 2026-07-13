@@ -32,7 +32,11 @@ def test_migrations_are_packaged_resources() -> None:
         if migration.is_file() and migration.name.endswith(".sql")
     )
 
-    assert migration_names == ["0000_initial.sql", "0001_add_binding_protocol.sql"]
+    assert migration_names == [
+        "0000_initial.sql",
+        "0001_add_binding_protocol.sql",
+        "0002_add_admin_accounts.sql",
+    ]
 
 
 def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
@@ -40,7 +44,11 @@ def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
 
     migrate_database(db_path=db_path)
 
-    assert _versions(db_path) == ["0000_initial", "0001_add_binding_protocol"]
+    assert _versions(db_path) == [
+        "0000_initial",
+        "0001_add_binding_protocol",
+        "0002_add_admin_accounts",
+    ]
     assert {
         "app_instances",
         "service_instances",
@@ -48,6 +56,7 @@ def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
         "platform_domains",
         "status_snapshots",
         "reconciliation_requests",
+        "admin_accounts",
         "schema_migrations",
     }.issubset(_table_names(db_path))
 
@@ -58,7 +67,11 @@ def test_migrate_database_is_idempotent(tmp_path: Path) -> None:
     migrate_database(db_path=db_path)
     migrate_database(db_path=db_path)
 
-    assert _versions(db_path) == ["0000_initial", "0001_add_binding_protocol"]
+    assert _versions(db_path) == [
+        "0000_initial",
+        "0001_add_binding_protocol",
+        "0002_add_admin_accounts",
+    ]
 
 
 def test_binding_protocol_migration_adds_nullable_protocol(tmp_path: Path) -> None:
