@@ -9,6 +9,7 @@ from typing import cast
 
 from nephos_api.db import connect_database, utc_now
 from nephos_api.domain import (
+    AdminAccount,
     AppInstance,
     Binding,
     PlatformDomain,
@@ -26,10 +27,13 @@ class DesiredStateRepository:
         self.db_path = db_path
 
     @contextmanager
-    def transaction(self) -> Iterator[StateTransaction]:
+    def transaction(self, *, immediate: bool = False) -> Iterator[StateTransaction]:
+        # ``immediate`` acquires the write lock at BEGIN so a check-then-insert
+        # (e.g. the zero-admin guard) cannot race a concurrent writer that read
+        # the same pre-insert state.
         connection = connect_database(self.db_path)
         try:
-            connection.execute("BEGIN")
+            connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
             yield StateTransaction(connection)
             connection.commit()
         except Exception:
@@ -37,6 +41,25 @@ class DesiredStateRepository:
             raise
         finally:
             connection.close()
+
+    def count_admin_accounts(self) -> int:
+        with connect_database(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT count(*) AS count FROM admin_accounts"
+            ).fetchone()
+        return int(row["count"])
+
+    def get_admin_credentials(self, username: str) -> dict[str, object] | None:
+        with connect_database(self.db_path) as connection:
+            row = connection.execute(
+                """
+                SELECT id, username, password_hash
+                FROM admin_accounts
+                WHERE username = ?
+                """,
+                (username,),
+            ).fetchone()
+        return dict(row) if row else None
 
     def list_platform_domains(self) -> list[PlatformDomain]:
         with connect_database(self.db_path) as connection:
@@ -423,6 +446,46 @@ class StateTransaction:
             ),
         )
         return binding
+
+    def count_admin_accounts(self) -> int:
+        row = self._connection.execute(
+            "SELECT count(*) AS count FROM admin_accounts"
+        ).fetchone()
+        return int(row["count"])
+
+    def create_admin_account(
+        self,
+        *,
+        username: str,
+        password_hash: str,
+    ) -> AdminAccount:
+        now = utc_now()
+        account = AdminAccount(
+            id=generate_id("admin"),
+            username=username,
+            created_at=now,
+            updated_at=now,
+        )
+        self._connection.execute(
+            """
+            INSERT INTO admin_accounts(
+                id,
+                username,
+                password_hash,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                account.id,
+                account.username,
+                password_hash,
+                now,
+                now,
+            ),
+        )
+        return account
 
     def create_platform_domain(
         self,

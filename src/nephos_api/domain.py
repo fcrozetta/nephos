@@ -81,6 +81,14 @@ class PlatformDomain:
 
 
 @dataclass(frozen=True)
+class AdminAccount:
+    id: str
+    username: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class StatusSnapshot:
     id: str
     resource_type: str

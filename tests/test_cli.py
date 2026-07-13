@@ -10,7 +10,11 @@ from nephos_api.dev_backbone import BackboneSmokeResult
 from nephos_api.dev_reference import ReferenceSmokeResult
 from nephos_api.registries import RegistrySyncError
 
-_MIGRATION_ROWS = [("0000_initial",), ("0001_add_binding_protocol",)]
+_MIGRATION_ROWS = [
+    ("0000_initial",),
+    ("0001_add_binding_protocol",),
+    ("0002_add_admin_accounts",),
+]
 
 
 @pytest.fixture(autouse=True)
