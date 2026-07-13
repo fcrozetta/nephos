@@ -54,6 +54,9 @@ flowchart LR
 
 ## Quick start
 
+> For a full walkthrough — the web console, first-run admin, and generating
+> service secrets you never type — see [docs/getting-started.md](docs/getting-started.md).
+
 ### 1. Configure local settings
 
 The initial Nephos API config has three preconfigured registry dependencies:
