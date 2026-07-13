@@ -18,7 +18,7 @@ from nephos_api.providers.pulumi import (
 from nephos_api.provisioners.base import BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
-from nephos_api.secret_refs import StaticSecretResolver
+from nephos_api.secret_refs import SecretGenSpec, StaticSecretResolver
 
 
 class RecordingProvider:
@@ -31,6 +31,20 @@ class RecordingProvider:
 
     def uninstall(self, context: ProviderContext) -> None:
         self.uninstalled.append(context)
+
+
+class RecordingMaterializer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, SecretGenSpec | None]] = []
+
+    def resolve(self, reference: str) -> str:
+        return self.materialize(reference, generate=None)
+
+    def materialize(
+        self, reference: str, *, generate: SecretGenSpec | None = None
+    ) -> str:
+        self.calls.append((reference, generate))
+        return f"materialized:{reference}"
 
 
 class RecordingPulumiRunner:
@@ -253,6 +267,116 @@ def test_provider_runtime_deployer_resolves_onepassword_config_refs(
 
     context = service_provider.deployed[0]
     assert context.values["storageSize"] == "resolved-secret"
+
+
+def test_provider_runtime_deployer_materializes_secrets_refs_with_genspec(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_service_with_secrets_config(catalog_root)
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={
+                "master-key": "secrets://svc/postgres/master/key",
+                "api-token": "secrets://svc/postgres/api/token",
+            },
+        )
+
+    materializer = RecordingMaterializer()
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+        secrets_materializer=materializer,
+    )
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    context = service_provider.deployed[0]
+    assert context.values["masterKey"] == "materialized:secrets://svc/postgres/master/key"
+    assert context.values["apiToken"] == "materialized:secrets://svc/postgres/api/token"
+    # master-key declares a generation policy; api-token does not (read-only).
+    master_spec = SecretGenSpec(kind="password", length=40)
+    assert set(materializer.calls) == {
+        ("secrets://svc/postgres/master/key", master_spec),
+        ("secrets://svc/postgres/api/token", None),
+    }
+
+
+def test_provider_runtime_deployer_synthesizes_ref_for_generated_option(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_service_with_secrets_config(catalog_root)
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    with repo.transaction() as tx:
+        # master-key is generated and NOT supplied by the user (hidden in the
+        # install form); api-token is a plain value.
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"api-token": "plain-token"},
+        )
+
+    materializer = RecordingMaterializer()
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+        secrets_materializer=materializer,
+    )
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    context = service_provider.deployed[0]
+    # Nephos synthesized secrets://svc/postgres/master-key/value and materialized it.
+    synthesized = "secrets://svc/postgres/master-key/value"
+    assert context.values["masterKey"] == f"materialized:{synthesized}"
+    assert context.values["apiToken"] == "plain-token"
+    spec = SecretGenSpec(kind="password", length=40)
+    assert (synthesized, spec) in materializer.calls
+
+
+def test_provider_runtime_deployer_blocks_secrets_refs_without_provider(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_service_with_secrets_config(catalog_root)
+    repo = _repo(tmp_path)
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={
+                "master-key": "secrets://svc/postgres/master/key",
+                "api-token": "plain",
+            },
+        )
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=RecordingProvider(),
+    )
+
+    try:
+        deployer.deploy(target_type="service_instance", slug="postgres")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "secret_ref_provider_unavailable"
+    else:
+        raise AssertionError("expected missing secrets provider to block")
 
 
 def test_provider_runtime_deployer_blocks_onepassword_refs_without_provider(
@@ -793,6 +917,52 @@ spec:
             name: debug-enabled
           to:
             helmValue: debug.enabled
+""".strip()
+    )
+    return path
+
+
+def _write_service_with_secrets_config(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: master-key
+        type: string
+        generate:
+          kind: password
+          length: 40
+      - name: api-token
+        type: string
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
+    values:
+      mappings:
+        - from:
+            kind: config
+            name: master-key
+          to:
+            helmValue: masterKey
+        - from:
+            kind: config
+            name: api-token
+          to:
+            helmValue: apiToken
 """.strip()
     )
     return path

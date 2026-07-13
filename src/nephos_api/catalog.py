@@ -89,6 +89,20 @@ class AppRoute(BaseModel):
     target: RouteTarget
 
 
+class GenerateSpec(BaseModel):
+    """Generation policy for a config option whose value is a `secrets://` ref.
+
+    When present, Nephos generates the value if the secrets provider has none
+    (never regenerating an existing one). Absent means gen=none: the value must
+    already exist or resolution fails closed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["password"] = "password"
+    length: int = Field(default=32, ge=8, le=256)
+
+
 class ConfigOption(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -99,6 +113,7 @@ class ConfigOption(BaseModel):
     default: str | int | bool | None = None
     required: bool = False
     values: list[dict[str, str]] | None = None
+    generate: GenerateSpec | None = None
 
 
 class AppConfig(BaseModel):
@@ -630,6 +645,9 @@ def _config_options_summary(options: list[ConfigOption]) -> list[dict[str, Any]]
             "default": option.default,
             "required": option.required,
             "values": option.values,
+            # Generated options are materialized by Nephos, not entered by the
+            # user; clients can hide them from the install form.
+            "generated": option.generate is not None,
         }
         for option in options
     ]
