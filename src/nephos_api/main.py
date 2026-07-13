@@ -32,10 +32,13 @@ from nephos_api.registries import ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.secret_refs import (
     BaoSecretResolver,
+    BaoTokenProvider,
     ChainedBaoTokenProvider,
     OnePasswordCliSecretResolver,
+    OpenBaoSecretsProvider,
     RuntimeSecretResolver,
     SchemeRoutingSecretResolver,
+    SecretsMaterializer,
     StaticBaoTokenProvider,
 )
 
@@ -370,8 +373,36 @@ def default_provider_deployer_factory(
             core_v1_api=core_v1_api
         ),
         secret_resolver=_build_secret_resolver(settings, core_v1_api=core_v1_api),
+        secrets_materializer=_build_secrets_materializer(
+            settings, core_v1_api=core_v1_api
+        ),
         service_lifecycle=openbao_lifecycle,
     )
+
+
+def _bao_token_providers(
+    settings: Settings, *, core_v1_api: object | None
+) -> list[BaoTokenProvider]:
+    # Ordered k8s-first so a live init token wins over a stale static dev token.
+    token_providers: list[BaoTokenProvider] = []
+    if core_v1_api is not None:
+        from nephos_api.kubernetes_runtime import (
+            KubernetesSecretBaoTokenProvider,
+            namespace_name,
+        )
+
+        token_providers.append(
+            # NOTE: openbao must be installed under the slug "openbao" (single-
+            # instance constraint, see the OpenBao ADR); the init Secret
+            # name/key are the shared fixed constants.
+            KubernetesSecretBaoTokenProvider(
+                core_v1_api,
+                namespace=namespace_name("service_instance", "openbao"),
+            )
+        )
+    if settings.bao_token:
+        token_providers.append(StaticBaoTokenProvider(settings.bao_token))
+    return token_providers
 
 
 def _build_secret_resolver(
@@ -379,36 +410,38 @@ def _build_secret_resolver(
 ) -> RuntimeSecretResolver:
     # op:// resolves through the 1Password CLI. bao:// resolves through OpenBao,
     # taking its token from the Nephos-managed init Secret (via the Kubernetes
-    # API) and falling back to the static dev token, so references can migrate
-    # off 1Password incrementally.
+    # API) and falling back to the static dev token. Both are legacy read-only
+    # schemes; new references use secrets:// (see the secrets-capability ADR).
     resolvers: dict[str, RuntimeSecretResolver] = {
         "op://": OnePasswordCliSecretResolver(),
     }
     if settings.bao_address:
-        token_providers = []
-        if core_v1_api is not None:
-            from nephos_api.kubernetes_runtime import (
-                KubernetesSecretBaoTokenProvider,
-                namespace_name,
-            )
-
-            token_providers.append(
-                # NOTE: openbao must be installed under the slug "openbao"
-                # (single-instance Phase 2 constraint, see the OpenBao ADR); the
-                # init Secret name/key are the shared fixed constants.
-                KubernetesSecretBaoTokenProvider(
-                    core_v1_api,
-                    namespace=namespace_name("service_instance", "openbao"),
-                )
-            )
-        if settings.bao_token:
-            token_providers.append(StaticBaoTokenProvider(settings.bao_token))
+        token_providers = _bao_token_providers(settings, core_v1_api=core_v1_api)
         if token_providers:
             resolvers["bao://"] = BaoSecretResolver(
                 address=settings.bao_address,
                 token_provider=ChainedBaoTokenProvider(tuple(token_providers)),
             )
     return SchemeRoutingSecretResolver(resolvers)
+
+
+def _build_secrets_materializer(
+    settings: Settings, *, core_v1_api: object | None = None
+) -> SecretsMaterializer | None:
+    # The secrets:// capability, backed by the managed OpenBao (KV v2 with CAS
+    # writes). Returns None when OpenBao is not configured, in which case a
+    # secrets:// reference fails closed at deploy time.
+    if not settings.bao_address:
+        return None
+    token_providers = _bao_token_providers(settings, core_v1_api=core_v1_api)
+    if not token_providers:
+        return None
+    provider = OpenBaoSecretsProvider(
+        address=settings.bao_address,
+        token_provider=ChainedBaoTokenProvider(tuple(token_providers)),
+        mount=settings.bao_kv_mount,
+    )
+    return SecretsMaterializer(provider)
 
 
 def _pulumi_helm_provider_config(settings: Settings) -> PulumiHelmProviderConfig:

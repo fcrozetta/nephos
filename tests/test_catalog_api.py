@@ -62,6 +62,11 @@ spec:
         values:
           - value: standalone
           - value: replica
+      - name: master-key
+        type: string
+        generate:
+          kind: password
+          length: 48
   provisioning:
     mode: app-scoped-resource
   operations: []
@@ -82,6 +87,8 @@ spec:
     assert options["mode"]["type"] == "enum"
     assert options["mode"]["default"] == "standalone"
     assert options["mode"]["values"] == [{"value": "standalone"}, {"value": "replica"}]
+    assert options["admin-password"]["generated"] is False
+    assert options["master-key"]["generated"] is True
 
 
 def test_catalog_api_returns_selected_detail(tmp_path: Path) -> None:

@@ -17,7 +17,13 @@ from nephos_api.providers.base import ProviderContext, RuntimeProvider
 from nephos_api.provisioners.base import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
-from nephos_api.secret_refs import RuntimeSecretResolver, resolve_runtime_secret_value
+from nephos_api.secret_refs import (
+    SECRETS_SCHEME,
+    RuntimeSecretResolver,
+    SecretGenSpec,
+    SecretsMaterializer,
+    resolve_runtime_secret_value,
+)
 
 
 class BindingValueSource(Protocol):
@@ -42,6 +48,7 @@ class ProviderRuntimeDeployer:
         binding_value_source: BindingValueSource | None = None,
         service_dependency_provisioner: BindingProvisioner | None = None,
         secret_resolver: RuntimeSecretResolver | None = None,
+        secrets_materializer: SecretsMaterializer | None = None,
         service_lifecycle: ServiceLifecycleProvisioner | None = None,
     ) -> None:
         self._repository = repository
@@ -50,6 +57,7 @@ class ProviderRuntimeDeployer:
         self._binding_value_source = binding_value_source
         self._service_dependency_provisioner = service_dependency_provisioner
         self._secret_resolver = secret_resolver
+        self._secrets_materializer = secrets_materializer
         self._service_lifecycle = service_lifecycle
 
     def deploy(self, *, target_type: str, slug: str) -> None:
@@ -163,6 +171,13 @@ class ProviderRuntimeDeployer:
             )
             else {}
         )
+        genspecs = {
+            option.name: SecretGenSpec(
+                kind=option.generate.kind, length=option.generate.length
+            )
+            for option in manifest.spec.config.options
+            if option.generate is not None
+        }
         values: dict[str, object] = {}
         for runtime_mapping in manifest.spec.runtime.values.mappings:
             value = self._runtime_mapping_value(
@@ -171,6 +186,7 @@ class ProviderRuntimeDeployer:
                 config=config,
                 bindings=bindings,
                 service_dependency_values=service_dependency_values,
+                genspecs=genspecs,
             )
             set_helm_value(values, runtime_mapping.to.helmValue, value)
         return values
@@ -327,6 +343,21 @@ class ProviderRuntimeDeployer:
             and snapshot["reason"] == "runtime_deployed"
         )
 
+    def _resolve_config_value(
+        self, value: object, *, genspec: SecretGenSpec | None
+    ) -> object:
+        # secrets:// is owned by the materializer: read-or-generate when a
+        # generation policy is declared, read-only (fail-closed) otherwise.
+        if isinstance(value, str) and value.startswith(SECRETS_SCHEME):
+            if self._secrets_materializer is None:
+                raise RuntimeBlockedError(
+                    reason="secret_ref_provider_unavailable",
+                    message=f"No secrets provider is configured for {value}.",
+                )
+            return self._secrets_materializer.materialize(value, generate=genspec)
+        # op:// and bao:// stay read-only via the legacy resolver.
+        return resolve_runtime_secret_value(value, self._secret_resolver)
+
     def _runtime_mapping_value(
         self,
         *,
@@ -335,6 +366,7 @@ class ProviderRuntimeDeployer:
         config: dict[str, object],
         bindings: list[dict[str, object]],
         service_dependency_values: dict[str, dict[str, str]],
+        genspecs: dict[str, SecretGenSpec] | None = None,
     ) -> object:
         source = mapping.from_
         if source.kind == "config":
@@ -343,9 +375,9 @@ class ProviderRuntimeDeployer:
                     reason="runtime_mapping_source_missing",
                     message=f"Config value {source.name} is not available.",
                 )
-            return resolve_runtime_secret_value(
+            return self._resolve_config_value(
                 config[source.name],
-                self._secret_resolver,
+                genspec=(genspecs or {}).get(source.name),
             )
 
         if source.field is None:

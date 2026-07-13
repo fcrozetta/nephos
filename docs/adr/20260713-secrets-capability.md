@@ -64,16 +64,38 @@ At deploy time a `secrets://` ref routes to the materializer:
    ref for a fixed-identity value (a username, an operator-fixed key) is never
    silently randomized.
 
-Generation policy is declared in **catalog manifest config-option metadata**
-(e.g. `generate: password`, `length: 32`), not in the ref string — keeping refs
-clean and portable.
+Generation policy is declared in **catalog manifest config-option metadata** as
+a nested `generate` object, not in the ref string — keeping refs clean and
+portable:
+
+```yaml
+- name: admin_password
+  type: string
+  generate:
+    kind: password   # v1: password only
+    length: 32
+```
 
 ### Provider selection
 
 A `secrets://` ref resolves through the **platform-default secrets provider**
 (a platform setting), defaulting to the managed OpenBao instance (slug
 `openbao`). The manifest carries no provider identity, so it stays portable; the
-environment's default pointer decides the store.
+environment's default pointer decides the store. In v1 there is only one
+provider (managed OpenBao), so the selection is implicit — no pointer table yet.
+
+**Logical → provider path (locked).** The OpenBao KV v2 mapping is:
+
+```
+secrets://<scope>/<name>/<field>
+  -> mount = <bao_kv_mount>   (default "secret")
+     path  = nephos/<scope>/<name>
+     field = <field>          (a key inside that KV secret)
+```
+
+Nephos-owned values live under the `nephos/` prefix so they never collide with
+hand-written `bao://` secrets in the same mount. This convention is a lock-in
+(renaming orphans stored values); it is fixed before a second provider lands.
 
 ### Bootstrap credential
 
@@ -136,10 +158,9 @@ capability, and never stored in a secrets provider:
 
 ## Follow-up / open questions
 
-- Locking the logical-path→provider-path mapping convention before a second
-  provider (1Password) is added (renaming orphans stored values).
 - Who seeds the platform-default provider pointer on a fresh install (CLI seed
-  like the internal domain, or the console first-run).
+  like the internal domain, or the console first-run) — deferred while there is
+  only one provider.
 - Whether `secrets://` needs a declared `secret` config-option type for
   install-time resolvability guarantees, or stays scheme-blind like today.
 - Rotation design (dual-secret window) and the adopt/import step for migrating
