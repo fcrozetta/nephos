@@ -178,6 +178,15 @@ class ProviderRuntimeDeployer:
             for option in manifest.spec.config.options
             if option.generate is not None
         }
+        # A generated option carries no secrets:// ref in the manifest (the user
+        # never fills it in). Synthesize one so the materializer has a stable
+        # coordinate to read-or-generate against; an explicit value still wins.
+        scope = "svc" if target_type == "service_instance" else "app"
+        for option in manifest.spec.config.options:
+            if option.generate is None:
+                continue
+            if config.get(option.name) in (None, ""):
+                config[option.name] = f"secrets://{scope}/{slug}/{option.name}/value"
         values: dict[str, object] = {}
         for runtime_mapping in manifest.spec.runtime.values.mappings:
             value = self._runtime_mapping_value(

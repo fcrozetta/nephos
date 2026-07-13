@@ -76,6 +76,12 @@ portable:
     length: 32
 ```
 
+A generated option carries no `secrets://` ref in the manifest — the user never
+fills it in. Nephos synthesizes one at deploy time,
+`secrets://<svc|app>/<slug>/<option-name>/value`, so the author declares only the
+`generate` policy. An explicit config value (a literal or a hand-written
+`secrets://` ref) still wins over synthesis.
+
 ### Provider selection
 
 A `secrets://` ref resolves through the **platform-default secrets provider**

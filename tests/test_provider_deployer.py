@@ -309,6 +309,43 @@ def test_provider_runtime_deployer_materializes_secrets_refs_with_genspec(
     }
 
 
+def test_provider_runtime_deployer_synthesizes_ref_for_generated_option(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    manifest_path = _write_service_with_secrets_config(catalog_root)
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    with repo.transaction() as tx:
+        # master-key is generated and NOT supplied by the user (hidden in the
+        # install form); api-token is a plain value.
+        tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:postgres",
+            config={"api-token": "plain-token"},
+        )
+
+    materializer = RecordingMaterializer()
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+        secrets_materializer=materializer,
+    )
+    deployer.deploy(target_type="service_instance", slug="postgres")
+
+    context = service_provider.deployed[0]
+    # Nephos synthesized secrets://svc/postgres/master-key/value and materialized it.
+    synthesized = "secrets://svc/postgres/master-key/value"
+    assert context.values["masterKey"] == f"materialized:{synthesized}"
+    assert context.values["apiToken"] == "plain-token"
+    spec = SecretGenSpec(kind="password", length=40)
+    assert (synthesized, spec) in materializer.calls
+
+
 def test_provider_runtime_deployer_blocks_secrets_refs_without_provider(
     tmp_path: Path,
 ) -> None:
