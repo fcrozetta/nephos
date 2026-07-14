@@ -1,0 +1,13 @@
+.nephos
+.venv
+.git
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
+.agents
+dist
+build
+*.egg-info
