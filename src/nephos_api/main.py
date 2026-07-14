@@ -315,6 +315,10 @@ def default_provider_deployer_factory(
                 config=kubernetes_config,
                 workload="reference-app",
             ),
+            "nephos-console": PulumiKubernetesProvider(
+                config=kubernetes_config,
+                workload="nephos-console",
+            ),
         },
     )
     service_runtimes: dict[str, PulumiKubernetesProvider] = {

@@ -193,6 +193,74 @@ def _reference_app(
     )
 
 
+def _nephos_console(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    name = spec.runtime_name
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    image = _string_value(
+        spec.values, "image", "ghcr.io/fcrozetta/nephos-console:latest"
+    )
+    # The console (BFF) reaches the Nephos API server-side. In LCL the API runs
+    # on the host, reachable from the cluster via host.k3d.internal.
+    api_url = _string_value(spec.values, "apiUrl", "http://host.k3d.internal:8099")
+    session_secret = _required_string_value(spec.values, "sessionSecret")
+    k8s.core.v1.Secret(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        type="Opaque",
+        string_data={"session-secret": session_secret},
+        opts=opts,
+    )
+    k8s.apps.v1.Deployment(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        spec={
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "web",
+                            "image": image,
+                            "ports": [{"name": "http", "containerPort": 3000}],
+                            "env": [
+                                {"name": "PORT", "value": "3000"},
+                                {"name": "NEPHOS_API_URL", "value": api_url},
+                                {
+                                    "name": "NEPHOS_CONSOLE_SESSION_SECRET",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "session-secret",
+                                        }
+                                    },
+                                },
+                            ],
+                        }
+                    ]
+                },
+            },
+        },
+        opts=opts,
+    )
+    k8s.core.v1.Service(
+        name,
+        metadata={"name": name, "namespace": spec.namespace, "labels": labels},
+        spec={
+            "ports": [{"name": "http", "port": 80, "targetPort": "http"}],
+            "selector": selector,
+        },
+        opts=opts,
+    )
+
+
 def _postgres_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -1567,6 +1635,7 @@ def _openbao_persistent_service(
 
 _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "reference-app": _reference_app,
+    "nephos-console": _nephos_console,
     "postgres-service": _postgres_service,
     "cloudflared-service": _cloudflared_service,
     "zitadel-service": _zitadel_service,
