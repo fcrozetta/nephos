@@ -126,8 +126,13 @@ Honest edges you will hit today:
 
 - **No one-command local backbone.** Creating the cluster and installing OpenBao
   as the secrets provider is still manual; there is no `nephos up` yet.
-- **Local ingress/DNS is manual.** Apps get URLs on the internal domain
-  (`<slug>.nephos.localhost` by default); wiring that to your cluster's ingress is
-  on you for now.
+- **Local ingress/DNS needs one setup step.** Apps get URLs on the internal
+  domain (`<slug>.<domain>`). For those to open directly in a browser, run
+  [`scripts/setup-local-routing.sh`](../scripts/setup-local-routing.sh) — it
+  publishes the k3d ingress on ports 80/443 and configures a dnsmasq wildcard so
+  `*.<domain>` resolves. `.localhost` is the only suffix that needs no DNS setup
+  (Chrome resolves it), but it can't reach a non-80 ingress port; a dnsmasq'd
+  suffix like `nephos.lcl` on ports 80/443 gives clean, portless URLs in any
+  browser. Requires host ports 80/443 to be free.
 - **Single admin, password login.** Roles and OIDC (via Zitadel) are planned, not
   here yet.
