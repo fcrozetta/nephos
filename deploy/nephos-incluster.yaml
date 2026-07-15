@@ -5,9 +5,15 @@
 # port-forward). RBAC is broad (cluster-admin) because the control plane creates
 # namespaces, workloads, secrets, ingresses and drives Pulumi cluster-wide.
 #
-# For LCL, override the image with a locally-imported build:
+# For LCL, override the image with a locally-imported build. The default image is
+# :latest, so the pod template's imagePullPolicy defaults to Always and is NOT
+# updated by `set image` -- a local :dev image would still be pulled and fail with
+# ImagePullBackOff. Patch the policy to IfNotPresent as well:
 #   kubectl -n nephos-system set image deploy/nephos-api \
 #     nephos-api=nephos-api:dev init=nephos-api:dev
+#   kubectl -n nephos-system patch deploy/nephos-api --type=json -p '[
+#     {"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"},
+#     {"op":"replace","path":"/spec/template/spec/initContainers/0/imagePullPolicy","value":"IfNotPresent"}]'
 ---
 apiVersion: v1
 kind: Namespace
