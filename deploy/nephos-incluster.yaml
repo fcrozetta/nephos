@@ -57,6 +57,9 @@ metadata:
   namespace: nephos-system
 data:
   NEPHOS_API_DB_PATH: /data/state/nephos.db
+  # The Pulumi reconcile path needs an explicit kubeconfig even in-cluster
+  # (unlike nephos's own client, which falls back to in-cluster config).
+  NEPHOS_API_KUBECONFIG: /etc/nephos/kube/config
   NEPHOS_API_ENV: lcl
   NEPHOS_API_INTERNAL_DOMAIN: nephos.lcl
   NEPHOS_API_INGRESS_CLASS: traefik
@@ -66,6 +69,34 @@ data:
   NEPHOS_API_CORE_REGISTRY_PATH: /data/registries/core-registry
   NEPHOS_API_MYTHOS_REGISTRY_PATH: /data/registries/mythos-registry
   NEPHOS_API_COMMUNITY_REGISTRY_PATH: /data/registries/community-registry
+---
+# In-cluster kubeconfig for the Pulumi Kubernetes provider. It reads the
+# ServiceAccount token by path (not inline) so it survives token rotation, and
+# uses the projected CA. Absolute paths resolve regardless of load location.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nephos-kubeconfig
+  namespace: nephos-system
+data:
+  config: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - name: in-cluster
+        cluster:
+          server: https://kubernetes.default.svc
+          certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    users:
+      - name: in-cluster
+        user:
+          tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    contexts:
+      - name: in-cluster
+        context:
+          cluster: in-cluster
+          user: in-cluster
+    current-context: in-cluster
 ---
 apiVersion: v1
 kind: Secret
@@ -110,6 +141,9 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
+            - name: kubeconfig
+              mountPath: /etc/nephos/kube
+              readOnly: true
       containers:
         - name: nephos-api
           image: ghcr.io/fcrozetta/nephos-api:latest
@@ -125,6 +159,9 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
+            - name: kubeconfig
+              mountPath: /etc/nephos/kube
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /healthz
@@ -141,6 +178,9 @@ spec:
         - name: state
           persistentVolumeClaim:
             claimName: nephos-state
+        - name: kubeconfig
+          configMap:
+            name: nephos-kubeconfig
 ---
 apiVersion: v1
 kind: Service
