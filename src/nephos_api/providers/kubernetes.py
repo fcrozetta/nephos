@@ -233,6 +233,14 @@ def _nephos_console(
                             "env": [
                                 {"name": "PORT", "value": "3000"},
                                 {"name": "NEPHOS_API_URL", "value": api_url},
+                                # adapter-node runs behind traefik; trust the
+                                # forwarded headers so SvelteKit's CSRF origin
+                                # check matches the browser origin.
+                                {
+                                    "name": "PROTOCOL_HEADER",
+                                    "value": "x-forwarded-proto",
+                                },
+                                {"name": "HOST_HEADER", "value": "x-forwarded-host"},
                                 {
                                     "name": "NEPHOS_CONSOLE_SESSION_SECRET",
                                     "valueFrom": {
