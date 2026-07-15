@@ -17,6 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Stamp the tag version into pyproject before the image build (which builds
+      # the wheel), so the shipped package metadata matches the image tag.
+      # pyproject stays committed at 0.0.0, same as release.yml.
+      - uses: astral-sh/setup-uv@v8.3.1
+      - run: uv version "${GITHUB_REF_NAME}"
+
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
