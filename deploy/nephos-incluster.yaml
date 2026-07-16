@@ -1,0 +1,204 @@
+# Nephos control plane, in-cluster. Applied by `nephos setup` / `nephos up`.
+#
+# Runs nephos-api as a Deployment with its own desired-state (SQLite) + Pulumi
+# state on a PVC, reaching the managed OpenBao via in-cluster DNS (no host
+# port-forward). RBAC is broad (cluster-admin) because the control plane creates
+# namespaces, workloads, secrets, ingresses and drives Pulumi cluster-wide.
+#
+# For LCL, override the image with a locally-imported build. The default image is
+# :latest, so the pod template's imagePullPolicy defaults to Always and is NOT
+# updated by `set image` -- a local :dev image would still be pulled and fail with
+# ImagePullBackOff. Patch the policy to IfNotPresent as well:
+#   kubectl -n nephos-system set image deploy/nephos-api \
+#     nephos-api=nephos-api:dev init=nephos-api:dev
+#   kubectl -n nephos-system patch deploy/nephos-api --type=json -p '[
+#     {"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"},
+#     {"op":"replace","path":"/spec/template/spec/initContainers/0/imagePullPolicy","value":"IfNotPresent"}]'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nephos-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nephos-api
+  namespace: nephos-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nephos-api-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: nephos-api
+    namespace: nephos-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nephos-state
+  namespace: nephos-system
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nephos-api-env
+  namespace: nephos-system
+data:
+  NEPHOS_API_DB_PATH: /data/state/nephos.db
+  # Pulumi's Kubernetes provider needs a kubeconfig even in-cluster; hand it the
+  # standard KUBECONFIG, which the Pulumi CLI inherits. Deliberately NOT
+  # NEPHOS_API_KUBECONFIG: that would route nephos's own client onto the
+  # kubeconfig path too, whose plain tokenFile the Python client reads once and
+  # never refreshes -- it would 401 after the projected token rotates. Left
+  # unset, the client uses load_incluster_config (1-min token refresh). Go
+  # client-go re-reads tokenFile, and each reconcile spawns a fresh CLI, so
+  # Pulumi honors rotation either way.
+  KUBECONFIG: /etc/nephos/kube/config
+  NEPHOS_API_ENV: lcl
+  NEPHOS_API_INTERNAL_DOMAIN: nephos.lcl
+  NEPHOS_API_INGRESS_CLASS: traefik
+  NEPHOS_API_OPENBAO_PERSISTENT: "1"
+  NEPHOS_API_BAO_ADDR: http://svc-openbao-openbao.svc-openbao:8200
+  NEPHOS_API_BAO_KV_MOUNT: secret
+  NEPHOS_API_CORE_REGISTRY_PATH: /data/registries/core-registry
+  NEPHOS_API_MYTHOS_REGISTRY_PATH: /data/registries/mythos-registry
+  NEPHOS_API_COMMUNITY_REGISTRY_PATH: /data/registries/community-registry
+---
+# In-cluster kubeconfig for the Pulumi Kubernetes provider. It reads the
+# ServiceAccount token by path (not inline) so it survives token rotation, and
+# uses the projected CA. Absolute paths resolve regardless of load location.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nephos-kubeconfig
+  namespace: nephos-system
+data:
+  config: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - name: in-cluster
+        cluster:
+          server: https://kubernetes.default.svc
+          certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    users:
+      - name: in-cluster
+        user:
+          tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    contexts:
+      - name: in-cluster
+        context:
+          cluster: in-cluster
+          user: in-cluster
+    current-context: in-cluster
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nephos-api-secrets
+  namespace: nephos-system
+type: Opaque
+stringData:
+  # Encrypts Pulumi state; must stay stable across restarts. `nephos setup`
+  # generates one; this placeholder is only for a raw kubectl apply.
+  PULUMI_CONFIG_PASSPHRASE: change-me
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nephos-api
+  namespace: nephos-system
+  labels:
+    app.kubernetes.io/name: nephos-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # single writer of the SQLite desired-state
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nephos-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nephos-api
+    spec:
+      serviceAccountName: nephos-api
+      initContainers:
+        - name: init
+          image: ghcr.io/fcrozetta/nephos-api:latest
+          command: ["nephos-api", "init"]
+          envFrom:
+            - configMapRef:
+                name: nephos-api-env
+            - secretRef:
+                name: nephos-api-secrets
+          volumeMounts:
+            - name: state
+              mountPath: /data
+            - name: kubeconfig
+              mountPath: /etc/nephos/kube
+              readOnly: true
+      containers:
+        - name: nephos-api
+          image: ghcr.io/fcrozetta/nephos-api:latest
+          command: ["nephos-api", "serve", "--host", "0.0.0.0", "--port", "8099"]
+          ports:
+            - name: http
+              containerPort: 8099
+          envFrom:
+            - configMapRef:
+                name: nephos-api-env
+            - secretRef:
+                name: nephos-api-secrets
+          volumeMounts:
+            - name: state
+              mountPath: /data
+            - name: kubeconfig
+              mountPath: /etc/nephos/kube
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: nephos-state
+        - name: kubeconfig
+          configMap:
+            name: nephos-kubeconfig
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nephos-api
+  namespace: nephos-system
+  labels:
+    app.kubernetes.io/name: nephos-api
+spec:
+  selector:
+    app.kubernetes.io/name: nephos-api
+  ports:
+    - name: http
+      port: 8099
+      targetPort: http
