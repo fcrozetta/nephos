@@ -1,14 +1,29 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import typer
 
+from nephos_api import hostctl
+from nephos_api.bootstrap_drive import BootstrapDriveError, drive_bootstrap
 from nephos_api.config import load_settings
 from nephos_api.db import migrate_database, reset_database
+from nephos_api.deploy_manifest import render_manifest
 from nephos_api.domain import InvalidDomainSuffixError
+from nephos_api.instance import (
+    InstanceProfile,
+    UnknownInstanceError,
+    resolve_instance,
+    resolve_passphrase,
+)
 from nephos_api.registries import RegistrySyncError, ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
+
+# Local port the host binds when port-forwarding the in-cluster API (setup/status).
+_BOOTSTRAP_LOCAL_PORT = 18099
+_SECRET_NAME = "nephos-api-secrets"
+_PASSPHRASE_KEY = "PULUMI_CONFIG_PASSPHRASE"
 
 app = typer.Typer(no_args_is_help=True)
 db_app = typer.Typer(no_args_is_help=True)
@@ -155,6 +170,146 @@ def dev_backbone_smoke(
     raise typer.Exit(2)
 
 
+@app.command("setup")
+def setup(
+    name: str = typer.Argument(..., help="Instance name (lcl)."),
+    skip_image_build: bool = typer.Option(
+        False, "--skip-image-build", help="Reuse the imported image; skip docker build."
+    ),
+    timeout_seconds: int = typer.Option(300, "--timeout-seconds", min=1),
+) -> None:
+    """One-time greenfield bootstrap: cluster + routing (LCL) -> control plane ->
+    OpenBao -> console, from nothing to a running in-cluster Nephos."""
+    profile = _resolve_instance_or_exit(name)
+    hostctl.require_tools("kubectl")
+
+    if profile.is_local:
+        hostctl.require_tools("docker", "k3d")
+        script = Path.cwd() / "scripts" / "setup-local-routing.sh"
+        if not script.exists():
+            typer.echo(f"routing script not found: {script}", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"- local routing (domain {profile.internal_domain})")
+        hostctl.run_local_routing_script(
+            script,
+            domain=profile.internal_domain,
+            cluster=profile.k3d_cluster or "nephos",
+        )
+        if not skip_image_build:
+            typer.echo(f"- building {profile.image}")
+            hostctl.docker_build(profile.image)
+        typer.echo(f"- importing {profile.image} into k3d {profile.k3d_cluster}")
+        hostctl.k3d_image_import(profile.image, cluster=profile.k3d_cluster or "nephos")
+    elif not hostctl.cluster_reachable(profile.kube_context):
+        typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
+        raise typer.Exit(1)
+
+    _apply_control_plane(profile)
+
+    typer.echo("- driving backbone (OpenBao + console)")
+    try:
+        with hostctl.port_forward(
+            "nephos-api",
+            namespace=profile.namespace,
+            local_port=_BOOTSTRAP_LOCAL_PORT,
+            remote_port=8099,
+            context=profile.kube_context,
+        ):
+            drive_bootstrap(
+                f"http://127.0.0.1:{_BOOTSTRAP_LOCAL_PORT}",
+                domain_name=profile.name,
+                domain=profile.internal_domain,
+                api_service_url=profile.api_service_url,
+                timeout_seconds=float(timeout_seconds),
+                progress=lambda message: typer.echo(f"  - {message}"),
+            )
+    except (BootstrapDriveError, hostctl.HostCommandError) as exc:
+        typer.echo(f"bootstrap drive failed: {exc}", err=True)
+        typer.echo("re-run `nephos setup` once the cluster settles (it is convergent).")
+        raise typer.Exit(2) from exc
+
+    typer.echo(
+        f"\nnephos '{name}' is up. Finish first-run admin at "
+        f"http://console.{profile.internal_domain}/setup"
+    )
+
+
+@app.command("up")
+def up(name: str = typer.Argument(..., help="Instance name (lcl).")) -> None:
+    """Converge an existing instance's control plane to match its profile and be
+    running. Does not create the cluster, build images, or seed the backbone."""
+    profile = _resolve_instance_or_exit(name)
+    if not hostctl.cluster_reachable(profile.kube_context):
+        typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
+        raise typer.Exit(1)
+    _apply_control_plane(profile)
+    typer.echo(f"nephos '{name}' control plane is up ({profile.kube_context})")
+
+
+@app.command("status")
+def status(name: str = typer.Argument(..., help="Instance name (lcl).")) -> None:
+    """Read-only health of a named instance."""
+    profile = _resolve_instance_or_exit(name)
+    if not hostctl.cluster_reachable(profile.kube_context):
+        typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
+        raise typer.Exit(1)
+    ready = hostctl.kubectl(
+        [
+            "get",
+            "deploy",
+            "nephos-api",
+            "-n",
+            profile.namespace,
+            "-o",
+            "jsonpath={.status.readyReplicas}/{.status.replicas}",
+        ],
+        context=profile.kube_context,
+        check=False,
+    ).strip()
+    typer.echo(f"nephos-api deployment: {ready or '0/0'} ready")
+
+
+@app.command("down")
+def down(
+    name: str = typer.Argument(..., help="Instance name (lcl)."),
+    destroy: bool = typer.Option(
+        False,
+        "--destroy",
+        help="Delete the namespace and Pulumi state (not just stop).",
+    ),
+    yes: bool = typer.Option(False, "--yes", help="Confirm a destructive/prd action."),
+) -> None:
+    """Stop (default) or tear down a named instance."""
+    profile = _resolve_instance_or_exit(name)
+    if profile.env == "prd" and not yes:
+        typer.echo("refusing to act on a prd instance without --yes", err=True)
+        raise typer.Exit(1)
+    if not hostctl.cluster_reachable(profile.kube_context):
+        typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
+        raise typer.Exit(1)
+
+    if not destroy:
+        hostctl.kubectl_scale(
+            "nephos-api",
+            replicas=0,
+            namespace=profile.namespace,
+            context=profile.kube_context,
+        )
+        typer.echo(
+            f"nephos '{name}' stopped (state retained; `nephos up {name}` to resume)"
+        )
+        return
+
+    if not yes:
+        typer.echo("--destroy deletes Pulumi state; pass --yes to confirm", err=True)
+        raise typer.Exit(1)
+    hostctl.kubectl_delete_namespace(profile.namespace, context=profile.kube_context)
+    typer.echo(
+        f"nephos '{name}' destroyed (namespace {profile.namespace} deleted, "
+        "Pulumi state lost). k3d cluster and host routing left in place."
+    )
+
+
 def main() -> None:
     app()
 
@@ -165,6 +320,35 @@ def _ensure_catalog_registries(settings) -> None:
     except RegistrySyncError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
+
+
+def _resolve_instance_or_exit(name: str) -> InstanceProfile:
+    try:
+        return resolve_instance(name)
+    except UnknownInstanceError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
+def _apply_control_plane(profile: InstanceProfile) -> None:
+    passphrase, generated = _ensure_passphrase(profile)
+    if generated:
+        typer.echo("- generated a new Pulumi passphrase (cached under ~/.nephos)")
+    manifest = render_manifest(profile, passphrase=passphrase)
+    hostctl.kubectl_apply(manifest, context=profile.kube_context)
+    hostctl.kubectl_rollout_status(
+        "nephos-api", namespace=profile.namespace, context=profile.kube_context
+    )
+
+
+def _ensure_passphrase(profile: InstanceProfile) -> tuple[str, bool]:
+    in_cluster = hostctl.kubectl_get_secret_value(
+        _SECRET_NAME,
+        namespace=profile.namespace,
+        key=_PASSPHRASE_KEY,
+        context=profile.kube_context,
+    )
+    return resolve_passphrase(profile, in_cluster_value=in_cluster)
 
 
 def _ensure_internal_platform_domain(

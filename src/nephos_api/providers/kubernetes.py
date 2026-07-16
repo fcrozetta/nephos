@@ -205,9 +205,14 @@ def _nephos_console(
     image = _string_value(
         spec.values, "image", "ghcr.io/fcrozetta/nephos-console:latest"
     )
-    # The console (BFF) reaches the Nephos API server-side. In LCL the API runs
-    # on the host, reachable from the cluster via host.k3d.internal.
-    api_url = _string_value(spec.values, "apiUrl", "http://host.k3d.internal:8099")
+    # The console (BFF) reaches the Nephos API east-west. Default to the
+    # in-cluster Service (FQDN, since the console pod is not in nephos-system);
+    # host-process dev overrides apiUrl with host.k3d.internal at install time.
+    api_url = _string_value(
+        spec.values,
+        "apiUrl",
+        "http://nephos-api.nephos-system.svc.cluster.local:8099",
+    )
     session_secret = _required_string_value(spec.values, "sessionSecret")
     k8s.core.v1.Secret(
         name,

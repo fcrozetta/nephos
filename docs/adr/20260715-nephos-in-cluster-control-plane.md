@@ -76,3 +76,39 @@ shared/host desired-state once it is in-cluster.
 - The console's `api-url` moves from `host.k3d.internal:8099` to the in-cluster API
   Service.
 - The control plane holds `cluster-admin` — an accepted, documented risk for now.
+
+## Addendum (CLI pinned) — 2026-07-16
+
+The `nephos setup`/`up`/`status`/`down` CLI landed; this pins the open questions above.
+
+- **Entrypoint.** A second console_script `nephos` aliases the same Typer app; the
+  image entrypoint (`nephos-api init`/`serve`) is unchanged.
+- **Instance model (LCL-first minimal).** A named instance resolves to built-in
+  defaults plus a kube-context; one control plane per cluster, namespace stays
+  `nephos-system`. There is no `~/.nephos/instances.toml` yet — v1 supports `lcl`
+  (context `k3d-nephos`); DEV/PRD profiles arrive with that file. Namespace is not
+  an isolation axis (cluster-admin makes it false isolation); a separate cluster is
+  the real boundary.
+- **`up` semantics.** Idempotent apply/converge (render the manifest in-Python →
+  `kubectl apply` → wait healthy). `up` is the reusable core `setup` builds on.
+- **Cluster lifecycle.** `setup` creates the cluster + local routing for LCL
+  (delegating to `scripts/setup-local-routing.sh`); DEV/PRD require a pre-existing
+  context. Cluster create stays in the host CLI, never the engine.
+- **Image source.** LCL builds `nephos-api:dev` and `k3d image import`s it, with
+  `imagePullPolicy: IfNotPresent` set at manifest-render time (no post-apply patch).
+- **Passphrase.** `PULUMI_CONFIG_PASSPHRASE` is read-existing-else-generate: the
+  in-cluster Secret is authoritative and never overwritten (drift would make Pulumi
+  state undecryptable); a host cache at `~/.nephos/instances/<name>.passphrase`
+  (0600) is a convenience mirror.
+- **Backbone drive.** `setup` drives greenfield bring-up over a one-shot
+  `kubectl port-forward`, POSTing the desired-state API (default domain → OpenBao →
+  console). The port-forward is bootstrap-only, not a runtime dependency (#54).
+- **v1 backbone scope.** `setup` installs **OpenBao + console** — both turnkey and
+  on-model (secrets materialized in OpenBao). postgres/zitadel are deferred: their
+  registry defs need `generate`/`secrets://` porting and zitadel needs
+  ingress/domain fixes (tracked as backbone-hardening, related to #60/#61).
+- **Admin bootstrap.** `setup` still ends with a manual console `/setup` first-run;
+  an unattended admin-seed path is deferred.
+- **`down`.** Default stops (scale to 0, state retained); `--destroy` (gated by
+  `--yes`, plus a prd guard) deletes the namespace. k3d/host-routing teardown is
+  deferred.
