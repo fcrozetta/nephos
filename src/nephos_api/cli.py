@@ -204,7 +204,7 @@ def setup(
         typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
         raise typer.Exit(1)
 
-    _apply_control_plane(profile)
+    _apply_control_plane_or_exit(profile)
 
     typer.echo("- driving backbone (OpenBao + console)")
     try:
@@ -242,7 +242,7 @@ def up(name: str = typer.Argument(..., help="Instance name (lcl).")) -> None:
     if not hostctl.cluster_reachable(profile.kube_context):
         typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
         raise typer.Exit(1)
-    _apply_control_plane(profile)
+    _apply_control_plane_or_exit(profile)
     typer.echo(f"nephos '{name}' control plane is up ({profile.kube_context})")
 
 
@@ -253,7 +253,7 @@ def status(name: str = typer.Argument(..., help="Instance name (lcl).")) -> None
     if not hostctl.cluster_reachable(profile.kube_context):
         typer.echo(f"cluster context {profile.kube_context} not reachable", err=True)
         raise typer.Exit(1)
-    ready = hostctl.kubectl(
+    raw = hostctl.kubectl(
         [
             "get",
             "deploy",
@@ -266,7 +266,12 @@ def status(name: str = typer.Argument(..., help="Instance name (lcl).")) -> None
         context=profile.kube_context,
         check=False,
     ).strip()
-    typer.echo(f"nephos-api deployment: {ready or '0/0'} ready")
+    # Kubernetes omits readyReplicas/replicas when 0, so jsonpath yields "/1" or
+    # "/"; coerce each side to 0 rather than printing a malformed string.
+    ready_s, _, total_s = raw.partition("/")
+    ready = ready_s.strip() or "0"
+    total = total_s.strip() or "0"
+    typer.echo(f"nephos-api deployment: {ready}/{total} ready")
 
 
 @app.command("down")
@@ -305,8 +310,11 @@ def down(
         raise typer.Exit(1)
     hostctl.kubectl_delete_namespace(profile.namespace, context=profile.kube_context)
     typer.echo(
-        f"nephos '{name}' destroyed (namespace {profile.namespace} deleted, "
-        "Pulumi state lost). k3d cluster and host routing left in place."
+        f"nephos '{name}' destroyed: namespace {profile.namespace} deleted "
+        "(Pulumi state + passphrase lost). Workloads Pulumi created in other "
+        "namespaces (e.g. svc-openbao, app-console) keep running and are now "
+        "orphaned; for a full local teardown run "
+        f"`k3d cluster delete {profile.k3d_cluster or 'nephos'}`."
     )
 
 
@@ -327,6 +335,14 @@ def _resolve_instance_or_exit(name: str) -> InstanceProfile:
         return resolve_instance(name)
     except UnknownInstanceError as exc:
         typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
+def _apply_control_plane_or_exit(profile: InstanceProfile) -> None:
+    try:
+        _apply_control_plane(profile)
+    except hostctl.HostCommandError as exc:
+        typer.echo(f"failed to apply the control plane: {exc}", err=True)
         raise typer.Exit(1) from exc
 
 

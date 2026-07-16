@@ -2,7 +2,8 @@ from pathlib import Path
 
 import yaml
 
-from nephos_api.deploy_manifest import render_manifest
+from nephos_api import deploy_manifest
+from nephos_api.deploy_manifest import default_manifest_path, render_manifest
 from nephos_api.instance import resolve_instance
 
 _MANIFEST = """
@@ -75,6 +76,20 @@ def test_render_sets_image_and_pull_policy_on_both_containers(tmp_path: Path) ->
     for container in containers:
         assert container["image"] == "nephos-api:dev"
         assert container["imagePullPolicy"] == "IfNotPresent"
+
+
+def test_default_manifest_path_resolves_the_repo_file() -> None:
+    path = default_manifest_path()
+    assert path.name == "nephos-incluster.yaml"
+    assert path.exists()
+
+
+def test_render_uses_default_path_when_omitted(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        deploy_manifest, "default_manifest_path", lambda: _manifest_file(tmp_path)
+    )
+    out = render_manifest(resolve_instance("lcl"), passphrase="p")
+    assert "PULUMI_CONFIG_PASSPHRASE" in out
 
 
 def test_render_preserves_unrelated_config_keys(tmp_path: Path) -> None:

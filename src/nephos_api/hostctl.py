@@ -121,10 +121,22 @@ def kubectl_get_secret_value(
     key: str,
     context: str | None = None,
 ) -> str | None:
+    # --ignore-not-found + check=True so a genuinely absent Secret returns None
+    # (safe to generate) while a real read failure (RBAC, transient api error)
+    # raises instead of masquerading as absence -- the latter would let the
+    # caller regenerate and overwrite the authoritative Pulumi passphrase.
     out = kubectl(
-        ["get", "secret", name, "-n", namespace, "-o", f"jsonpath={{.data.{key}}}"],
+        [
+            "get",
+            "secret",
+            name,
+            "-n",
+            namespace,
+            "--ignore-not-found",
+            "-o",
+            f"jsonpath={{.data.{key}}}",
+        ],
         context=context,
-        check=False,
     ).strip()
     if not out:
         return None
@@ -191,6 +203,16 @@ def port_forward(
     context: str | None = None,
     ready_timeout: float = 20.0,
 ) -> Iterator[None]:
+    # Refuse to run if the local port is already taken: otherwise the new
+    # kubectl silently fails to bind and the readiness probe connects to the
+    # foreign listener, driving the bootstrap at the wrong backend.
+    if _port_in_use(local_port):
+        raise HostCommandError(
+            ["kubectl", "port-forward"],
+            1,
+            f"local port {local_port} is already in use "
+            "(a stale port-forward?); free it and retry",
+        )
     cmd = ["kubectl"]
     if context:
         cmd += ["--context", context]
@@ -205,7 +227,7 @@ def port_forward(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
     try:
-        _wait_for_port(local_port, timeout=ready_timeout)
+        _wait_for_port(local_port, proc=proc, timeout=ready_timeout)
         yield
     finally:
         proc.terminate()
@@ -213,11 +235,27 @@ def port_forward(
             proc.wait(timeout=5)
 
 
+def _port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    with socket.socket() as sock:
+        sock.settimeout(1.0)
+        return sock.connect_ex((host, port)) == 0
+
+
 def _wait_for_port(
-    port: int, *, host: str = "127.0.0.1", timeout: float = 20.0
+    port: int,
+    *,
+    proc: subprocess.Popen | None = None,
+    host: str = "127.0.0.1",
+    timeout: float = 20.0,
 ) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if proc is not None and proc.poll() is not None:
+            raise HostCommandError(
+                ["kubectl", "port-forward"],
+                proc.returncode or 1,
+                "port-forward exited before it was ready (port bind failed?)",
+            )
         with socket.socket() as sock:
             sock.settimeout(1.0)
             if sock.connect_ex((host, port)) == 0:
