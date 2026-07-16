@@ -79,9 +79,13 @@ def test_drive_reconciles_on_already_installed_conflict() -> None:
         if request.method == "POST" and path == "/platform/config/domains":
             return httpx.Response(409, json={})
         if request.method == "POST" and path == "/services":
-            return httpx.Response(409, json={"code": "service_instance_conflict"})
+            return httpx.Response(
+                409, json={"error": {"code": "service_instance_conflict"}}
+            )
         if request.method == "POST" and path == "/apps":
-            return httpx.Response(409, json={"code": "app_instance_conflict"})
+            return httpx.Response(
+                409, json={"error": {"code": "app_instance_conflict"}}
+            )
         if path.endswith("/actions/reconcile"):
             reconciled.append(path)
             return httpx.Response(202, json={})
@@ -111,7 +115,9 @@ def test_drive_raises_on_non_conflict_409() -> None:
         if request.method == "POST" and path == "/platform/config/domains":
             return httpx.Response(202, json={})
         if request.method == "POST" and path == "/services":
-            return httpx.Response(409, json={"code": "catalog_entry_ambiguous"})
+            return httpx.Response(
+                409, json={"error": {"code": "catalog_entry_ambiguous"}}
+            )
         return httpx.Response(404)
 
     with pytest.raises(BootstrapDriveError, match="install openbao failed"):

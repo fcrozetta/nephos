@@ -131,10 +131,19 @@ def _ensure_installed(
 
 
 def _error_code(resp: httpx.Response) -> str | None:
+    # The API serializes errors as {"error": {"code": ...}}; tolerate a flat
+    # {"code": ...} too so the drive is robust to either shape.
     try:
-        return resp.json().get("code")
-    except (ValueError, AttributeError):
+        body = resp.json()
+    except ValueError:
         return None
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str):
+        return error["code"]
+    code = body.get("code")
+    return code if isinstance(code, str) else None
 
 
 def _set_default_domain(client: httpx.Client, *, name: str, domain: str) -> None:
