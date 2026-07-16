@@ -57,9 +57,15 @@ metadata:
   namespace: nephos-system
 data:
   NEPHOS_API_DB_PATH: /data/state/nephos.db
-  # The Pulumi reconcile path needs an explicit kubeconfig even in-cluster
-  # (unlike nephos's own client, which falls back to in-cluster config).
-  NEPHOS_API_KUBECONFIG: /etc/nephos/kube/config
+  # Pulumi's Kubernetes provider needs a kubeconfig even in-cluster; hand it the
+  # standard KUBECONFIG, which the Pulumi CLI inherits. Deliberately NOT
+  # NEPHOS_API_KUBECONFIG: that would route nephos's own client onto the
+  # kubeconfig path too, whose plain tokenFile the Python client reads once and
+  # never refreshes -- it would 401 after the projected token rotates. Left
+  # unset, the client uses load_incluster_config (1-min token refresh). Go
+  # client-go re-reads tokenFile, and each reconcile spawns a fresh CLI, so
+  # Pulumi honors rotation either way.
+  KUBECONFIG: /etc/nephos/kube/config
   NEPHOS_API_ENV: lcl
   NEPHOS_API_INTERNAL_DOMAIN: nephos.lcl
   NEPHOS_API_INGRESS_CLASS: traefik
