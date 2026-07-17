@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 nephos-api = "nephos_api.cli:main"
+nephos = "nephos_api.cli:main"
 
 [dependency-groups]
 dev = [

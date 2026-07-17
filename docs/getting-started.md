@@ -5,9 +5,38 @@ your own admin account, and an installed workload whose secrets Nephos generates
 for you. By the end you will not have typed a single service password.
 
 > [!WARNING]
-> Nephos is early and local-first. The API + console + secrets flow below work
-> today; the one-command local cluster and backbone bring-up do not yet (see
-> [What's still rough](#whats-still-rough)).
+> Nephos is early and local-first. For a one-command LCL bootstrap that stands up
+> the control plane in-cluster with OpenBao + the console, see
+> [Quickstart: in-cluster (LCL)](#quickstart-in-cluster-lcl). The manual host-run
+> flow below is the alternative and shows each moving part; the postgres/zitadel
+> backbone is still installed by hand (see [What's still rough](#whats-still-rough)).
+
+## Quickstart: in-cluster (LCL)
+
+Run Nephos itself inside a local k3d cluster, one command, from the repo root:
+
+```bash
+uv run nephos setup lcl
+```
+
+This creates the k3d cluster + local routing (via
+[`scripts/setup-local-routing.sh`](../scripts/setup-local-routing.sh); uses sudo
+for dnsmasq/DNS), builds and imports the `nephos-api` image, applies the
+in-cluster control-plane manifest, then drives the backbone over a one-shot
+port-forward: sets the default domain (`nephos.lcl`), installs OpenBao (the core
+secrets backend), and installs the console pointed at the in-cluster API. It ends
+by printing the console `/setup` URL for your first-run admin.
+
+Other verbs:
+
+```bash
+uv run nephos up lcl        # converge the control plane (idempotent apply)
+uv run nephos status lcl    # deployment readiness
+uv run nephos down lcl      # stop (scale to 0); --destroy --yes removes state
+```
+
+`setup` is convergent: re-run it if a step is interrupted. The rest of this page
+walks the manual host-run flow, which is useful for understanding the pieces.
 
 ## Prerequisites
 
@@ -124,8 +153,10 @@ secret.
 
 Honest edges you will hit today:
 
-- **No one-command local backbone.** Creating the cluster and installing OpenBao
-  as the secrets provider is still manual; there is no `nephos up` yet.
+- **Backbone is OpenBao + console only.** `nephos setup lcl` brings up the
+  control plane, OpenBao, and the console; postgres and zitadel are not yet
+  installed automatically (their catalog defs need `generate`/`secrets://`
+  porting first). Install those by hand for now.
 - **Local ingress/DNS needs one setup step.** Apps get URLs on the internal
   domain (`<slug>.<domain>`). For those to open directly in a browser, run
   [`scripts/setup-local-routing.sh`](../scripts/setup-local-routing.sh) — it
