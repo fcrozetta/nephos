@@ -23,7 +23,7 @@ def test_alpha_backbone_catalog_generator_writes_protocol_aware_entries(
 ) -> None:
     catalog_root = tmp_path / "catalog"
 
-    write_alpha_backbone_catalog(catalog_root)
+    write_alpha_backbone_catalog(catalog_root, "nephos.lcl")
 
     loader = CatalogLoader((catalog_root,))
     services = {service["name"]: service for service in loader.list_services()}
@@ -55,7 +55,7 @@ def test_alpha_backbone_catalog_generator_writes_service_config_mappings(
 ) -> None:
     catalog_root = tmp_path / "catalog"
 
-    write_alpha_backbone_catalog(catalog_root)
+    write_alpha_backbone_catalog(catalog_root, "nephos.lcl")
 
     manifests = {
         service_name: yaml.safe_load(

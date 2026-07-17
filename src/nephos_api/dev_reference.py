@@ -33,6 +33,11 @@ def run_reference_smoke(
     timeout_seconds: int = 240,
     progress: Callable[[str], None] | None = None,
 ) -> ReferenceSmokeResult:
+    if settings.internal_domain is None:
+        raise ValueError(
+            "internal domain is required for the reference smoke: set "
+            "NEPHOS_API_INTERNAL_DOMAIN"
+        )
     suffix = uuid4().hex[:8]
     service_slug = f"postgres-{suffix}"
     app_slug = f"reference-web-{suffix}"

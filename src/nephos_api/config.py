@@ -24,7 +24,10 @@ class Settings:
     catalog_roots: tuple[Path, ...]
     kubeconfig: Path | None
     kube_context: str | None
-    internal_domain: str = "nephos.local"
+    # No baked default: the domain is environment-specific and must be supplied
+    # (env var, --internal-domain, in-cluster ConfigMap, or a setup profile).
+    # Consumers that need it fail fast when it is unset.
+    internal_domain: str | None = None
     ingress_class: str | None = None
     managed_catalog_registries: tuple[ManagedCatalogRegistry, ...] = field(
         default_factory=tuple
@@ -85,7 +88,7 @@ def load_settings(
         catalog_roots=catalog_roots,
         kubeconfig=_resolve_path(kubeconfig, cwd=base_path) if kubeconfig else None,
         kube_context=env.get("NEPHOS_API_KUBE_CONTEXT") or None,
-        internal_domain=env.get("NEPHOS_API_INTERNAL_DOMAIN", "nephos.local"),
+        internal_domain=env.get("NEPHOS_API_INTERNAL_DOMAIN") or None,
         ingress_class=env.get("NEPHOS_API_INGRESS_CLASS") or None,
         managed_catalog_registries=managed_catalog_registries,
         catalog_source_ids=catalog_source_ids,

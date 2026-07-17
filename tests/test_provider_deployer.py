@@ -299,7 +299,9 @@ def test_provider_runtime_deployer_materializes_secrets_refs_with_genspec(
     deployer.deploy(target_type="service_instance", slug="postgres")
 
     context = service_provider.deployed[0]
-    assert context.values["masterKey"] == "materialized:secrets://svc/postgres/master/key"
+    assert (
+        context.values["masterKey"] == "materialized:secrets://svc/postgres/master/key"
+    )
     assert context.values["apiToken"] == "materialized:secrets://svc/postgres/api/token"
     # master-key declares a generation policy; api-token does not (read-only).
     master_spec = SecretGenSpec(kind="password", length=40)

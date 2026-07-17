@@ -50,13 +50,20 @@ def init(
         None,
         "--internal-domain",
         help=(
-            "Default internal root domain for generated App routes. "
-            "Defaults to NEPHOS_API_INTERNAL_DOMAIN or nephos.local."
+            "Internal root domain for generated App routes. Required: set this "
+            "or NEPHOS_API_INTERNAL_DOMAIN (no default)."
         ),
     ),
 ) -> None:
     settings = load_settings()
     resolved_internal_domain = internal_domain or settings.internal_domain
+    if not resolved_internal_domain:
+        typer.echo(
+            "internal domain is required: set NEPHOS_API_INTERNAL_DOMAIN "
+            "or pass --internal-domain",
+            err=True,
+        )
+        raise typer.Exit(1)
     migrate_database(db_path=settings.db_path)
     try:
         configured_domain = _ensure_internal_platform_domain(

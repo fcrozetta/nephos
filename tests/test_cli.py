@@ -96,11 +96,35 @@ def test_cli_init_reports_managed_registry_sync_errors(
     result = runner.invoke(
         app,
         ["init"],
-        env={"NEPHOS_API_DB_PATH": str(db_path)},
+        env={
+            "NEPHOS_API_DB_PATH": str(db_path),
+            "NEPHOS_API_INTERNAL_DOMAIN": "nephos.lcl",
+        },
     )
 
     assert result.exit_code == 1
     assert "failed to refresh managed catalog registry core-registry" in result.output
+
+
+def test_cli_init_requires_internal_domain(monkeypatch, tmp_path: Path) -> None:
+    from nephos_api.config import Settings
+
+    db_path = tmp_path / "state" / "nephos.db"
+    settings = Settings(
+        db_path=db_path,
+        catalog_roots=(),
+        kubeconfig=None,
+        kube_context=None,
+        internal_domain=None,
+    )
+    # Stub load_settings so the local .env (which sets a domain) can't leak in.
+    monkeypatch.setattr("nephos_api.cli.load_settings", lambda: settings)
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["init"])
+
+    assert result.exit_code == 1
+    assert "internal domain is required" in result.output
 
 
 def test_cli_init_accepts_custom_internal_domain(tmp_path: Path) -> None:
