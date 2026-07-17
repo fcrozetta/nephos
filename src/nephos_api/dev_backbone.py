@@ -53,6 +53,14 @@ def run_backbone_smoke(
     environ: Mapping[str, str] | None = None,
     live: bool | None = None,
 ) -> BackboneSmokeResult:
+    if settings.internal_domain is None:
+        return BackboneSmokeResult(
+            status="skipped",
+            blocker_code="internal_domain_missing",
+            message=(
+                "NEPHOS_API_INTERNAL_DOMAIN is required for the alpha backbone smoke."
+            ),
+        )
     env = os.environ if environ is None else environ
     if live is False:
         return _run_non_live_backbone_flow(
@@ -100,7 +108,7 @@ def _backbone_service_config(service_name: str) -> dict[str, object]:
     return {}
 
 
-def write_alpha_backbone_catalog(root: Path) -> None:
+def write_alpha_backbone_catalog(root: Path, internal_domain: str) -> None:
     _write_backbone_check_app(root)
     _write_service(
         root,
@@ -137,7 +145,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             {
                 "name": "external-host",
                 "type": "string",
-                "default": "zitadel.nephos.localhost",
+                "default": f"zitadel.{internal_domain}",
             },
             {"name": "external-port", "type": "integer", "default": 8080},
             {"name": "external-secure", "type": "boolean", "default": False},
@@ -146,7 +154,7 @@ def write_alpha_backbone_catalog(root: Path) -> None:
             {
                 "name": "admin-username",
                 "type": "string",
-                "default": "root@zitadel.nephos.localhost",
+                "default": f"root@zitadel.{internal_domain}",
             },
             {"name": "admin-password", "type": "string", "required": True},
             {"name": "master-key", "type": "string", "required": True},
@@ -222,7 +230,7 @@ def _run_non_live_backbone_flow(
         temp_path = Path(temp_dir)
         catalog_root = temp_path / "catalog"
         db_path = temp_path / "state" / "nephos.db"
-        write_alpha_backbone_catalog(catalog_root)
+        write_alpha_backbone_catalog(catalog_root, settings.internal_domain)
         smoke_settings = _smoke_settings(
             settings,
             db_path=db_path,
@@ -238,7 +246,9 @@ def _run_non_live_backbone_flow(
             provisioner=_MissingLiveBackboneProvisioner(),
         )
         with TestClient(api_app) as api:
-            _install_backbone_desired_state(api, log=log)
+            _install_backbone_desired_state(
+                api, internal_domain=settings.internal_domain, log=log
+            )
             _drain_reconciler(reconciler, timeout_seconds=timeout_seconds)
             blocker = _first_blocked_status(api)
             if blocker is None:
@@ -271,7 +281,7 @@ def _run_live_backbone_flow(
         temp_path = Path(temp_dir)
         catalog_root = temp_path / "catalog"
         db_path = temp_path / "state" / "nephos.db"
-        write_alpha_backbone_catalog(catalog_root)
+        write_alpha_backbone_catalog(catalog_root, settings.internal_domain)
         smoke_settings = _smoke_settings(
             settings,
             db_path=db_path,
@@ -289,6 +299,7 @@ def _run_live_backbone_flow(
             with TestClient(api_app) as api:
                 _install_backbone_desired_state(
                     api,
+                    internal_domain=settings.internal_domain,
                     service_slugs=dict(
                         zip(BACKBONE_SERVICE_NAMES, service_slugs, strict=True)
                     ),
@@ -322,6 +333,7 @@ def _run_live_backbone_flow(
 def _install_backbone_desired_state(
     api: TestClient,
     *,
+    internal_domain: str,
     service_slugs: dict[str, str] | None = None,
     app_slug: str = BACKBONE_APP_NAME,
     log: Callable[[str], None],
@@ -329,7 +341,7 @@ def _install_backbone_desired_state(
     resolved_service_slugs = service_slugs or {
         service_name: service_name for service_name in BACKBONE_SERVICE_NAMES
     }
-    _ensure_platform_domain(api, domain="nephos.localhost", name_hint="local")
+    _ensure_platform_domain(api, domain=internal_domain, name_hint="local")
     for service_name in BACKBONE_SERVICE_NAMES:
         service_slug = resolved_service_slugs[service_name]
         log(f"installing Service {service_slug}")

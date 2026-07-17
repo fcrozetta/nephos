@@ -580,18 +580,10 @@ def _zitadel_service(
     labels = _labels(spec)
     selector = {"app.kubernetes.io/name": name}
     image = _string_value(spec.values, "image", "ghcr.io/zitadel/zitadel:v2.58.0")
-    external_host = _string_value(
-        spec.values,
-        "externalHost",
-        f"{spec.runtime_name}.nephos.localhost",
-    )
+    external_host = _required_string_value(spec.values, "externalHost")
     external_port = _int_value(spec.values, "externalPort", 8080)
     external_secure = _bool_value(spec.values, "externalSecure", False)
-    admin_username = _string_value(
-        spec.values,
-        "adminUsername",
-        "root@zitadel.nephos.localhost",
-    )
+    admin_username = _required_string_value(spec.values, "adminUsername")
     admin_password = _required_string_value(spec.values, "adminPassword")
     _validate_zitadel_admin_password(admin_password)
     master_key = _zitadel_master_key(spec.values)

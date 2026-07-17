@@ -33,7 +33,7 @@ Use this semantic shape:
 ```yaml
 rootDomains:
   - name: local
-    domain: nephos.local
+    domain: nephos.lcl
     default: true
   - name: cloudflare
     domain: nephos.fcrozetta.app
@@ -109,16 +109,19 @@ That initial setup includes at least one ingress root domain and exactly one def
 The root domain may be provided by the user during setup.
 
 For API 0.0.1 backend-local development, `uv run nephos-api init` creates the
-initial internal root domain. If no domain is provided, it defaults to
-`nephos.local` with platform-domain name `internal`.
+initial internal root domain (platform-domain name `internal`).
 
-`NEPHOS_API_INTERNAL_DOMAIN` may supply that initial domain from `.env` or the
-process environment.
+The internal domain is **required** and has **no default**: `init` fails fast
+unless it is supplied via `NEPHOS_API_INTERNAL_DOMAIN` (`.env` or the process
+environment) or `--internal-domain`. There is no baked-in fallback domain
+anywhere in the code; every path derives the domain from that single
+configuration, which seeds the DB `platform_domains` row that is the runtime
+source of truth. See the amendment below.
 
-For local browser testing without editing `/etc/hosts`, use a DNS suffix that
-already resolves to the ingress endpoint, such as `nephos.localhost`. Traefik
-or another ingress controller routes HTTP after the hostname resolves; it does
-not provide local DNS resolution for `*.nephos.local`.
+For local browser testing, use a dnsmasq wildcard so `*.<domain>` resolves to the
+ingress endpoint (see the local-ingress-dns ADR); the LCL domain is `nephos.lcl`.
+Traefik routes HTTP after the hostname resolves; Nephos does not provide local DNS
+resolution itself.
 
 The selected runtime Ingress class is not a platform root-domain field.
 API 0.0.1 may set generated Kubernetes `ingressClassName` from
@@ -176,3 +179,27 @@ Need to decide later:
 - setup idempotency behavior
 - App install behavior when setup is missing
 - whether route status should show HTTP-only Nephos URLs, externally observed HTTPS URLs, or both after future tunnel/DNS integrations
+
+## Amendment (2026-07-18): the internal domain is required, single source
+
+The original "Initial Setup" text said `nephos-api init` defaults the internal
+domain to `nephos.local`. That default, plus separate hardcoded `nephos.localhost`
+literals in `dev_backbone` and the zitadel provider, diverged from the DB
+`platform_domains` row that actually drives routing. Editing `.env` appeared to do
+nothing because the seeded DB row wins and `.env` only seeds a fresh `init`.
+
+Decision:
+
+- The internal domain has **no baked default**. It is required configuration,
+  supplied by `NEPHOS_API_INTERNAL_DOMAIN`, `--internal-domain`, the in-cluster
+  ConfigMap, or a `nephos setup` profile.
+- `nephos-api init` and the dev smokes fail fast when it is unset.
+- No code path hardcodes a domain literal; each derives from
+  `settings.internal_domain` or the passed value. The DB `platform_domains` row
+  remains the runtime source of truth.
+
+Consequence: one source, no silent divergence between configuration and behavior.
+
+Still open (tracked in #61): `_route_scheme` decides http/https by domain suffix
+(`.localhost`/`.local`), which suffix-guessing the scheme rework should replace
+rather than extend.

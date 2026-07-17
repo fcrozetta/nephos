@@ -49,7 +49,7 @@ def test_load_settings_uses_default_paths(tmp_path: Path) -> None:
     )
     assert settings.kubeconfig is None
     assert settings.kube_context is None
-    assert settings.internal_domain == "nephos.local"
+    assert settings.internal_domain is None
     assert settings.ingress_class is None
 
 

@@ -505,6 +505,8 @@ def test_zitadel_service_can_use_external_postgres() -> None:
         values={
             "adminPassword": "Local-secret1!",
             "masterKey": "0123456789abcdef0123456789abcdef",
+            "externalHost": "zitadel.nephos.lcl",
+            "adminUsername": "root@zitadel.nephos.lcl",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
             "embeddedPostgres": False,
             "databaseHost": "svc-postgres-postgresql.svc-postgres.svc.cluster.local",
@@ -568,6 +570,8 @@ def test_zitadel_service_blocks_admin_password_without_symbol() -> None:
         values={
             "adminPassword": "LocalSecret1",
             "masterKey": "0123456789abcdef0123456789abcdef",
+            "externalHost": "zitadel.nephos.lcl",
+            "adminUsername": "root@zitadel.nephos.lcl",
             "databasePassword": "db-secret",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
         },
@@ -598,6 +602,8 @@ def test_zitadel_service_omits_ingress_by_default() -> None:
         values={
             "adminPassword": "Local-secret1!",
             "masterKey": "0123456789abcdef0123456789abcdef",
+            "externalHost": "zitadel.nephos.lcl",
+            "adminUsername": "root@zitadel.nephos.lcl",
             "databasePassword": "db-secret",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
         },
