@@ -10,6 +10,7 @@ from nephos_api.provisioners.postgres import (
 )
 from nephos_api.provisioners.registry import (
     CompositeBindingProvisioner,
+    EngineRoutingBindingProvisioner,
     SecretResolvingBindingProvisioner,
 )
 from nephos_api.provisioners.seaweedfs import (
@@ -31,6 +32,7 @@ __all__ = [
     "BindingProvisioner",
     "BindingProvisioningContext",
     "CompositeBindingProvisioner",
+    "EngineRoutingBindingProvisioner",
     "KubernetesPsqlRunner",
     "KubernetesPulumiZitadelProvisioningClient",
     "KubernetesZitadelProvisionerConfig",

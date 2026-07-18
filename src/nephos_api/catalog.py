@@ -219,6 +219,13 @@ class Provisioning(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["app-scoped-resource", "none"]
+    # Registry-declared provisioning engine (ADR 20260718): selects a
+    # backend-owned engine by name (e.g. sql, oidc). Left open (not a Literal) so
+    # the engine registry, not this schema, is the source of valid engine names.
+    # Unset falls back to legacy (capability, protocol) predicate dispatch during
+    # the strangler migration.
+    engine: str | None = None
+    inputs: dict[str, Any] = Field(default_factory=dict)
 
 
 class ServiceSpec(BaseModel):

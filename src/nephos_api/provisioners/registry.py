@@ -5,6 +5,7 @@ from nephos_api.provisioners.base import (
     BindingProvisioner,
     BindingProvisioningContext,
 )
+from nephos_api.runtime_errors import RuntimeBlockedError
 from nephos_api.secret_refs import RuntimeSecretResolver, resolve_runtime_secret_value
 
 
@@ -25,6 +26,59 @@ class CompositeBindingProvisioner:
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
         for provisioner in self._provisioners:
             provisioner.deprovision_binding(context)
+
+
+class EngineRoutingBindingProvisioner:
+    """Dispatch a binding to its registry-declared provisioning engine.
+
+    ADR 20260718: the service manifest declares which capability-typed engine
+    provisions its bindings (surfaced as ``context.provisioning_engine``). When
+    declared, route to that named backend engine. When absent, fall back to the
+    legacy ``(capability, protocol)`` predicate dispatch across ``fallback`` --
+    the strangler back-compat path so nothing installed today breaks. A declared
+    engine that is not registered blocks loudly rather than silently trying the
+    fallback (which could pick the wrong provisioner).
+    """
+
+    def __init__(
+        self,
+        engines: Mapping[str, BindingProvisioner],
+        *,
+        fallback: Iterable[BindingProvisioner] = (),
+    ) -> None:
+        self._engines = dict(engines)
+        self._fallback = CompositeBindingProvisioner(fallback)
+
+    def provision_binding(
+        self,
+        context: BindingProvisioningContext,
+    ) -> dict[str, str] | None:
+        engine = self._resolve_engine(context)
+        if engine is not None:
+            return engine.provision_binding(context)
+        return self._fallback.provision_binding(context)
+
+    def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        engine = self._resolve_engine(context)
+        if engine is not None:
+            engine.deprovision_binding(context)
+            return
+        self._fallback.deprovision_binding(context)
+
+    def _resolve_engine(
+        self,
+        context: BindingProvisioningContext,
+    ) -> BindingProvisioner | None:
+        name = context.provisioning_engine
+        if name is None:
+            return None
+        try:
+            return self._engines[name]
+        except KeyError as exc:
+            raise RuntimeBlockedError(
+                reason="provisioning_engine_unknown",
+                message=f"No provisioning engine registered for '{name}'.",
+            ) from exc
 
 
 class _LazyResolvingServiceConfig(Mapping):
