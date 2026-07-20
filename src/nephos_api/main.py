@@ -485,7 +485,7 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
     from kubernetes import client
 
     from nephos_api.provisioning import (
-        CompositeBindingProvisioner,
+        EngineRoutingBindingProvisioner,
         KubernetesPulumiZitadelProvisioningClient,
         KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
@@ -505,12 +505,15 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
             kube_context=settings.kube_context,
         ),
     )
+    postgres = PostgresAppScopedProvisioner(core_v1_api=core_v1_api)
+    zitadel = ZitadelAppScopedProvisioner(client=zitadel_client)
     return SecretResolvingBindingProvisioner(
-        CompositeBindingProvisioner(
-            [
-                PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
-                ZitadelAppScopedProvisioner(client=zitadel_client),
-            ]
+        EngineRoutingBindingProvisioner(
+            {"sql": postgres, "oidc": zitadel},
+            # Legacy (capability, protocol) predicate dispatch for services whose
+            # manifest has not declared a provisioning.engine yet (strangler
+            # back-compat; remove once postgres/zitadel manifests are cut over).
+            fallback=[postgres, zitadel],
         ),
         resolver=_build_secret_resolver(settings, core_v1_api=core_v1_api),
     )

@@ -575,6 +575,23 @@ class Reconciler:
         )
         return manifest_config_values(row, manifest)
 
+    def _service_provisioning_engine(self, slug: str) -> str | None:
+        """The service's registry-declared provisioning engine (ADR 20260718).
+
+        None when unset or the manifest is unavailable, so the provisioner falls
+        back to legacy (capability, protocol) predicate dispatch.
+        """
+        row = self._repository.get_service_row(slug)
+        if row is None:
+            return None
+        source_path = Path(str(row["catalog_source_path"]))
+        if not source_path.exists():
+            return None
+        manifest = ServiceManifest.model_validate(
+            yaml.safe_load(source_path.read_text())
+        )
+        return manifest.spec.provisioning.engine
+
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
             {
@@ -614,6 +631,9 @@ class Reconciler:
                     ),
                     app_routes=tuple(self._app_routes(app_slug)),
                     platform_domains=tuple(self._platform_domains_for_ingress()),
+                    provisioning_engine=self._service_provisioning_engine(
+                        str(binding["service_instance_slug"])
+                    ),
                 )
             )
 
@@ -643,6 +663,9 @@ class Reconciler:
                 ),
                 app_routes=tuple(self._app_routes(app_slug)),
                 platform_domains=tuple(self._platform_domains_for_ingress()),
+                provisioning_engine=self._service_provisioning_engine(
+                    str(binding["service_instance_slug"])
+                ),
             )
             if deprovision is not None:
                 # Force-destroy tears down the whole Service namespace next. If
@@ -758,6 +781,9 @@ class Reconciler:
                         self._app_routes(str(binding["app_instance_slug"]))
                     ),
                     platform_domains=tuple(self._platform_domains_for_ingress()),
+                    provisioning_engine=self._service_provisioning_engine(
+                        str(binding["service_instance_slug"])
+                    ),
                 )
             )
         if values is None:
