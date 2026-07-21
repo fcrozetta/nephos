@@ -65,6 +65,10 @@ class CapabilityRequirement(BaseModel):
     protocol: str | None = None
     alias: str | None = Field(default=None, alias="as")
     provider: str | None = None
+    # Elevated grants this binding is entitled to (ADR 20260721). Open set: the
+    # provisioning engine, not this schema, defines valid values (e.g. the sql
+    # engine understands "admin-credentials"). Default-deny (empty).
+    entitlements: list[str] = Field(default_factory=list)
 
 
 class RouteTarget(BaseModel):
@@ -192,6 +196,19 @@ class AppSpec(BaseModel):
     config: AppConfig = Field(default_factory=AppConfig)
     runtime: RuntimeRef
 
+    @model_validator(mode="after")
+    def _reject_app_entitlements(self) -> AppSpec:
+        # ADR 20260721: entitlements are honored only on service->service
+        # dependencies today; the App binding path does not carry them, so an
+        # App-declared entitlement would be silently dropped. Reject it loudly
+        # until the App binding path propagates entitlements.
+        if any(requirement.entitlements for requirement in self.requires):
+            raise ValueError(
+                "App capability requirements cannot declare 'entitlements' "
+                "(ADR 20260721: app binding entitlements are not wired yet)."
+            )
+        return self
+
 
 class ProvidedCapability(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -222,8 +239,8 @@ class Provisioning(BaseModel):
     # Registry-declared provisioning engine (ADR 20260718): selects a
     # backend-owned engine by name (e.g. sql, oidc). Left open (not a Literal) so
     # the engine registry, not this schema, is the source of valid engine names.
-    # Unset falls back to legacy (capability, protocol) predicate dispatch during
-    # the strangler migration.
+    # A binding whose engine is unset or unregistered blocks loudly (increment 2b
+    # removed the legacy predicate-dispatch fallback).
     engine: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
 

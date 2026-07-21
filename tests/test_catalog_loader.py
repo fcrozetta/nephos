@@ -311,6 +311,35 @@ spec:
         loader.list_apps()
 
 
+def test_catalog_loader_rejects_app_requirement_entitlements(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  requires:
+    - capability: postgres
+      entitlements: [admin-credentials]
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="entitlements"):
+        loader.list_apps()
+
+
 def test_catalog_loader_allows_same_capability_with_distinct_protocol_aliases(
     tmp_path: Path,
 ) -> None:

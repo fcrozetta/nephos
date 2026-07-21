@@ -300,6 +300,34 @@ def test_postgres_provisioner_returns_admin_outputs_for_service_dependency() -> 
     }
 
 
+def test_postgres_provisioner_grants_admin_via_entitlement() -> None:
+    core = FakeCoreV1Api()
+    runner = FakePsqlRunner()
+    provisioner = PostgresAppScopedProvisioner(
+        core_v1_api=core,
+        psql_runner=runner,
+        password_factory=lambda: "pg-secret",
+    )
+
+    # Plain app-binding id (not the "service-" heuristic); the explicit
+    # entitlement is what grants the admin credential (ADR 20260721).
+    values = provisioner.provision_binding(
+        BindingProvisioningContext(
+            binding_id="binding_01",
+            app_slug="reporting",
+            service_slug="postgres",
+            alias="database",
+            capability="sql",
+            protocol="postgres",
+            entitlements=frozenset({"admin-credentials"}),
+        )
+    )
+
+    assert values is not None
+    assert values["adminUsername"] == "postgres"
+    assert values["adminPassword"] == "admin-secret"
+
+
 def test_postgres_provisioner_reuses_existing_owned_credential_secret() -> None:
     core = FakeCoreV1Api()
     core.secrets[("svc-postgres", "nephos-pg-paperless-database")] = _secret(

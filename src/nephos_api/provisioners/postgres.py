@@ -91,6 +91,11 @@ class KubernetesPsqlRunner:
 
 
 class PostgresAppScopedProvisioner:
+    # ADR 20260721: the sql engine grants the "admin-credentials" entitlement.
+    # The engine router blocks any binding requesting an entitlement outside
+    # this set.
+    recognized_entitlements = frozenset({"admin-credentials"})
+
     def __init__(
         self,
         *,
@@ -142,7 +147,7 @@ class PostgresAppScopedProvisioner:
             credentials,
             host=runtime.host,
             admin_password=(
-                admin_password if _is_service_dependency_context(context) else None
+                admin_password if _grants_admin_credentials(context) else None
             ),
         )
 
@@ -399,6 +404,16 @@ def _binding_values(
 
 def _is_service_dependency_context(context: BindingProvisioningContext) -> bool:
     return context.binding_id.startswith("service-")
+
+
+def _grants_admin_credentials(context: BindingProvisioningContext) -> bool:
+    # ADR 20260721: explicit, default-deny entitlement. During the migration the
+    # legacy service-dependency heuristic is still honored so a not-yet-declared
+    # consumer keeps its admin grant; removed once manifests declare the
+    # entitlement (final increment).
+    if "admin-credentials" in context.entitlements:
+        return True
+    return _is_service_dependency_context(context)
 
 
 def _provision_database_sql(credentials: dict[str, str]) -> str:
