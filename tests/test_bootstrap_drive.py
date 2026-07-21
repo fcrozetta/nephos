@@ -48,7 +48,7 @@ def test_drive_installs_openbao_then_console_with_apiurl() -> None:
             return httpx.Response(202, json={})
         if request.method == "POST" and path == "/services":
             return httpx.Response(202, json={})
-        if path == "/services/openbao":
+        if path in ("/services/openbao", "/services/postgres"):
             return httpx.Response(
                 200, json={"resource": {"status": {"level": "healthy"}}}
             )
@@ -65,6 +65,39 @@ def test_drive_installs_openbao_then_console_with_apiurl() -> None:
     assert ("POST", "/services") in seen
     assert ("POST", "/apps") in seen
     assert console_config["api-url"] == "http://svc:8099"
+
+
+def test_drive_installs_postgres_turnkey_between_openbao_and_console() -> None:
+    seen: list[str] = []
+    installs: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        seen.append(path)
+        if path == "/healthz":
+            return httpx.Response(200, json={})
+        if request.method == "POST" and path == "/platform/config/domains":
+            return httpx.Response(202, json={})
+        if request.method == "POST" and path in ("/services", "/apps"):
+            installs.append(json.loads(request.content))
+            return httpx.Response(202, json={})
+        if path in ("/services/openbao", "/services/postgres", "/apps/console"):
+            return httpx.Response(
+                200, json={"resource": {"status": {"level": "healthy"}}}
+            )
+        return httpx.Response(404)
+
+    _run(handler)
+
+    # postgres is installed turnkey: no operator config, Nephos generates the
+    # admin-password.
+    postgres = [
+        body for body in installs if body["catalogRef"]["name"] == "postgres"
+    ]
+    assert postgres and postgres[0]["config"] == {}
+    # ordered OpenBao -> postgres -> console, each awaited before the next.
+    assert seen.index("/services/openbao") < seen.index("/services/postgres")
+    assert seen.index("/services/postgres") < seen.index("/apps")
 
 
 def test_drive_reconciles_on_already_installed_conflict() -> None:
@@ -89,7 +122,7 @@ def test_drive_reconciles_on_already_installed_conflict() -> None:
         if path.endswith("/actions/reconcile"):
             reconciled.append(path)
             return httpx.Response(202, json={})
-        if path == "/services/openbao":
+        if path in ("/services/openbao", "/services/postgres"):
             return httpx.Response(
                 200, json={"resource": {"status": {"level": "ready"}}}
             )
@@ -139,7 +172,7 @@ def test_drive_keeps_polling_on_blocked_then_succeeds() -> None:
             polls["openbao"] += 1
             level = "blocked" if polls["openbao"] < 2 else "healthy"
             return httpx.Response(200, json={"resource": {"status": {"level": level}}})
-        if path == "/apps/console":
+        if path in ("/services/postgres", "/apps/console"):
             return httpx.Response(
                 200, json={"resource": {"status": {"level": "healthy"}}}
             )

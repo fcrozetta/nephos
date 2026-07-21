@@ -153,10 +153,11 @@ secret.
 
 Honest edges you will hit today:
 
-- **Backbone is OpenBao + console only.** `nephos setup lcl` brings up the
-  control plane, OpenBao, and the console; postgres and zitadel are not yet
-  installed automatically (their catalog defs need `generate`/`secrets://`
-  porting first). Install those by hand for now.
+- **Backbone is OpenBao + PostgreSQL + console.** `nephos setup lcl` brings up
+  the control plane, OpenBao, PostgreSQL, and the console. PostgreSQL installs
+  turnkey (Nephos generates its admin-password). zitadel is not yet installed
+  automatically (its catalog def still needs symbol-capable secret generation
+  and ingress/domain fixes); install it by hand for now.
 - **Local ingress/DNS needs one setup step.** Apps get URLs on the internal
   domain (`<slug>.<domain>`). For those to open directly in a browser, run
   [`scripts/setup-local-routing.sh`](../scripts/setup-local-routing.sh) — it

@@ -186,7 +186,7 @@ def setup(
     timeout_seconds: int = typer.Option(300, "--timeout-seconds", min=1),
 ) -> None:
     """One-time greenfield bootstrap: cluster + routing (LCL) -> control plane ->
-    OpenBao -> console, from nothing to a running in-cluster Nephos."""
+    OpenBao -> PostgreSQL -> console, from nothing to a running in-cluster Nephos."""
     profile = _resolve_instance_or_exit(name)
     hostctl.require_tools("kubectl")
 
@@ -213,7 +213,7 @@ def setup(
 
     _apply_control_plane_or_exit(profile)
 
-    typer.echo("- driving backbone (OpenBao + console)")
+    typer.echo("- driving backbone (OpenBao + PostgreSQL + console)")
     try:
         with hostctl.port_forward(
             "nephos-api",
