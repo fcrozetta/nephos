@@ -583,6 +583,14 @@ def _validate_config_options(
             label="config option name",
             value=option.name,
         )
+        if option.generate is not None and option.type_ != "string":
+            # A generated value is always a password string, so a generate
+            # policy on a non-string option would deliver a string where the
+            # manifest declared another type. Reject at load, fail-closed.
+            raise CatalogValidationError(
+                f"invalid {kind} manifest {path}: config option {option.name!r} "
+                "declares a generate policy but is not a string"
+            )
         if option.default is not None and not _config_value_matches_type(
             option.default,
             option.type_,

@@ -767,10 +767,19 @@ def _validate_manifest_config(
             details={"keys": unknown_keys},
         )
 
+    # A required option with a generation policy is satisfied by Nephos at
+    # deploy time (the materializer read-or-generates the secrets:// value), so
+    # it must not force the operator to supply a value at install. Only a
+    # required option with neither a default nor a generate policy is missing.
     missing_required = sorted(
         option.name
         for option in options.values()
-        if option.required and option.default is None and option.name not in config
+        if (
+            option.required
+            and option.default is None
+            and option.generate is None
+            and option.name not in config
+        )
     )
     if missing_required:
         raise NephosError(

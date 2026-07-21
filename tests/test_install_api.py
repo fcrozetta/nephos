@@ -1002,6 +1002,24 @@ def test_install_service_rejects_missing_required_config(tmp_path: Path) -> None
     }
 
 
+def test_install_service_accepts_missing_required_generated_config(
+    tmp_path: Path,
+) -> None:
+    # A required option Nephos generates (generate policy set) must not force the
+    # operator to supply a value: install is turnkey and the secret is
+    # materialized at deploy time. This is the postgres admin-password shape.
+    catalog_root = tmp_path / "catalog"
+    _write_generated_password_service(catalog_root)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+    )
+
+    assert response.status_code == 202
+
+
 def test_install_service_rejects_invalid_config_value_type(tmp_path: Path) -> None:
     catalog_root = tmp_path / "catalog"
     _write_configured_service(catalog_root)
@@ -1190,6 +1208,46 @@ spec:
       name: postgres
     values:
       mappings: []
+""".strip()
+    )
+    return path
+
+
+def _write_generated_password_service(root: Path) -> Path:
+    path = root / "services" / "postgres" / "service.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: admin-password
+        type: string
+        required: true
+        generate:
+          kind: password
+          length: 32
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: postgres
+    values:
+      mappings:
+        - from:
+            kind: config
+            name: admin-password
+          to:
+            helmValue: adminPassword
 """.strip()
     )
     return path

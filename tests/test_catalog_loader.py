@@ -726,6 +726,39 @@ spec:
         loader.list_apps()
 
 
+def test_catalog_loader_rejects_generate_on_non_string_option(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "default" / "apps" / "paperless" / "app.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: paperless
+spec:
+  config:
+    options:
+      - name: workers
+        type: integer
+        generate:
+          kind: password
+          length: 32
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: paperless
+      version: "1.0.0"
+""".strip()
+    )
+    loader = CatalogLoader((tmp_path / "default",))
+
+    with pytest.raises(CatalogValidationError, match="not a string"):
+        loader.list_apps()
+
+
 def test_catalog_loader_accepts_provider_runtime_without_helm_chart(
     tmp_path: Path,
 ) -> None:
