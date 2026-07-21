@@ -2,10 +2,9 @@
 
 setup port-forwards the nephos-api Service and POSTs the same desired-state the
 console/API expose: set the default platform domain, install OpenBao (the core
-secrets backend), install PostgreSQL (the core database), then install the
-console pointed at the in-cluster API, waiting for each before the next. The
-drive is convergent -- already-installed resources (409) are treated as done --
-so an interrupted setup is fixed by re-running it. The port-forward is
+secrets backend), wait for it, then install the console pointed at the in-cluster
+API. The drive is convergent -- already-installed resources (409) are treated as
+done -- so an interrupted setup is fixed by re-running it. The port-forward is
 bootstrap-only, not a runtime dependency.
 """
 
@@ -72,27 +71,6 @@ def drive_bootstrap(
             client,
             "/services/openbao",
             label="openbao",
-            timeout_seconds=timeout_seconds,
-            poll_interval=poll_interval,
-            progress=progress,
-        )
-
-        # Postgres is turnkey: config={} installs it and Nephos generates the
-        # admin-password (secrets:// materialized in OpenBao at deploy), so no
-        # operator secret is needed. OpenBao must be ready first for that.
-        progress("installing PostgreSQL (core database)")
-        _ensure_installed(
-            client,
-            "/services",
-            "/services/postgres",
-            kind="Service",
-            name="postgres",
-            config={},
-        )
-        _wait_ready(
-            client,
-            "/services/postgres",
-            label="postgres",
             timeout_seconds=timeout_seconds,
             poll_interval=poll_interval,
             progress=progress,
