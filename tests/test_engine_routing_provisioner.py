@@ -37,36 +37,35 @@ def _ctx(engine=None, capability="sql", protocol="postgres"):
 def test_routes_to_declared_engine():
     sql = _Recorder({"uri": "x"})
     oidc = _Recorder({"client": "y"})
-    router = EngineRoutingBindingProvisioner(
-        {"sql": sql, "oidc": oidc}, fallback=[sql, oidc]
-    )
+    router = EngineRoutingBindingProvisioner({"sql": sql, "oidc": oidc})
     assert router.provision_binding(_ctx(engine="oidc")) == {"client": "y"}
     assert len(oidc.provisioned) == 1
     assert sql.provisioned == []
 
 
-def test_falls_back_to_predicate_dispatch_when_engine_absent():
+def test_absent_engine_blocks_loudly():
     sql = _Recorder({"uri": "x"})
-    router = EngineRoutingBindingProvisioner({"sql": sql}, fallback=[sql])
-    assert router.provision_binding(_ctx(engine=None)) == {"uri": "x"}
-    assert len(sql.provisioned) == 1
+    router = EngineRoutingBindingProvisioner({"sql": sql})
+    with pytest.raises(RuntimeBlockedError, match="no declared"):
+        router.provision_binding(_ctx(engine=None))
+    # No fallback: a binding whose manifest declares no engine must block, not be
+    # handed to an arbitrary provisioner.
+    assert sql.provisioned == []
 
 
 def test_unknown_declared_engine_blocks_loudly():
     sql = _Recorder({"uri": "x"})
-    router = EngineRoutingBindingProvisioner({"sql": sql}, fallback=[sql])
+    router = EngineRoutingBindingProvisioner({"sql": sql})
     with pytest.raises(RuntimeBlockedError, match="engine registered for 'nope'"):
         router.provision_binding(_ctx(engine="nope"))
-    # Must not silently fall through to the fallback and pick the wrong engine.
+    # A declared-but-unregistered engine must block, not pick another provisioner.
     assert sql.provisioned == []
 
 
 def test_deprovision_routes_to_declared_engine():
     sql = _Recorder()
     oidc = _Recorder()
-    router = EngineRoutingBindingProvisioner(
-        {"sql": sql, "oidc": oidc}, fallback=[sql, oidc]
-    )
+    router = EngineRoutingBindingProvisioner({"sql": sql, "oidc": oidc})
     router.deprovision_binding(_ctx(engine="sql"))
     assert len(sql.deprovisioned) == 1
     assert oidc.deprovisioned == []
