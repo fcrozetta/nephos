@@ -51,12 +51,14 @@ def write_service(
     protocol: str | None = None,
     alias: str | None = "__capability__",
     version: str = "16",
+    engine: str | None = None,
 ) -> Path:
     path = root / "services" / name / "service.yaml"
     path.parent.mkdir(parents=True)
     protocol_yaml = f"\n      protocol: {protocol}" if protocol is not None else ""
     provided_alias = capability if alias == "__capability__" else alias
     alias_yaml = f"\n      as: {provided_alias}" if provided_alias is not None else ""
+    engine_yaml = f"\n    engine: {engine}" if engine is not None else ""
     path.write_text(
         f"""
 apiVersion: nephos.pro/v1alpha1
@@ -73,7 +75,7 @@ spec:
       - name: connection
         target: app-secret
   provisioning:
-    mode: app-scoped-resource
+    mode: app-scoped-resource{engine_yaml}
   operations: []
   runtime:
     type: helm

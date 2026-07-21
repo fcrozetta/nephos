@@ -285,9 +285,28 @@ class ProviderRuntimeDeployer:
                     alias=alias,
                     capability=requirement.capability,
                     protocol=requirement.protocol,
+                    # ADR 20260718: route to the provider Service's declared
+                    # engine, same as an app->service binding. Resolved from the
+                    # provider manifest so a service dependency never depends on a
+                    # hardcoded provisioner.
+                    provisioning_engine=self._provider_provisioning_engine(
+                        provider_row
+                    ),
                 )
             )
         return contexts
+
+    def _provider_provisioning_engine(
+        self,
+        provider_row: dict[str, object],
+    ) -> str | None:
+        manifest = _manifest_from_path(
+            target_type="service_instance",
+            path=Path(str(provider_row["catalog_source_path"])),
+        )
+        if not isinstance(manifest, ServiceManifest):
+            return None
+        return manifest.spec.provisioning.engine
 
     def _service_dependency_provider(
         self,

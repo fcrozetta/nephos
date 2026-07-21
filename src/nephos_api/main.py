@@ -302,7 +302,6 @@ def default_provider_deployer_factory(
 
     from nephos_api.kubernetes_runtime import KubernetesSecretBindingValueSource
     from nephos_api.providers.service_lifecycle import KubernetesOpenBaoLifecycle
-    from nephos_api.provisioning import PostgresAppScopedProvisioner
 
     load_kubernetes_config(settings)
     core_v1_api = client.CoreV1Api()
@@ -373,8 +372,8 @@ def default_provider_deployer_factory(
         app_provider=app_provider,
         service_provider=service_provider,
         binding_value_source=KubernetesSecretBindingValueSource(core_v1_api),
-        service_dependency_provisioner=PostgresAppScopedProvisioner(
-            core_v1_api=core_v1_api
+        service_dependency_provisioner=_build_binding_provisioner(
+            settings, core_v1_api=core_v1_api
         ),
         secret_resolver=_build_secret_resolver(settings, core_v1_api=core_v1_api),
         secrets_materializer=_build_secrets_materializer(
@@ -481,20 +480,21 @@ def _pulumi_base_dir(settings: Settings) -> Path:
     return base_dir
 
 
-def default_postgres_provisioner_factory(settings: Settings) -> BindingProvisioner:
-    from kubernetes import client
+def _build_provisioning_engines(
+    settings: Settings, *, core_v1_api: object
+) -> dict[str, BindingProvisioner]:
+    """The capability-typed provisioning engines (ADR 20260718).
 
+    Single source of the engine set so the app->service binding provisioner and
+    the service->service dependency provisioner cannot drift apart.
+    """
     from nephos_api.provisioning import (
-        EngineRoutingBindingProvisioner,
         KubernetesPulumiZitadelProvisioningClient,
         KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
-        SecretResolvingBindingProvisioner,
         ZitadelAppScopedProvisioner,
     )
 
-    load_kubernetes_config(settings)
-    core_v1_api = client.CoreV1Api()
     pulumi_dir = _pulumi_base_dir(settings) / "pulumi"
     zitadel_client = KubernetesPulumiZitadelProvisioningClient(
         core_v1_api=core_v1_api,
@@ -505,12 +505,39 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
             kube_context=settings.kube_context,
         ),
     )
-    postgres = PostgresAppScopedProvisioner(core_v1_api=core_v1_api)
-    zitadel = ZitadelAppScopedProvisioner(client=zitadel_client)
+    return {
+        "sql": PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
+        "oidc": ZitadelAppScopedProvisioner(client=zitadel_client),
+    }
+
+
+def _build_binding_provisioner(
+    settings: Settings, *, core_v1_api: object
+) -> BindingProvisioner:
+    """Engine-routing binding provisioner with op:// resolution.
+
+    Shared by the reconciler's app->service binding provisioner and the
+    deployer's service->service dependency provisioner so both dispatch through
+    the same registry-declared engines.
+    """
+    from nephos_api.provisioning import (
+        EngineRoutingBindingProvisioner,
+        SecretResolvingBindingProvisioner,
+    )
+
     return SecretResolvingBindingProvisioner(
-        EngineRoutingBindingProvisioner({"sql": postgres, "oidc": zitadel}),
+        EngineRoutingBindingProvisioner(
+            _build_provisioning_engines(settings, core_v1_api=core_v1_api)
+        ),
         resolver=_build_secret_resolver(settings, core_v1_api=core_v1_api),
     )
+
+
+def default_postgres_provisioner_factory(settings: Settings) -> BindingProvisioner:
+    from kubernetes import client
+
+    load_kubernetes_config(settings)
+    return _build_binding_provisioner(settings, core_v1_api=client.CoreV1Api())
 
 
 app = create_app()
