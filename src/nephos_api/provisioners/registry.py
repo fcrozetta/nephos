@@ -47,10 +47,33 @@ class EngineRoutingBindingProvisioner:
         self,
         context: BindingProvisioningContext,
     ) -> dict[str, str] | None:
-        return self._resolve_engine(context).provision_binding(context)
+        engine = self._resolve_engine(context)
+        self._assert_entitlements_recognized(context, engine)
+        return engine.provision_binding(context)
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
+        # Teardown stays best-effort; do not block deprovision on entitlements.
         self._resolve_engine(context).deprovision_binding(context)
+
+    @staticmethod
+    def _assert_entitlements_recognized(
+        context: BindingProvisioningContext,
+        engine: BindingProvisioner,
+    ) -> None:
+        # ADR 20260721: an engine blocks loudly on an entitlement it does not
+        # recognize rather than silently ignoring the grant. Recognition is
+        # engine-declared data (``recognized_entitlements``); the router enforces
+        # it uniformly so every engine, not just postgres, is covered.
+        recognized = getattr(engine, "recognized_entitlements", frozenset())
+        unknown = context.entitlements - recognized
+        if unknown:
+            raise RuntimeBlockedError(
+                reason="binding_entitlement_unknown",
+                message=(
+                    f"Binding requests entitlement(s) {sorted(unknown)} not "
+                    f"recognized by engine '{context.provisioning_engine}'."
+                ),
+            )
 
     def _resolve_engine(
         self,

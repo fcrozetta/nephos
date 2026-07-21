@@ -10,7 +10,6 @@ from nephos_api.provisioning import (
     KubernetesPsqlRunner,
     PostgresAppScopedProvisioner,
 )
-from nephos_api.runtime_errors import RuntimeBlockedError
 
 
 class FakeCoreV1Api:
@@ -327,29 +326,6 @@ def test_postgres_provisioner_grants_admin_via_entitlement() -> None:
     assert values is not None
     assert values["adminUsername"] == "postgres"
     assert values["adminPassword"] == "admin-secret"
-
-
-def test_postgres_provisioner_blocks_unknown_entitlement() -> None:
-    core = FakeCoreV1Api()
-    runner = FakePsqlRunner()
-    provisioner = PostgresAppScopedProvisioner(
-        core_v1_api=core,
-        psql_runner=runner,
-        password_factory=lambda: "pg-secret",
-    )
-
-    with pytest.raises(RuntimeBlockedError, match="unknown entitlement"):
-        provisioner.provision_binding(
-            BindingProvisioningContext(
-                binding_id="binding_01",
-                app_slug="reporting",
-                service_slug="postgres",
-                alias="database",
-                capability="sql",
-                protocol="postgres",
-                entitlements=frozenset({"root-shell"}),
-            )
-        )
 
 
 def test_postgres_provisioner_reuses_existing_owned_credential_secret() -> None:

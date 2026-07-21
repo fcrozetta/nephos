@@ -18,7 +18,6 @@ from nephos_api.kubernetes_runtime import (
     namespace_name,
 )
 from nephos_api.provisioners.base import BindingProvisioningContext
-from nephos_api.runtime_errors import RuntimeBlockedError
 
 
 class PostgresPsqlRunner(Protocol):
@@ -92,6 +91,11 @@ class KubernetesPsqlRunner:
 
 
 class PostgresAppScopedProvisioner:
+    # ADR 20260721: the sql engine grants the "admin-credentials" entitlement.
+    # The engine router blocks any binding requesting an entitlement outside
+    # this set.
+    recognized_entitlements = frozenset({"admin-credentials"})
+
     def __init__(
         self,
         *,
@@ -110,7 +114,6 @@ class PostgresAppScopedProvisioner:
         if not _is_postgres_binding(context):
             return None
 
-        _assert_recognized_entitlements(context)
         runtime = _postgres_runtime(context.service_slug)
         _assert_active_owned_service_namespace(
             self._core_v1_api,
@@ -401,23 +404,6 @@ def _binding_values(
 
 def _is_service_dependency_context(context: BindingProvisioningContext) -> bool:
     return context.binding_id.startswith("service-")
-
-
-_RECOGNIZED_ENTITLEMENTS = frozenset({"admin-credentials"})
-
-
-def _assert_recognized_entitlements(context: BindingProvisioningContext) -> None:
-    # ADR 20260721: an engine blocks loudly on an entitlement it does not
-    # understand rather than silently ignoring the grant request.
-    unknown = context.entitlements - _RECOGNIZED_ENTITLEMENTS
-    if unknown:
-        raise RuntimeBlockedError(
-            reason="binding_entitlement_unknown",
-            message=(
-                f"Binding requests unknown entitlement(s) {sorted(unknown)}; "
-                "the sql engine grants only 'admin-credentials'."
-            ),
-        )
 
 
 def _grants_admin_credentials(context: BindingProvisioningContext) -> bool:

@@ -321,6 +321,10 @@ class PulumiAutomationZitadelRunner:
 
 
 class ZitadelAppScopedProvisioner:
+    # ADR 20260721: the oidc engine recognizes no entitlements; the engine router
+    # blocks any binding that requests one.
+    recognized_entitlements: frozenset[str] = frozenset()
+
     def __init__(self, client: ZitadelProvisioningClient | None = None) -> None:
         self._client = client
 

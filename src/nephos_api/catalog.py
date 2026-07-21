@@ -196,6 +196,19 @@ class AppSpec(BaseModel):
     config: AppConfig = Field(default_factory=AppConfig)
     runtime: RuntimeRef
 
+    @model_validator(mode="after")
+    def _reject_app_entitlements(self) -> AppSpec:
+        # ADR 20260721: entitlements are honored only on service->service
+        # dependencies today; the App binding path does not carry them, so an
+        # App-declared entitlement would be silently dropped. Reject it loudly
+        # until the App binding path propagates entitlements.
+        if any(requirement.entitlements for requirement in self.requires):
+            raise ValueError(
+                "App capability requirements cannot declare 'entitlements' "
+                "(ADR 20260721: app binding entitlements are not wired yet)."
+            )
+        return self
+
 
 class ProvidedCapability(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)

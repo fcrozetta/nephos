@@ -9,8 +9,14 @@ from nephos_api.runtime_errors import RuntimeBlockedError
 
 
 class _Recorder:
-    def __init__(self, result: dict | None = None) -> None:
+    def __init__(
+        self,
+        result: dict | None = None,
+        *,
+        recognized_entitlements: frozenset[str] = frozenset(),
+    ) -> None:
         self.result = result
+        self.recognized_entitlements = recognized_entitlements
         self.provisioned: list = []
         self.deprovisioned: list = []
 
@@ -22,7 +28,7 @@ class _Recorder:
         self.deprovisioned.append(context)
 
 
-def _ctx(engine=None, capability="sql", protocol="postgres"):
+def _ctx(engine=None, capability="sql", protocol="postgres", entitlements=frozenset()):
     return BindingProvisioningContext(
         binding_id="b1",
         app_slug="app",
@@ -31,6 +37,7 @@ def _ctx(engine=None, capability="sql", protocol="postgres"):
         capability=capability,
         protocol=protocol,
         provisioning_engine=engine,
+        entitlements=entitlements,
     )
 
 
@@ -69,6 +76,43 @@ def test_deprovision_routes_to_declared_engine():
     router.deprovision_binding(_ctx(engine="sql"))
     assert len(sql.deprovisioned) == 1
     assert oidc.deprovisioned == []
+
+
+def test_blocks_entitlement_not_recognized_by_engine():
+    sql = _Recorder(
+        {"uri": "x"}, recognized_entitlements=frozenset({"admin-credentials"})
+    )
+    router = EngineRoutingBindingProvisioner({"sql": sql})
+    with pytest.raises(RuntimeBlockedError, match="not recognized"):
+        router.provision_binding(
+            _ctx(engine="sql", entitlements=frozenset({"root-shell"}))
+        )
+    # Blocked before reaching the engine.
+    assert sql.provisioned == []
+
+
+def test_passes_recognized_entitlement_to_engine():
+    sql = _Recorder(
+        {"uri": "x"}, recognized_entitlements=frozenset({"admin-credentials"})
+    )
+    router = EngineRoutingBindingProvisioner({"sql": sql})
+    values = router.provision_binding(
+        _ctx(engine="sql", entitlements=frozenset({"admin-credentials"}))
+    )
+    assert values == {"uri": "x"}
+    assert len(sql.provisioned) == 1
+
+
+def test_blocks_entitlement_for_engine_recognizing_none():
+    # An engine that recognizes no entitlements (e.g. oidc) blocks any declared
+    # entitlement rather than silently ignoring it.
+    oidc = _Recorder({"client": "y"})
+    router = EngineRoutingBindingProvisioner({"oidc": oidc})
+    with pytest.raises(RuntimeBlockedError, match="not recognized"):
+        router.provision_binding(
+            _ctx(engine="oidc", entitlements=frozenset({"admin-credentials"}))
+        )
+    assert oidc.provisioned == []
 
 
 def test_provisioning_manifest_accepts_optional_engine():
