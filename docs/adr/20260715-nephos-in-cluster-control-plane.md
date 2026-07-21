@@ -112,3 +112,17 @@ The `nephos setup`/`up`/`status`/`down` CLI landed; this pins the open questions
 - **`down`.** Default stops (scale to 0, state retained); `--destroy` (gated by
   `--yes`, plus a prd guard) deletes the namespace. k3d/host-routing teardown is
   deferred.
+
+## Addendum (backbone: PostgreSQL) — 2026-07-21
+
+Amends the "Backbone drive" and "v1 backbone scope" bullets above: `setup` now
+installs PostgreSQL as part of the backbone drive.
+
+- **Drive order.** default domain → OpenBao → **PostgreSQL** → console, each
+  awaited before the next. OpenBao must be ready first so the postgres
+  admin-password `secrets://` ref can materialize.
+- **v1 backbone scope.** `setup` installs **OpenBao + PostgreSQL + console** —
+  all turnkey and on-model (the postgres admin-password is generated via the
+  registry `generate` policy, materialized in OpenBao at deploy, never
+  operator-entered). Only zitadel is still deferred: it needs symbol-capable
+  secret generation and ingress/domain fixes (backbone-hardening, #60/#61/#64).
