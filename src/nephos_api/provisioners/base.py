@@ -15,8 +15,10 @@ class BindingProvisioningContext:
     app_routes: tuple[Mapping[str, object], ...] = ()
     platform_domains: tuple[Mapping[str, object], ...] = ()
     # Registry-declared provisioning engine for the service (ADR 20260718).
-    # None -> legacy (capability, protocol) predicate dispatch.
     provisioning_engine: str | None = None
+    # Elevated grants this binding is entitled to (ADR 20260721), from the
+    # consumer's capability requirement. Engine-interpreted; empty = default-deny.
+    entitlements: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if self.service_config is None:

@@ -292,6 +292,9 @@ class ProviderRuntimeDeployer:
                     provisioning_engine=self._provider_provisioning_engine(
                         provider_row
                     ),
+                    # ADR 20260721: elevated grants the consumer declared on this
+                    # requirement (e.g. admin-credentials). Default-deny.
+                    entitlements=frozenset(requirement.entitlements),
                 )
             )
         return contexts

@@ -18,6 +18,7 @@ from nephos_api.kubernetes_runtime import (
     namespace_name,
 )
 from nephos_api.provisioners.base import BindingProvisioningContext
+from nephos_api.runtime_errors import RuntimeBlockedError
 
 
 class PostgresPsqlRunner(Protocol):
@@ -109,6 +110,7 @@ class PostgresAppScopedProvisioner:
         if not _is_postgres_binding(context):
             return None
 
+        _assert_recognized_entitlements(context)
         runtime = _postgres_runtime(context.service_slug)
         _assert_active_owned_service_namespace(
             self._core_v1_api,
@@ -142,7 +144,7 @@ class PostgresAppScopedProvisioner:
             credentials,
             host=runtime.host,
             admin_password=(
-                admin_password if _is_service_dependency_context(context) else None
+                admin_password if _grants_admin_credentials(context) else None
             ),
         )
 
@@ -399,6 +401,33 @@ def _binding_values(
 
 def _is_service_dependency_context(context: BindingProvisioningContext) -> bool:
     return context.binding_id.startswith("service-")
+
+
+_RECOGNIZED_ENTITLEMENTS = frozenset({"admin-credentials"})
+
+
+def _assert_recognized_entitlements(context: BindingProvisioningContext) -> None:
+    # ADR 20260721: an engine blocks loudly on an entitlement it does not
+    # understand rather than silently ignoring the grant request.
+    unknown = context.entitlements - _RECOGNIZED_ENTITLEMENTS
+    if unknown:
+        raise RuntimeBlockedError(
+            reason="binding_entitlement_unknown",
+            message=(
+                f"Binding requests unknown entitlement(s) {sorted(unknown)}; "
+                "the sql engine grants only 'admin-credentials'."
+            ),
+        )
+
+
+def _grants_admin_credentials(context: BindingProvisioningContext) -> bool:
+    # ADR 20260721: explicit, default-deny entitlement. During the migration the
+    # legacy service-dependency heuristic is still honored so a not-yet-declared
+    # consumer keeps its admin grant; removed once manifests declare the
+    # entitlement (final increment).
+    if "admin-credentials" in context.entitlements:
+        return True
+    return _is_service_dependency_context(context)
 
 
 def _provision_database_sql(credentials: dict[str, str]) -> str:
