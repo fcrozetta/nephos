@@ -269,7 +269,10 @@ def test_postgres_provisioner_creates_credentials_and_returns_outputs() -> None:
     assert "nephos_paperless_database" in runner.calls[0]["sql"]
 
 
-def test_postgres_provisioner_returns_admin_outputs_for_service_dependency() -> None:
+def test_postgres_service_dep_no_admin_without_entitlement() -> None:
+    # ADR 20260721: the legacy "service-" binding-id heuristic is gone. Without
+    # the explicit admin-credentials entitlement, even a service dependency gets
+    # only the app-scoped credential.
     core = FakeCoreV1Api()
     runner = FakePsqlRunner()
     provisioner = PostgresAppScopedProvisioner(
@@ -290,8 +293,8 @@ def test_postgres_provisioner_returns_admin_outputs_for_service_dependency() -> 
     )
 
     assert values is not None
-    assert values["adminUsername"] == "postgres"
-    assert values["adminPassword"] == "admin-secret"
+    assert "adminUsername" not in values
+    assert "adminPassword" not in values
     created = core.created_secrets[0]
     assert created.string_data == {
         "database": "nephos_zitadel_database",

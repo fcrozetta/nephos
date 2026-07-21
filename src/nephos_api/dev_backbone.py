@@ -135,7 +135,9 @@ def write_alpha_backbone_catalog(root: Path, internal_domain: str) -> None:
         display_name="Zitadel",
         provider_name="zitadel",
         provides=[("oidc", "oidc", "oidc"), ("service-account", "jwt", "jwt")],
-        requires=[("sql", "postgres", "database")],
+        # ADR 20260721: Zitadel maps the provider admin credential and bootstraps
+        # its own schema, so it needs the postgres admin credential.
+        requires=[("sql", "postgres", "database", ("admin-credentials",))],
         config_options=[
             {
                 "name": "image",
@@ -438,7 +440,7 @@ def _write_service(
     provides: list[tuple[str, str, str]],
     config_options: list[dict[str, object]],
     runtime_mappings: list[tuple[str, str]],
-    requires: list[tuple[str, str, str]] | None = None,
+    requires: list[tuple[str, str, str, tuple[str, ...]]] | None = None,
     binding_runtime_mappings: list[tuple[str, str, str]] | None = None,
     provisioning_mode: str = "app-scoped-resource",
     binding_outputs: bool = True,
@@ -459,8 +461,9 @@ def _write_service(
                 "capability": capability,
                 "protocol": protocol,
                 "as": alias,
+                **({"entitlements": list(entitlements)} if entitlements else {}),
             }
-            for capability, protocol, alias in requires or []
+            for capability, protocol, alias, entitlements in requires or []
         ],
         "config": {"options": config_options},
         "provisioning": {"mode": provisioning_mode},

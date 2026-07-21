@@ -402,18 +402,11 @@ def _binding_values(
     return values
 
 
-def _is_service_dependency_context(context: BindingProvisioningContext) -> bool:
-    return context.binding_id.startswith("service-")
-
-
 def _grants_admin_credentials(context: BindingProvisioningContext) -> bool:
-    # ADR 20260721: explicit, default-deny entitlement. During the migration the
-    # legacy service-dependency heuristic is still honored so a not-yet-declared
-    # consumer keeps its admin grant; removed once manifests declare the
-    # entitlement (final increment).
-    if "admin-credentials" in context.entitlements:
-        return True
-    return _is_service_dependency_context(context)
+    # ADR 20260721: admin credentials go only to a binding that explicitly
+    # declares the entitlement (default-deny). The legacy service-dependency
+    # binding-id heuristic was removed once manifests declared the entitlement.
+    return "admin-credentials" in context.entitlements
 
 
 def _provision_database_sql(credentials: dict[str, str]) -> str:
