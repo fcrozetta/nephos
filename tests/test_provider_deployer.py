@@ -421,6 +421,7 @@ def test_provider_runtime_deployer_provisions_service_dependencies(
         capability="sql",
         protocol="postgres",
         alias="postgres",
+        engine="sql",
     )
     zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
     repo = _repo(tmp_path)
@@ -469,6 +470,7 @@ def test_provider_runtime_deployer_provisions_service_dependencies(
     assert provision_context.alias == "database"
     assert provision_context.capability == "sql"
     assert provision_context.protocol == "postgres"
+    assert provision_context.provisioning_engine == "sql"
     assert provisioner.deprovisioned == []
 
 
@@ -482,6 +484,7 @@ def test_provider_runtime_deployer_blocks_service_dependency_until_provider_depl
         capability="sql",
         protocol="postgres",
         alias="postgres",
+        engine="sql",
     )
     zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
     repo = _repo(tmp_path)
@@ -531,6 +534,7 @@ def test_provider_runtime_deployer_deprovisions_service_dependencies_on_uninstal
         capability="sql",
         protocol="postgres",
         alias="postgres",
+        engine="sql",
     )
     zitadel_manifest = _write_service_with_dependency_runtime_mappings(catalog_root)
     repo = _repo(tmp_path)
