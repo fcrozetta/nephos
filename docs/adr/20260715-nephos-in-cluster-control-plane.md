@@ -113,16 +113,20 @@ The `nephos setup`/`up`/`status`/`down` CLI landed; this pins the open questions
   `--yes`, plus a prd guard) deletes the namespace. k3d/host-routing teardown is
   deferred.
 
-## Addendum (backbone: PostgreSQL) — 2026-07-21
+## Addendum (backbone: lazy provider install) — 2026-07-21
 
-Amends the "Backbone drive" and "v1 backbone scope" bullets above: `setup` now
-installs PostgreSQL as part of the backbone drive.
+Reverses the intent to auto-install postgres/zitadel from `setup`. `setup` drives
+only the default domain + **OpenBao + console**; it does not install capability
+providers.
 
-- **Drive order.** default domain → OpenBao → **PostgreSQL** → console, each
-  awaited before the next. OpenBao must be ready first so the postgres
-  admin-password `secrets://` ref can materialize.
-- **v1 backbone scope.** `setup` installs **OpenBao + PostgreSQL + console** —
-  all turnkey and on-model (the postgres admin-password is generated via the
-  registry `generate` policy, materialized in OpenBao at deploy, never
-  operator-entered). Only zitadel is still deferred: it needs symbol-capable
-  secret generation and ingress/domain fixes (backbone-hardening, #60/#61/#64).
+- **Lazy provider install.** A capability provider (e.g. postgres for `sql`) is
+  installed on demand, when a consumer's dependency would otherwise be unmet, not
+  eagerly in the backbone. Nephos resolves the provider from the registered
+  registries in precedence order **core → mythos → community** (skipping any not
+  registered), installs it turnkey, then binds.
+- **Why not eager.** An always-on database on every install is dead weight for
+  installs that never use `sql`; lazy keeps the backbone minimal and stands up
+  infra only when something actually needs it.
+- Postgres is turnkey-installable today (generate/`secrets://` done); only the
+  auto-install-in-`setup` step is dropped. The lazy resolve-and-install mechanism
+  is new work, tracked in #79.
