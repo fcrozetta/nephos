@@ -508,13 +508,7 @@ def default_postgres_provisioner_factory(settings: Settings) -> BindingProvision
     postgres = PostgresAppScopedProvisioner(core_v1_api=core_v1_api)
     zitadel = ZitadelAppScopedProvisioner(client=zitadel_client)
     return SecretResolvingBindingProvisioner(
-        EngineRoutingBindingProvisioner(
-            {"sql": postgres, "oidc": zitadel},
-            # Legacy (capability, protocol) predicate dispatch for services whose
-            # manifest has not declared a provisioning.engine yet (strangler
-            # back-compat; remove once postgres/zitadel manifests are cut over).
-            fallback=[postgres, zitadel],
-        ),
+        EngineRoutingBindingProvisioner({"sql": postgres, "oidc": zitadel}),
         resolver=_build_secret_resolver(settings, core_v1_api=core_v1_api),
     )
 

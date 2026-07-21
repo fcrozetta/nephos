@@ -32,46 +32,39 @@ class EngineRoutingBindingProvisioner:
     """Dispatch a binding to its registry-declared provisioning engine.
 
     ADR 20260718: the service manifest declares which capability-typed engine
-    provisions its bindings (surfaced as ``context.provisioning_engine``). When
-    declared, route to that named backend engine. When absent, fall back to the
-    legacy ``(capability, protocol)`` predicate dispatch across ``fallback`` --
-    the strangler back-compat path so nothing installed today breaks. A declared
-    engine that is not registered blocks loudly rather than silently trying the
-    fallback (which could pick the wrong provisioner).
+    provisions its bindings (surfaced as ``context.provisioning_engine``). The
+    named engine must be registered; a binding that declares no engine, or one
+    whose declared engine is not registered, blocks loudly rather than being
+    handed to the wrong backend. (The strangler back-compat fallback to legacy
+    ``(capability, protocol)`` dispatch was removed once the postgres/zitadel
+    manifests declared their engines.)
     """
 
-    def __init__(
-        self,
-        engines: Mapping[str, BindingProvisioner],
-        *,
-        fallback: Iterable[BindingProvisioner] = (),
-    ) -> None:
+    def __init__(self, engines: Mapping[str, BindingProvisioner]) -> None:
         self._engines = dict(engines)
-        self._fallback = CompositeBindingProvisioner(fallback)
 
     def provision_binding(
         self,
         context: BindingProvisioningContext,
     ) -> dict[str, str] | None:
-        engine = self._resolve_engine(context)
-        if engine is not None:
-            return engine.provision_binding(context)
-        return self._fallback.provision_binding(context)
+        return self._resolve_engine(context).provision_binding(context)
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
-        engine = self._resolve_engine(context)
-        if engine is not None:
-            engine.deprovision_binding(context)
-            return
-        self._fallback.deprovision_binding(context)
+        self._resolve_engine(context).deprovision_binding(context)
 
     def _resolve_engine(
         self,
         context: BindingProvisioningContext,
-    ) -> BindingProvisioner | None:
+    ) -> BindingProvisioner:
         name = context.provisioning_engine
         if name is None:
-            return None
+            raise RuntimeBlockedError(
+                reason="provisioning_engine_missing",
+                message=(
+                    "Binding reached provisioning with no declared "
+                    "provisioning.engine; the service manifest must declare one."
+                ),
+            )
         try:
             return self._engines[name]
         except KeyError as exc:
