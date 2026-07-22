@@ -306,6 +306,22 @@ class CatalogLoader:
             key=lambda entry: (entry["name"], entry["source"]),
         )
 
+    def list_service_providers(
+        self, capability: str, protocol: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Catalog Service entries that provide (capability, protocol), in
+        registry precedence order (core -> mythos -> community).
+
+        Unlike list_services, this keeps _load_entries' source order rather than
+        re-sorting by (name, source), so callers can rank candidates by which
+        registry they came from.
+        """
+        return [
+            entry
+            for entry in self._load_entries(kind="Service", source=None)
+            if entry_provides(entry, capability, protocol)
+        ]
+
     def get_app(self, name: str, source: str | None = None) -> dict[str, Any]:
         return self._get(kind="App", name=name, source=source)
 
@@ -347,6 +363,21 @@ class CatalogLoader:
             if source_id == source:
                 return ((source_id, root),)
         raise CatalogSourceNotFoundError(source=source)
+
+
+def entry_provides(
+    entry: dict[str, Any], capability: str, protocol: str | None
+) -> bool:
+    """Whether a catalog Service entry provides (capability, protocol).
+
+    Same exact-match rule the install/reconcile paths use on deployed manifests
+    (capability and protocol equality; protocol None matches only None), but over
+    a catalog entry dict's `provides` summary.
+    """
+    return any(
+        provided["capability"] == capability and provided["protocol"] == protocol
+        for provided in entry.get("provides", [])
+    )
 
 
 def _load_source_entries(

@@ -11,8 +11,10 @@ from nephos_api.catalog import (
     CatalogSourceNotFoundError,
     CatalogValidationError,
 )
+from nephos_api.dependency_plan import build_app_dependency_plan
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
+from nephos_api.repository import DesiredStateRepository
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -30,6 +32,29 @@ def get_app(
 ) -> dict[str, Any]:
     _validate_catalog_name(name)
     return _handle_catalog_errors(lambda: _loader(request).get_app(name, source=source))
+
+
+@router.get("/apps/{name}/plan")
+def get_app_dependency_plan(
+    name: str,
+    request: Request,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Read-only preflight: what an App's capability requirements need before it
+    can install (already satisfied, needs a pick, installable, or unresolvable).
+    No side effects."""
+    _validate_catalog_name(name)
+    loader = _loader(request)
+    repo = DesiredStateRepository(request.app.state.settings.db_path)
+
+    def _build() -> dict[str, Any]:
+        return build_app_dependency_plan(
+            app_entry=loader.get_app(name, source=source),
+            service_rows=repo.list_service_rows(),
+            loader=loader,
+        )
+
+    return _handle_catalog_errors(_build)
 
 
 @router.get("/services")
