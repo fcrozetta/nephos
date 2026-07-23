@@ -577,12 +577,7 @@ def test_install_app_dependency_install_rolls_back_on_app_conflict(
     assert client.get("/services/postgres-2").status_code == 404
 
 
-def test_install_app_rejects_duplicate_dependency_install_slugs(
-    tmp_path: Path,
-) -> None:
-    # Two requirements install the same provider slug in one request; the clash
-    # is caught before the transaction, not misreported as an app conflict.
-    catalog_root = tmp_path / "catalog"
+def _write_twodb_app(catalog_root: Path) -> None:
     app_path = catalog_root / "apps" / "twodb" / "app.yaml"
     app_path.parent.mkdir(parents=True)
     app_path.write_text(
@@ -609,6 +604,15 @@ spec:
       mappings: []
 """.strip()
     )
+
+
+def test_install_app_shares_one_lazy_provider_across_requirements(
+    tmp_path: Path,
+) -> None:
+    # Two requirements install the same provider; it is created once and both
+    # aliases bind to it (mirrors multiple bindings to one installed Service).
+    catalog_root = tmp_path / "catalog"
+    _write_twodb_app(catalog_root)
     write_service(
         catalog_root, name="postgres", capability="sql", protocol="postgres"
     )
@@ -625,12 +629,60 @@ spec:
         },
     )
 
+    assert response.status_code == 202
+    bindings = response.json()["resource"]["bindings"]
+    assert {b["serviceInstance"]["slug"] for b in bindings} == {"postgres"}
+    assert {b["alias"] for b in bindings} == {"primary-db", "replica-db"}
+    # the provider was created exactly once
+    db_path = client.app.state.settings.db_path
+    with sqlite3.connect(db_path) as connection:
+        service_installs = connection.execute(
+            "SELECT COUNT(*) FROM reconciliation_requests "
+            "WHERE target_type = 'service_instance'"
+        ).fetchone()[0]
+    assert service_installs == 1
+
+
+def test_install_app_rejects_same_slug_from_different_providers(
+    tmp_path: Path,
+) -> None:
+    # Two aliases map the same instance name to different providers: a real
+    # clash, caught before the transaction, not misreported as an app conflict.
+    catalog_root = tmp_path / "catalog"
+    _write_twodb_app(catalog_root)
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    write_service(catalog_root, name="pgalt", capability="sql", protocol="postgres")
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "twodb"},
+            "bindings": {
+                "primary-db": {
+                    "install": {
+                        "name": "postgres",
+                        "source": "default",
+                        "instanceName": "shared",
+                    }
+                },
+                "replica-db": {
+                    "install": {
+                        "name": "pgalt",
+                        "source": "default",
+                        "instanceName": "shared",
+                    }
+                },
+            },
+        },
+    )
+
     assert response.status_code == 409
-    error = response.json()["error"]
-    assert error["code"] == "dependency_instance_conflict"
-    assert error["details"]["aliases"] == ["primary-db", "replica-db"]
+    assert response.json()["error"]["code"] == "dependency_instance_conflict"
     assert client.get("/apps/twodb").status_code == 404
-    assert client.get("/services/postgres").status_code == 404
+    assert client.get("/services/shared").status_code == 404
 
 
 def test_install_app_matches_binding_provider_by_capability_and_protocol(

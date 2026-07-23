@@ -237,14 +237,15 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
         request, requirements_by_alias, install_selections
     )
     repo = _repo(request)
-    _reject_dependency_slug_conflicts(repo, staged)
+    slug_installs, alias_to_slug = _group_dependency_installs(repo, staged)
 
     try:
         with repo.transaction(immediate=True) as tx:
-            # Create dependency providers first (FK + worker ordering), binding
-            # to their fresh ids directly since list_service_rows can't see them.
-            dependency_ids: dict[str, str] = {}
-            for alias, (entry, provider_slug, provider_path) in staged.items():
+            # Create dependency providers first (FK + worker ordering), once per
+            # unique slug so multiple aliases can share one provider; bind to the
+            # fresh ids directly since list_service_rows can't see them.
+            slug_ids: dict[str, str] = {}
+            for provider_slug, (entry, provider_path) in slug_installs.items():
                 service = tx.create_service_instance(
                     slug=provider_slug,
                     catalog_name=entry["name"],
@@ -261,7 +262,7 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
                     action="install",
                     target_snapshot={"slug": service.slug},
                 )
-                dependency_ids[alias] = service.id
+                slug_ids[provider_slug] = service.id
             app = tx.create_app_instance(
                 slug=slug,
                 catalog_name=catalog_entry["name"],
@@ -273,8 +274,11 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
             )
             for requirement in catalog_entry["requires"]:
                 alias = requirement["alias"]
-                service_instance_id = dependency_ids.get(alias) or str(
-                    providers[alias]["id"]
+                install_slug = alias_to_slug.get(alias)
+                service_instance_id = (
+                    slug_ids[install_slug]
+                    if install_slug is not None
+                    else str(providers[alias]["id"])
                 )
                 binding = tx.create_binding(
                     app_instance_id=app.id,
@@ -572,33 +576,47 @@ def _stage_dependency_installs(
     return staged
 
 
-def _reject_dependency_slug_conflicts(
+def _group_dependency_installs(
     repo: DesiredStateRepository,
     staged: dict[str, tuple[dict[str, Any], str, Path]],
-) -> None:
-    # Precise conflicts before the combined transaction, where a duplicate would
-    # otherwise surface as the generic app_instance_conflict naming the app.
-    seen_slugs: dict[str, str] = {}
-    for alias, (_entry, provider_slug, _path) in staged.items():
-        other_alias = seen_slugs.get(provider_slug)
-        if other_alias is not None:
-            raise NephosError(
-                status_code=409,
-                code="dependency_instance_conflict",
-                message="Two dependency installs target the same instance name.",
-                details={
-                    "slug": provider_slug,
-                    "aliases": sorted([other_alias, alias]),
-                },
-            )
-        seen_slugs[provider_slug] = alias
-        if repo.get_service_row(provider_slug) is not None:
-            raise NephosError(
-                status_code=409,
-                code="dependency_instance_conflict",
-                message="Dependency Service instance already exists.",
-                details={"alias": alias, "slug": provider_slug},
-            )
+) -> tuple[dict[str, tuple[dict[str, Any], Path]], dict[str, str]]:
+    """Collapse staged installs to one create per slug, mapping alias -> slug.
+
+    Multiple requirement aliases may point at the same provider (e.g. one
+    multi-capability Service bound twice), so a repeated {slug, provider} is
+    installed once and shared. Two aliases mapping the same slug to *different*
+    providers, or a slug already installed, is a genuine conflict.
+    """
+    slug_installs: dict[str, tuple[dict[str, Any], Path]] = {}
+    alias_to_slug: dict[str, str] = {}
+    for alias, (entry, provider_slug, path) in staged.items():
+        existing = slug_installs.get(provider_slug)
+        if existing is not None:
+            prev_entry = existing[0]
+            if (prev_entry["name"], prev_entry["source"]) != (
+                entry["name"],
+                entry["source"],
+            ):
+                raise NephosError(
+                    status_code=409,
+                    code="dependency_instance_conflict",
+                    message=(
+                        "Two dependency installs target the same instance name "
+                        "with different providers."
+                    ),
+                    details={"slug": provider_slug},
+                )
+        else:
+            if repo.get_service_row(provider_slug) is not None:
+                raise NephosError(
+                    status_code=409,
+                    code="dependency_instance_conflict",
+                    message="Dependency Service instance already exists.",
+                    details={"alias": alias, "slug": provider_slug},
+                )
+            slug_installs[provider_slug] = (entry, path)
+        alias_to_slug[alias] = provider_slug
+    return slug_installs, alias_to_slug
 
 
 def _select_binding_provider(
