@@ -214,6 +214,29 @@ def test_plan_provider_pin_filters_candidates(tmp_path: Path) -> None:
     assert req["candidates"] == [{"name": "postgres", "source": "core-registry"}]
 
 
+def test_plan_provider_pin_selects_installed(tmp_path: Path) -> None:
+    # Two installed providers match the capability, but the pin narrows to one,
+    # so the plan reports satisfied (mirrors the install path honoring the pin).
+    core = tmp_path / "core"
+    _write_consumer_app(core, provider="postgres")
+    _write_provider_service(core, "postgres")
+    _write_provider_service(core, "pgalt")
+    loader = _loader((core, "core-registry"))
+
+    plan = build_app_dependency_plan(
+        app_entry=loader.get_app("consumer"),
+        service_rows=[
+            _service_row("postgres-1", catalog_name="postgres"),
+            _service_row("pgalt-1", catalog_name="pgalt"),
+        ],
+        loader=loader,
+    )
+    req = _only_requirement(plan)
+
+    assert req["state"] == "satisfied"
+    assert req["installedProviders"] == ["postgres-1"]
+
+
 def test_plan_endpoint_returns_installable(tmp_path: Path) -> None:
     core = tmp_path / "core"
     _write_consumer_app(core)

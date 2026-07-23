@@ -349,6 +349,67 @@ def test_install_app_uses_explicit_binding_provider_selection(
     )
 
 
+def test_install_app_honors_requirement_provider_pin(tmp_path: Path) -> None:
+    # Two services match the capability, but the requirement pins one by catalog
+    # name, so install auto-binds to it without needing an explicit selection.
+    catalog_root = tmp_path / "catalog"
+    write_app(
+        catalog_root, capability="sql", protocol="postgres", provider="postgres-lab"
+    )
+    write_service(
+        catalog_root, name="postgres-main", capability="sql", protocol="postgres"
+    )
+    write_service(
+        catalog_root, name="postgres-lab", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    for name in ("postgres-main", "postgres-lab"):
+        assert (
+            client.post(
+                "/services", json={"catalogRef": {"kind": "Service", "name": name}}
+            ).status_code
+            == 202
+        )
+
+    response = client.post(
+        "/apps", json={"catalogRef": {"kind": "App", "name": "paperless"}}
+    )
+
+    assert response.status_code == 202
+    assert response.json()["resource"]["bindings"][0]["serviceInstance"]["slug"] == (
+        "postgres-lab"
+    )
+
+
+def test_install_app_pin_to_uninstalled_provider_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    # The pinned provider is not installed; a different service that also matches
+    # the capability must NOT satisfy the pin.
+    catalog_root = tmp_path / "catalog"
+    write_app(
+        catalog_root, capability="sql", protocol="postgres", provider="postgres-lab"
+    )
+    write_service(
+        catalog_root, name="postgres-main", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres-main"}},
+        ).status_code
+        == 202
+    )
+
+    response = client.post(
+        "/apps", json={"catalogRef": {"kind": "App", "name": "paperless"}}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "binding_provider_unavailable"
+
+
 def test_install_app_matches_binding_provider_by_capability_and_protocol(
     tmp_path: Path,
 ) -> None:
