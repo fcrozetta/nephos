@@ -2541,3 +2541,39 @@ Cluster setup and lifecycle are user-managed or `nephos-cli`-managed for now.
 
 `nephos-api` reconciles into Kubernetes, but it must not start the selected
 cluster itself.
+
+## D243: Capability providers install lazily, on demand
+
+`nephos setup` installs only the backbone (OpenBao + console); it does not
+install capability providers. When an App/Service is installed and a capability
+requirement is unmet, the provider is installed on demand:
+
+- Resolution searches the registered registries in precedence order
+  core -> mythos -> community (skipping any not registered).
+- Ambiguity (more than one eligible provider) is resolved by an explicit user
+  pick, not silent auto-selection.
+- A lazily-installed provider persists like a normally-installed service; it is
+  not torn down when its consumer is removed.
+- Single-user assumption for now; no cross-request race handling.
+
+At install the console shows a modal listing what is missing and what will be
+installed, with Install dependencies / Cancel (cancel aborts the original
+install too). Reverses the earlier "install providers from setup" intent (see
+the ADR 20260715 addendum). Tracked in #79.
+
+## D244: Dependency preflight is a read-only plan endpoint
+
+`GET /catalog/apps/{name}/plan` returns a read-only dependency plan the console
+renders before install. Per capability requirement it reports one of four states:
+
+- satisfied: exactly one eligible installed provider (auto-binds).
+- needs_selection: more than one eligible installed provider (user picks).
+- installable: no installed provider, but >= 1 catalog provider could be
+  installed; candidates in core -> mythos -> community order as {name, source}.
+- unresolvable: no installed provider and no catalog candidate.
+
+Plan shape: {app:{name,source}, requirements:[{alias, capability, protocol?,
+state, installedProviders:[slug], candidates:[{name,source}]}], satisfiable}.
+Match is (capability, protocol) equality honoring an optional requirement.provider
+pin; eligibility reuses the install path's running-provider rule. The mutating
+commit (install chosen providers, then the app) is separate.
