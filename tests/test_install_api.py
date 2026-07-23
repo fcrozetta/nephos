@@ -410,6 +410,281 @@ def test_install_app_pin_to_uninstalled_provider_is_unavailable(
     assert response.json()["error"]["code"] == "binding_provider_unavailable"
 
 
+def test_install_app_installs_dependency_provider(tmp_path: Path) -> None:
+    # No provider installed; the app carries an install directive, so Nephos
+    # installs the provider and binds to it in one request.
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {"install": {"name": "postgres", "source": "default"}}
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["resource"]["bindings"][0]["serviceInstance"]["slug"] == "postgres"
+    # the dependency provider now exists as a Service instance
+    assert client.get("/services/postgres").status_code == 200
+    # reconcile requests cover the provider install, the binding, and the app,
+    # with the provider install enqueued before the app install.
+    db_path = client.app.state.settings.db_path
+    with sqlite3.connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT target_type, action FROM reconciliation_requests "
+            "ORDER BY created_at"
+        ).fetchall()
+    assert ("service_instance", "install") in rows
+    assert ("binding", "reconcile") in rows
+    assert ("app_instance", "install") in rows
+    assert rows.index(("service_instance", "install")) < rows.index(
+        ("app_instance", "install")
+    )
+
+
+def test_install_app_rejects_dependency_install_for_wrong_capability(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(catalog_root, name="cache", capability="kv", protocol=None)
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {"install": {"name": "cache", "source": "default"}}
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "dependency_provider_incapable"
+    assert client.get("/services/cache").status_code == 404
+    assert client.get("/apps/paperless").status_code == 404
+
+
+def test_install_app_rejects_dependency_install_pin_mismatch(tmp_path: Path) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(
+        catalog_root, capability="sql", protocol="postgres", provider="postgres"
+    )
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    write_service(catalog_root, name="pgalt", capability="sql", protocol="postgres")
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {"install": {"name": "pgalt", "source": "default"}}
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "dependency_provider_pin_mismatch"
+
+
+def test_install_app_rejects_dependency_install_slug_conflict(
+    tmp_path: Path,
+) -> None:
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert (
+        client.post(
+            "/services", json={"catalogRef": {"kind": "Service", "name": "postgres"}}
+        ).status_code
+        == 202
+    )
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {"install": {"name": "postgres", "source": "default"}}
+            },
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "dependency_instance_conflict"
+    assert client.get("/apps/paperless").status_code == 404
+
+
+def test_install_app_dependency_install_rolls_back_on_app_conflict(
+    tmp_path: Path,
+) -> None:
+    # A provider is created inside the same transaction as the app; if the app
+    # insert conflicts, the provider create must roll back too.
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+    assert (
+        client.post(
+            "/services", json={"catalogRef": {"kind": "Service", "name": "postgres"}}
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/apps", json={"catalogRef": {"kind": "App", "name": "paperless"}}
+        ).status_code
+        == 202
+    )
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "paperless"},
+            "bindings": {
+                "database": {
+                    "install": {
+                        "name": "postgres",
+                        "source": "default",
+                        "instanceName": "postgres-2",
+                    }
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "app_instance_conflict"
+    # the provider create was rolled back with the failed app install
+    assert client.get("/services/postgres-2").status_code == 404
+
+
+def _write_twodb_app(catalog_root: Path) -> None:
+    app_path = catalog_root / "apps" / "twodb" / "app.yaml"
+    app_path.parent.mkdir(parents=True)
+    app_path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: twodb
+spec:
+  requires:
+    - capability: sql
+      protocol: postgres
+      as: primary-db
+    - capability: sql
+      protocol: postgres
+      as: replica-db
+  runtime:
+    type: helm
+    chart:
+      repository: https://charts.example.test
+      name: twodb
+      version: "1.0.0"
+    values:
+      mappings: []
+""".strip()
+    )
+
+
+def test_install_app_shares_one_lazy_provider_across_requirements(
+    tmp_path: Path,
+) -> None:
+    # Two requirements install the same provider; it is created once and both
+    # aliases bind to it (mirrors multiple bindings to one installed Service).
+    catalog_root = tmp_path / "catalog"
+    _write_twodb_app(catalog_root)
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "twodb"},
+            "bindings": {
+                "primary-db": {"install": {"name": "postgres", "source": "default"}},
+                "replica-db": {"install": {"name": "postgres", "source": "default"}},
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    bindings = response.json()["resource"]["bindings"]
+    assert {b["serviceInstance"]["slug"] for b in bindings} == {"postgres"}
+    assert {b["alias"] for b in bindings} == {"primary-db", "replica-db"}
+    # the provider was created exactly once
+    db_path = client.app.state.settings.db_path
+    with sqlite3.connect(db_path) as connection:
+        service_installs = connection.execute(
+            "SELECT COUNT(*) FROM reconciliation_requests "
+            "WHERE target_type = 'service_instance'"
+        ).fetchone()[0]
+    assert service_installs == 1
+
+
+def test_install_app_rejects_same_slug_from_different_providers(
+    tmp_path: Path,
+) -> None:
+    # Two aliases map the same instance name to different providers: a real
+    # clash, caught before the transaction, not misreported as an app conflict.
+    catalog_root = tmp_path / "catalog"
+    _write_twodb_app(catalog_root)
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    write_service(catalog_root, name="pgalt", capability="sql", protocol="postgres")
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    response = client.post(
+        "/apps",
+        json={
+            "catalogRef": {"kind": "App", "name": "twodb"},
+            "bindings": {
+                "primary-db": {
+                    "install": {
+                        "name": "postgres",
+                        "source": "default",
+                        "instanceName": "shared",
+                    }
+                },
+                "replica-db": {
+                    "install": {
+                        "name": "pgalt",
+                        "source": "default",
+                        "instanceName": "shared",
+                    }
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "dependency_instance_conflict"
+    assert client.get("/apps/twodb").status_code == 404
+    assert client.get("/services/shared").status_code == 404
+
+
 def test_install_app_matches_binding_provider_by_capability_and_protocol(
     tmp_path: Path,
 ) -> None:

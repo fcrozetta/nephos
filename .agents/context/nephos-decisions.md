@@ -2577,3 +2577,24 @@ state, installedProviders:[slug], candidates:[{name,source}]}], satisfiable}.
 Match is (capability, protocol) equality honoring an optional requirement.provider
 pin; eligibility reuses the install path's running-provider rule. The mutating
 commit (install chosen providers, then the app) is separate.
+
+## D245: App install can install dependency providers (install directive)
+
+`POST /apps` may carry, per requirement alias, an install directive instead of an
+existing-instance selection. `BindingSelection` is a union: exactly one of
+
+- `serviceInstance: <slug>` -- bind an already-installed running instance, or
+- `install: {name, source, instanceName?}` -- install that catalog provider
+  Service turnkey (config={}) and bind to it.
+
+The provider(s), App, and bindings are created in one atomic transaction. A
+requirement with no installed provider and no install directive still fails
+closed -- nothing auto-installs without an explicit directive. Fail-fast
+validation before the transaction: the chosen provider must provide the
+requirement's capability (dependency_provider_incapable) and match a
+requirement.provider pin (dependency_provider_pin_mismatch); it installs turnkey
+only (config={}); a slug clash -- an existing instance, or the same instance name
+from two different providers in one request -- returns
+dependency_instance_conflict. Multiple aliases may install the same provider
+(same name/source/slug): it is created once and all those aliases bind to it.
+Implements #79 (commit half).
