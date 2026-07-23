@@ -401,6 +401,7 @@ def _resolve_binding_providers(
             service_rows=service_rows,
             capability=capability,
             protocol=protocol,
+            provider=requirement.get("provider"),
         )
         providers[alias] = _select_binding_provider(
             alias=alias,
@@ -651,11 +652,16 @@ def _matching_provider_rows(
     service_rows: list[dict[str, object]],
     capability: str,
     protocol: object,
+    provider: object = None,
 ) -> list[dict[str, object]]:
     eligible = []
     for service_row in service_rows:
         catalog_name = str(service_row["catalog_name"])
         catalog_source_id = str(service_row["catalog_source_id"])
+        # A requirement.provider pin narrows to that catalog Service name; the
+        # dependency preflight applies the same filter, so plan and install agree.
+        if provider is not None and catalog_name != provider:
+            continue
         service_catalog = _catalog_or_404(
             lambda catalog_name=catalog_name, catalog_source_id=catalog_source_id: (
                 loader.get_service(

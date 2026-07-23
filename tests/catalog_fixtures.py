@@ -7,11 +7,13 @@ def write_app(
     capability: str = "postgres",
     protocol: str | None = None,
     alias: str | None = "database",
+    provider: str | None = None,
 ) -> Path:
     path = root / "apps" / name / "app.yaml"
     path.parent.mkdir(parents=True)
     protocol_yaml = f"\n      protocol: {protocol}" if protocol is not None else ""
     alias_yaml = f"\n      as: {alias}" if alias is not None else ""
+    provider_yaml = f"\n      provider: {provider}" if provider is not None else ""
     path.write_text(
         f"""
 apiVersion: nephos.pro/v1alpha1
@@ -23,7 +25,7 @@ metadata:
   version: "1.0.0"
 spec:
   requires:
-    - capability: {capability}{protocol_yaml}{alias_yaml}
+    - capability: {capability}{protocol_yaml}{alias_yaml}{provider_yaml}
   routes:
     - name: web
       visibility: local
