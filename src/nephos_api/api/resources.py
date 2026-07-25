@@ -246,15 +246,27 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
             # fresh ids directly since list_service_rows can't see them.
             slug_ids: dict[str, str] = {}
             for provider_slug, (entry, provider_path) in slug_installs.items():
-                service = tx.create_service_instance(
-                    slug=provider_slug,
-                    catalog_name=entry["name"],
-                    catalog_version=entry["version"],
-                    catalog_source_id=entry["source"],
-                    catalog_source_path=str(provider_path),
-                    manifest_digest=entry["manifestDigest"],
-                    config={},
-                )
+                try:
+                    service = tx.create_service_instance(
+                        slug=provider_slug,
+                        catalog_name=entry["name"],
+                        catalog_version=entry["version"],
+                        catalog_source_id=entry["source"],
+                        catalog_source_path=str(provider_path),
+                        manifest_digest=entry["manifestDigest"],
+                        config={},
+                    )
+                except sqlite3.IntegrityError as exc:
+                    # The slug passed the pre-check but collided at insert (a
+                    # concurrent install won the race). Report the dependency
+                    # conflict rather than the outer app_instance_conflict,
+                    # which would name the App and the wrong remediation.
+                    raise NephosError(
+                        status_code=409,
+                        code="dependency_instance_conflict",
+                        message="Dependency Service instance already exists.",
+                        details={"slug": provider_slug},
+                    ) from exc
                 tx.create_reconciliation_request(
                     target_type="service_instance",
                     target_id=service.id,
