@@ -17,6 +17,7 @@ from nephos_api.catalog import (
     CatalogSourceNotFoundError,
     CatalogValidationError,
     ServiceManifest,
+    entry_provides,
 )
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
@@ -33,10 +34,33 @@ class CatalogRef(BaseModel):
     source: str | None = None
 
 
-class BindingSelection(BaseModel):
+class InstallDirective(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Install this catalog Service (turnkey, config={}) to satisfy a requirement,
+    # then bind to it. `name`/`source` identify the catalog provider to install.
+    name: str
+    source: str
+    instanceName: str | None = None
+
+
+class BindExistingInstance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     serviceInstance: str
+
+
+class BindNewInstall(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    install: InstallDirective
+
+
+# A real union so the published schema (and generated clients) carry the
+# either/or: bind an installed instance, or install a new provider. Modeling it
+# as two optional fields would let the schema advertise {} and both-at-once,
+# which the endpoint rejects.
+BindingSelection = BindExistingInstance | BindNewInstall
 
 
 class InstallRequest(BaseModel):
@@ -190,15 +214,69 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
     )
     manifest = _load_app_manifest(source_path)
     _validate_app_config(manifest, payload.config)
+    requirements_by_alias = _requirements_by_alias(catalog_entry)
+    _reject_unknown_binding_aliases(payload.bindings, requirements_by_alias)
+    install_selections = {
+        alias: selection.install
+        for alias, selection in payload.bindings.items()
+        if isinstance(selection, BindNewInstall)
+    }
+    instance_selections = {
+        alias: selection
+        for alias, selection in payload.bindings.items()
+        if isinstance(selection, BindExistingInstance)
+    }
+    # Requirements without an install directive resolve against installed
+    # providers (unmet ones still fail closed -- nothing auto-installs without an
+    # explicit install directive from the caller).
     providers = _resolve_binding_providers(
         request,
         catalog_entry,
-        selections=payload.bindings,
+        selections=instance_selections,
+        install_aliases=set(install_selections),
+    )
+    staged = _stage_dependency_installs(
+        request, requirements_by_alias, install_selections
     )
     repo = _repo(request)
+    slug_installs, alias_to_slug = _group_dependency_installs(repo, staged)
 
     try:
-        with repo.transaction() as tx:
+        with repo.transaction(immediate=True) as tx:
+            # Create dependency providers first (FK + worker ordering), once per
+            # unique slug so multiple aliases can share one provider; bind to the
+            # fresh ids directly since list_service_rows can't see them.
+            slug_ids: dict[str, str] = {}
+            for provider_slug, (entry, provider_path) in slug_installs.items():
+                try:
+                    service = tx.create_service_instance(
+                        slug=provider_slug,
+                        catalog_name=entry["name"],
+                        catalog_version=entry["version"],
+                        catalog_source_id=entry["source"],
+                        catalog_source_path=str(provider_path),
+                        manifest_digest=entry["manifestDigest"],
+                        config={},
+                    )
+                except sqlite3.IntegrityError as exc:
+                    # The slug passed the pre-check but collided at insert (a
+                    # concurrent install won the race). Report the dependency
+                    # conflict rather than the outer app_instance_conflict,
+                    # which would name the App and the wrong remediation.
+                    raise NephosError(
+                        status_code=409,
+                        code="dependency_instance_conflict",
+                        message="Dependency Service instance already exists.",
+                        details={"slug": provider_slug},
+                    ) from exc
+                tx.create_reconciliation_request(
+                    target_type="service_instance",
+                    target_id=service.id,
+                    target_generation=service.generation,
+                    action="install",
+                    target_snapshot={"slug": service.slug},
+                )
+                slug_ids[provider_slug] = service.id
             app = tx.create_app_instance(
                 slug=slug,
                 catalog_name=catalog_entry["name"],
@@ -209,16 +287,22 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
                 config=payload.config,
             )
             for requirement in catalog_entry["requires"]:
-                service_row = providers[requirement["alias"]]
+                alias = requirement["alias"]
+                install_slug = alias_to_slug.get(alias)
+                service_instance_id = (
+                    slug_ids[install_slug]
+                    if install_slug is not None
+                    else str(providers[alias]["id"])
+                )
                 binding = tx.create_binding(
                     app_instance_id=app.id,
-                    service_instance_id=str(service_row["id"]),
-                    alias=requirement["alias"],
+                    service_instance_id=service_instance_id,
+                    alias=alias,
                     capability=requirement["capability"],
                     protocol=requirement["protocol"],
                     output_summary={
                         "target": "app-secret",
-                        "secretName": f"nephos-bind-{requirement['alias']}",
+                        "secretName": f"nephos-bind-{alias}",
                         "namespace": f"app-{app.slug}",
                         "keys": ["redacted"],
                         "redacted": True,
@@ -382,7 +466,8 @@ def _resolve_binding_providers(
     request: Request,
     app_catalog_entry: dict[str, Any],
     *,
-    selections: dict[str, BindingSelection],
+    selections: dict[str, BindExistingInstance],
+    install_aliases: set[str] = frozenset(),
 ) -> dict[str, dict[str, object]]:
     repo = _repo(request)
     loader = _loader(request)
@@ -394,6 +479,11 @@ def _resolve_binding_providers(
     providers: dict[str, dict[str, object]] = {}
     for requirement in app_catalog_entry["requires"]:
         alias = requirement["alias"]
+        # Requirements satisfied by installing a new provider are resolved by id
+        # inside the transaction (the just-created row is invisible here, which
+        # reads a separate connection), not from existing installed instances.
+        if alias in install_aliases:
+            continue
         capability = requirement["capability"]
         protocol = requirement.get("protocol")
         capable = _matching_provider_rows(
@@ -438,6 +528,111 @@ def _reject_unknown_binding_aliases(
     )
 
 
+def _stage_dependency_installs(
+    request: Request,
+    requirements_by_alias: dict[str, dict[str, object]],
+    install_selections: dict[str, InstallDirective],
+) -> dict[str, tuple[dict[str, Any], str, Path]]:
+    """Validate each install directive and resolve its catalog Service.
+
+    Returns {alias: (service_catalog_entry, provider_slug, provider_source_path)}
+    for the providers to create in the install transaction. All validation is
+    front-loaded so a bad directive fails before any state is written.
+    """
+    staged: dict[str, tuple[dict[str, Any], str, Path]] = {}
+    for alias, directive in install_selections.items():
+        requirement = requirements_by_alias[alias]
+        pin = requirement.get("provider")
+        if pin is not None and directive.name != pin:
+            raise NephosError(
+                status_code=400,
+                code="dependency_provider_pin_mismatch",
+                message=(
+                    "Dependency install does not match the requirement's "
+                    "provider pin."
+                ),
+                details={
+                    "alias": alias,
+                    "requiredProvider": pin,
+                    "requested": directive.name,
+                },
+            )
+        synthetic = InstallRequest(
+            catalogRef=CatalogRef(
+                kind="Service", name=directive.name, source=directive.source
+            ),
+            instanceName=directive.instanceName,
+        )
+        entry, provider_slug, provider_path = _install_catalog_entry(
+            synthetic, request, kind="Service"
+        )
+        if not entry_provides(
+            entry, requirement["capability"], requirement.get("protocol")
+        ):
+            raise NephosError(
+                status_code=400,
+                code="dependency_provider_incapable",
+                message=(
+                    "Chosen dependency provider does not provide the required "
+                    "capability."
+                ),
+                details={
+                    "alias": alias,
+                    "capability": requirement["capability"],
+                    "protocol": requirement.get("protocol"),
+                    "provider": directive.name,
+                },
+            )
+        # Lazy installs are turnkey: only config={} is allowed. A provider whose
+        # manifest still requires operator config must be installed explicitly.
+        _validate_service_config(_load_service_manifest(provider_path), {})
+        staged[alias] = (entry, provider_slug, provider_path)
+    return staged
+
+
+def _group_dependency_installs(
+    repo: DesiredStateRepository,
+    staged: dict[str, tuple[dict[str, Any], str, Path]],
+) -> tuple[dict[str, tuple[dict[str, Any], Path]], dict[str, str]]:
+    """Collapse staged installs to one create per slug, mapping alias -> slug.
+
+    Multiple requirement aliases may point at the same provider (e.g. one
+    multi-capability Service bound twice), so a repeated {slug, provider} is
+    installed once and shared. Two aliases mapping the same slug to *different*
+    providers, or a slug already installed, is a genuine conflict.
+    """
+    slug_installs: dict[str, tuple[dict[str, Any], Path]] = {}
+    alias_to_slug: dict[str, str] = {}
+    for alias, (entry, provider_slug, path) in staged.items():
+        existing = slug_installs.get(provider_slug)
+        if existing is not None:
+            prev_entry = existing[0]
+            if (prev_entry["name"], prev_entry["source"]) != (
+                entry["name"],
+                entry["source"],
+            ):
+                raise NephosError(
+                    status_code=409,
+                    code="dependency_instance_conflict",
+                    message=(
+                        "Two dependency installs target the same instance name "
+                        "with different providers."
+                    ),
+                    details={"slug": provider_slug},
+                )
+        else:
+            if repo.get_service_row(provider_slug) is not None:
+                raise NephosError(
+                    status_code=409,
+                    code="dependency_instance_conflict",
+                    message="Dependency Service instance already exists.",
+                    details={"alias": alias, "slug": provider_slug},
+                )
+            slug_installs[provider_slug] = (entry, path)
+        alias_to_slug[alias] = provider_slug
+    return slug_installs, alias_to_slug
+
+
 def _select_binding_provider(
     *,
     alias: str,
@@ -445,7 +640,7 @@ def _select_binding_provider(
     protocol: object,
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
-    selection: BindingSelection | None,
+    selection: BindExistingInstance | None,
 ) -> dict[str, object]:
     eligible = [
         service_row
@@ -478,7 +673,7 @@ def _selected_binding_provider(
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
-    selection: BindingSelection,
+    selection: BindExistingInstance,
 ) -> dict[str, object]:
     selected = next(
         (
@@ -525,7 +720,7 @@ def _reject_ineligible_binding_provider(
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
     selected: dict[str, object],
-    selection: BindingSelection,
+    selection: BindExistingInstance,
 ) -> None:
     if str(selected["id"]) in {str(row["id"]) for row in capable}:
         return
@@ -551,7 +746,7 @@ def _reject_unavailable_binding_provider(
     capability: str,
     protocol: object,
     selected: dict[str, object],
-    selection: BindingSelection,
+    selection: BindExistingInstance,
 ) -> None:
     if selected["delete_requested_at"] is not None:
         raise NephosError(

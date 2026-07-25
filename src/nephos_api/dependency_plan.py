@@ -10,9 +10,14 @@ app) is separate.
 State per requirement:
 - satisfied:      exactly one eligible installed provider (auto-binds).
 - needs_selection: more than one eligible installed provider (user picks one).
-- installable:    no installed provider, but >= 1 catalog provider could be
-                  installed (candidates in core -> mythos -> community order).
-- unresolvable:   no installed provider and no catalog provider.
+- installable:    no installed provider, but >= 1 turnkey catalog provider could
+                  be installed (candidates in core -> mythos -> community order).
+- unresolvable:   no installed provider and no turnkey catalog provider.
+
+Candidates are turnkey only: a lazy install always commits config={}, so a
+provider whose manifest still requires operator config cannot be installed this
+way. Those matching providers are reported as `manualCandidates` so a client can
+point at installing them directly instead of offering a button that would fail.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from nephos_api.catalog import (
     CatalogEntryNotFoundError,
     CatalogLoader,
     CatalogSourceNotFoundError,
+    entry_is_turnkey,
     entry_provides,
 )
 
@@ -65,6 +71,7 @@ def _plan_requirement(
         "capability": capability,
         "installedProviders": installed,
         "candidates": [],
+        "manualCandidates": [],
     }
     if protocol is not None:
         item["protocol"] = protocol
@@ -76,8 +83,11 @@ def _plan_requirement(
         item["state"] = "needs_selection"
         return item
 
-    candidates = _catalog_candidates(loader, capability, protocol, provider_pin)
+    candidates, manual = _catalog_candidates(
+        loader, capability, protocol, provider_pin
+    )
     item["candidates"] = candidates
+    item["manualCandidates"] = manual
     item["state"] = "installable" if candidates else "unresolvable"
     return item
 
@@ -114,12 +124,24 @@ def _catalog_candidates(
     capability: str,
     protocol: str | None,
     provider_pin: str | None,
-) -> list[dict[str, str]]:
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Split matching catalog providers into (turnkey, needs-config).
+
+    Only turnkey providers can be lazily installed (the install directive always
+    commits config={}), so offering a config-requiring provider as a candidate
+    would hand the console a plan it cannot commit. Those are reported
+    separately as manual candidates instead.
+    """
     entries = loader.list_service_providers(capability, protocol)
     if provider_pin is not None:
         entries = [entry for entry in entries if entry["name"] == provider_pin]
     # list_service_providers already yields registry precedence order.
-    return [{"name": entry["name"], "source": entry["source"]} for entry in entries]
+    candidates: list[dict[str, str]] = []
+    manual: list[dict[str, str]] = []
+    for entry in entries:
+        ref = {"name": entry["name"], "source": entry["source"]}
+        (candidates if entry_is_turnkey(entry) else manual).append(ref)
+    return candidates, manual
 
 
 def _row_is_available(row: dict[str, object]) -> bool:

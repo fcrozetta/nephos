@@ -365,6 +365,21 @@ class CatalogLoader:
         raise CatalogSourceNotFoundError(source=source)
 
 
+def entry_is_turnkey(entry: dict[str, Any]) -> bool:
+    """Whether a catalog entry installs with no operator input (config={}).
+
+    Mirrors the install-time missing-required gate: an option blocks only when it
+    is required with neither a default nor a generation policy. A non-turnkey
+    provider cannot be lazily installed, so the dependency plan must not offer it
+    as an install candidate.
+    """
+    options = entry.get("config", {}).get("options", [])
+    return not any(
+        option["required"] and option["default"] is None and not option["generated"]
+        for option in options
+    )
+
+
 def entry_provides(
     entry: dict[str, Any], capability: str, protocol: str | None
 ) -> bool:
