@@ -685,6 +685,34 @@ def test_install_app_rejects_same_slug_from_different_providers(
     assert client.get("/services/shared").status_code == 404
 
 
+def test_install_app_rejects_ambiguous_binding_selection_shapes(
+    tmp_path: Path,
+) -> None:
+    # The published schema is a union: exactly one of serviceInstance / install.
+    catalog_root = tmp_path / "catalog"
+    write_app(catalog_root, capability="sql", protocol="postgres")
+    write_service(
+        catalog_root, name="postgres", capability="sql", protocol="postgres"
+    )
+    client = _client_with_catalog_roots(tmp_path / "nephos.db", (catalog_root,))
+
+    for selection in (
+        {},
+        {
+            "serviceInstance": "postgres",
+            "install": {"name": "postgres", "source": "default"},
+        },
+    ):
+        response = client.post(
+            "/apps",
+            json={
+                "catalogRef": {"kind": "App", "name": "paperless"},
+                "bindings": {"database": selection},
+            },
+        )
+        assert response.status_code == 422, selection
+
+
 def test_install_app_matches_binding_provider_by_capability_and_protocol(
     tmp_path: Path,
 ) -> None:

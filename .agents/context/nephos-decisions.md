@@ -2568,12 +2568,19 @@ renders before install. Per capability requirement it reports one of four states
 
 - satisfied: exactly one eligible installed provider (auto-binds).
 - needs_selection: more than one eligible installed provider (user picks).
-- installable: no installed provider, but >= 1 catalog provider could be
+- installable: no installed provider, but >= 1 turnkey catalog provider could be
   installed; candidates in core -> mythos -> community order as {name, source}.
-- unresolvable: no installed provider and no catalog candidate.
+- unresolvable: no installed provider and no turnkey catalog candidate.
+
+Candidates are turnkey only. A lazy install always commits config={}, so a
+matching provider whose manifest still requires operator config (required, no
+default, no generate) cannot be installed this way; those are reported
+separately as `manualCandidates` so a client can point at installing them
+directly instead of offering an action that would fail.
 
 Plan shape: {app:{name,source}, requirements:[{alias, capability, protocol?,
-state, installedProviders:[slug], candidates:[{name,source}]}], satisfiable}.
+state, installedProviders:[slug], candidates:[{name,source}],
+manualCandidates:[{name,source}]}], satisfiable}.
 Match is (capability, protocol) equality honoring an optional requirement.provider
 pin; eligibility reuses the install path's running-provider rule. The mutating
 commit (install chosen providers, then the app) is separate.
@@ -2581,11 +2588,15 @@ commit (install chosen providers, then the app) is separate.
 ## D245: App install can install dependency providers (install directive)
 
 `POST /apps` may carry, per requirement alias, an install directive instead of an
-existing-instance selection. `BindingSelection` is a union: exactly one of
+existing-instance selection. `BindingSelection` is a schema-level union (two
+models, `anyOf`, each requiring its own field and forbidding extras, so the
+published contract and generated clients carry the either/or rather than leaving
+it to runtime validation): exactly one of
 
 - `serviceInstance: <slug>` -- bind an already-installed running instance, or
 - `install: {name, source, instanceName?}` -- install that catalog provider
-  Service turnkey (config={}) and bind to it.
+  Service turnkey (config={}) and bind to it. Only turnkey providers are
+  installable this way, matching the plan's candidate filtering (D244).
 
 The provider(s), App, and bindings are created in one atomic transaction. A
 requirement with no installed provider and no install directive still fails

@@ -237,6 +237,73 @@ def test_plan_provider_pin_selects_installed(tmp_path: Path) -> None:
     assert req["installedProviders"] == ["postgres-1"]
 
 
+def _write_needs_config_service(root: Path, name: str) -> None:
+    # required option with no default and no generate: cannot install turnkey.
+    path = root / "services" / name / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: {name}
+spec:
+  provides:
+    - capability: sql
+      protocol: postgres
+      as: postgres
+  config:
+    options:
+      - name: license-key
+        type: string
+        required: true
+  provisioning:
+    mode: app-scoped-resource
+  runtime:
+    type: provider
+    provider:
+      name: {name}
+    values:
+      mappings: []
+""".strip()
+    )
+
+
+def test_plan_excludes_non_turnkey_provider_from_candidates(tmp_path: Path) -> None:
+    # A provider needing operator config cannot be lazily installed (the commit
+    # always sends config={}), so it must not be offered as a candidate.
+    core = tmp_path / "core"
+    _write_consumer_app(core)
+    _write_needs_config_service(core, "needy")
+    loader = _loader((core, "core-registry"))
+
+    plan = build_app_dependency_plan(
+        app_entry=loader.get_app("consumer"), service_rows=[], loader=loader
+    )
+    req = _only_requirement(plan)
+
+    assert req["state"] == "unresolvable"
+    assert req["candidates"] == []
+    assert req["manualCandidates"] == [{"name": "needy", "source": "core-registry"}]
+
+
+def test_plan_offers_only_turnkey_candidates(tmp_path: Path) -> None:
+    core = tmp_path / "core"
+    _write_consumer_app(core)
+    _write_provider_service(core, "postgres")
+    _write_needs_config_service(core, "needy")
+    loader = _loader((core, "core-registry"))
+
+    plan = build_app_dependency_plan(
+        app_entry=loader.get_app("consumer"), service_rows=[], loader=loader
+    )
+    req = _only_requirement(plan)
+
+    assert req["state"] == "installable"
+    assert req["candidates"] == [{"name": "postgres", "source": "core-registry"}]
+    assert req["manualCandidates"] == [{"name": "needy", "source": "core-registry"}]
+
+
 def test_plan_endpoint_returns_installable(tmp_path: Path) -> None:
     core = tmp_path / "core"
     _write_consumer_app(core)

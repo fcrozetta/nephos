@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 import yaml
 from fastapi import APIRouter, Request, status
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from nephos_api.api.snapshots import compact_status_snapshot, status_snapshot
 from nephos_api.catalog import (
@@ -44,21 +44,23 @@ class InstallDirective(BaseModel):
     instanceName: str | None = None
 
 
-class BindingSelection(BaseModel):
+class BindExistingInstance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Exactly one: bind an already-installed instance, or install a new provider.
-    serviceInstance: str | None = None
-    install: InstallDirective | None = None
+    serviceInstance: str
 
-    @model_validator(mode="after")
-    def _exactly_one_target(self) -> BindingSelection:
-        if (self.serviceInstance is None) == (self.install is None):
-            raise ValueError(
-                "binding selection must set exactly one of "
-                "'serviceInstance' or 'install'"
-            )
-        return self
+
+class BindNewInstall(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    install: InstallDirective
+
+
+# A real union so the published schema (and generated clients) carry the
+# either/or: bind an installed instance, or install a new provider. Modeling it
+# as two optional fields would let the schema advertise {} and both-at-once,
+# which the endpoint rejects.
+BindingSelection = BindExistingInstance | BindNewInstall
 
 
 class InstallRequest(BaseModel):
@@ -217,12 +219,12 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
     install_selections = {
         alias: selection.install
         for alias, selection in payload.bindings.items()
-        if selection.install is not None
+        if isinstance(selection, BindNewInstall)
     }
     instance_selections = {
         alias: selection
         for alias, selection in payload.bindings.items()
-        if selection.serviceInstance is not None
+        if isinstance(selection, BindExistingInstance)
     }
     # Requirements without an install directive resolve against installed
     # providers (unmet ones still fail closed -- nothing auto-installs without an
@@ -464,7 +466,7 @@ def _resolve_binding_providers(
     request: Request,
     app_catalog_entry: dict[str, Any],
     *,
-    selections: dict[str, BindingSelection],
+    selections: dict[str, BindExistingInstance],
     install_aliases: set[str] = frozenset(),
 ) -> dict[str, dict[str, object]]:
     repo = _repo(request)
@@ -638,7 +640,7 @@ def _select_binding_provider(
     protocol: object,
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
-    selection: BindingSelection | None,
+    selection: BindExistingInstance | None,
 ) -> dict[str, object]:
     eligible = [
         service_row
@@ -671,7 +673,7 @@ def _selected_binding_provider(
     service_rows: list[dict[str, object]],
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
-    selection: BindingSelection,
+    selection: BindExistingInstance,
 ) -> dict[str, object]:
     selected = next(
         (
@@ -718,7 +720,7 @@ def _reject_ineligible_binding_provider(
     capable: list[dict[str, object]],
     eligible: list[dict[str, object]],
     selected: dict[str, object],
-    selection: BindingSelection,
+    selection: BindExistingInstance,
 ) -> None:
     if str(selected["id"]) in {str(row["id"]) for row in capable}:
         return
@@ -744,7 +746,7 @@ def _reject_unavailable_binding_provider(
     capability: str,
     protocol: object,
     selected: dict[str, object],
-    selection: BindingSelection,
+    selection: BindExistingInstance,
 ) -> None:
     if selected["delete_requested_at"] is not None:
         raise NephosError(
