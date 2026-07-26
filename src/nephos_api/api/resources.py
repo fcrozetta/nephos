@@ -19,6 +19,7 @@ from nephos_api.catalog import (
     CatalogValidationError,
     ServiceManifest,
     entry_provides,
+    is_sensitive_config_name,
 )
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
@@ -1017,6 +1018,10 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
             service_instance_id=str(row["id"]),
             portals=catalog_entry["portals"],
         ),
+        "credentials": _credentials_snapshot(
+            catalog_entry["credentials"],
+            config=manifest_config_values(row, manifest),
+        ),
         "dependents": [
             {
                 "appInstance": dependent["app_instance_slug"],
@@ -1349,6 +1354,30 @@ def _reject_hostname_collision(
                 )
 
 
+def _credentials_snapshot(
+    declared: dict[str, Any] | None,
+    *,
+    config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The Service's admin login identity, with the username resolved.
+
+    The username is returned in clear text on purpose: it is an account name, not
+    a secret, and withholding it was the whole defect -- an operator could reveal a
+    password without being told which account it opened. The password itself stays
+    out of this payload and behind the reveal endpoint.
+    """
+    if declared is None:
+        return None
+    username = declared["username"]
+    if username is None:
+        resolved = config.get(str(declared["usernameOption"]))
+        username = None if resolved is None else str(resolved)
+    return {
+        "username": username,
+        "passwordOption": declared["passwordOption"],
+    }
+
+
 def _portal_snapshots(
     request: Request,
     *,
@@ -1596,9 +1625,6 @@ def _redacted_config(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _is_sensitive_config_key(key: str) -> bool:
-    lowered = key.lower()
-    return any(
-        marker in lowered
-        for marker in ("password", "secret", "token", "key", "credential")
-    )
+# Single-sourced in catalog.py so redaction, the reveal gate, and manifest
+# validation of credentials.passwordOption cannot disagree.
+_is_sensitive_config_key = is_sensitive_config_name

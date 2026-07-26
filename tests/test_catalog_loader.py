@@ -71,6 +71,7 @@ def test_catalog_loader_lists_normalized_app_and_service_summaries(
                 }
             ],
             "portals": [],
+            "credentials": None,
             "config": {"options": []},
         }
     ]

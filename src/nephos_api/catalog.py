@@ -29,6 +29,17 @@ _ROUTE_INGRESS_NAME_PREFIX = "nephos-route-"
 # unknown name is always a manifest error and is caught at catalog load.
 PORTAL_MAPPING_FIELDS = frozenset({"host", "port", "scheme", "secure", "url"})
 
+# Substrings that mark a config option as a secret. Single-sourced here because
+# three things must agree: the API redacts on it, the reveal endpoint gates on it,
+# and manifest validation rejects a credentials passwordOption that fails it. Two
+# copies would let a manifest declare a credential the platform then prints.
+_SENSITIVE_CONFIG_MARKERS = ("password", "secret", "token", "key", "credential")
+
+
+def is_sensitive_config_name(name: str) -> bool:
+    lowered = name.lower()
+    return any(marker in lowered for marker in _SENSITIVE_CONFIG_MARKERS)
+
 
 class CatalogValidationError(ValueError):
     pass
@@ -266,6 +277,39 @@ class Provisioning(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
 
 
+class ServiceCredentials(BaseModel):
+    """The Service's own admin login identity.
+
+    Not app-scoped binding output: this is the credential an operator uses to
+    sign in to the Service itself. It exists because the username was reaching
+    nobody. `postgres` and `root` were hardcoded in provider code and appeared in
+    no manifest, so Nephos could show an operator a password it had generated
+    while being unable to tell them the account it belonged to.
+
+    Service-scoped rather than portal-scoped so it also covers a Service with no
+    browser surface at all, where the username is still needed to connect (psql).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Exactly one of these. `username` is a fixed identity the runtime imposes
+    # (the postgres superuser); `usernameOption` points at a config option when
+    # the operator chooses it (Zitadel's admin-username).
+    username: str | None = None
+    usernameOption: str | None = None
+    # Which config option holds the password. Named rather than inlined so the
+    # value keeps flowing through the existing redaction and reveal paths.
+    passwordOption: str
+
+    @model_validator(mode="after")
+    def validate_username_source(self) -> ServiceCredentials:
+        if (self.username is None) == (self.usernameOption is None):
+            raise ValueError(
+                "credentials require exactly one of 'username' or 'usernameOption'"
+            )
+        return self
+
+
 class ServiceSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -274,6 +318,7 @@ class ServiceSpec(BaseModel):
     bindings: BindingOutputs | None = None
     config: AppConfig = Field(default_factory=AppConfig)
     portals: list[ServicePortal] = Field(default_factory=list)
+    credentials: ServiceCredentials | None = None
     provisioning: Provisioning
     operations: list[dict[str, Any]] = Field(default_factory=list)
     runtime: RuntimeRef
@@ -646,11 +691,40 @@ def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None
                 )
             output_names.add(output.name)
     _validate_service_portals(path=path, manifest=manifest)
+    _validate_service_credentials(path=path, manifest=manifest)
     _validate_config_options(
         kind="Service",
         path=path,
         options=manifest.spec.config.options,
     )
+
+
+def _validate_service_credentials(*, path: Path, manifest: ServiceManifest) -> None:
+    credentials = manifest.spec.credentials
+    if credentials is None:
+        return
+    option_names = {option.name for option in manifest.spec.config.options}
+    for label, name in (
+        ("credentials usernameOption", credentials.usernameOption),
+        ("credentials passwordOption", credentials.passwordOption),
+    ):
+        if name is None:
+            continue
+        _validate_catalog_identifier(path=path, label=label, value=name)
+        if name not in option_names:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: {label} {name!r} is not a "
+                "declared config option"
+            )
+    # A password option that the API would not treat as sensitive would be shown
+    # in clear text by the config payload and rejected by the reveal endpoint, so
+    # the manifest would be describing a credential the platform does not protect.
+    if not is_sensitive_config_name(credentials.passwordOption):
+        raise CatalogValidationError(
+            f"invalid Service manifest {path}: credentials passwordOption "
+            f"{credentials.passwordOption!r} is not treated as a secret; name it "
+            "so it reads as one (password, secret, token, key, credential)"
+        )
 
 
 def _validate_service_portals(*, path: Path, manifest: ServiceManifest) -> None:
@@ -902,6 +976,15 @@ def _service_summary(
             }
             for portal in manifest.spec.portals
         ],
+        "credentials": (
+            {
+                "username": manifest.spec.credentials.username,
+                "usernameOption": manifest.spec.credentials.usernameOption,
+                "passwordOption": manifest.spec.credentials.passwordOption,
+            }
+            if manifest.spec.credentials is not None
+            else None
+        ),
         "config": {"options": _config_options_summary(manifest.spec.config.options)},
     }
 
