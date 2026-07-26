@@ -700,9 +700,15 @@ def test_ineligible_domain_unpublishes_portals_even_when_deploy_blocks(
     ]
 
 
-def test_service_without_portals_does_not_touch_portal_ingress(
+def test_service_declaring_no_portals_still_reaches_the_runtime_to_prune(
     tmp_path: Path,
 ) -> None:
+    """An empty desired set is an instruction, not a no-op.
+
+    Bailing out here is what let an Ingress survive a registry revision that
+    removed or renamed a portal: nothing enumerated the owned Ingresses, so the
+    orphan kept serving the admin backend.
+    """
     repo = _repo(tmp_path)
     runtime = FakeRuntime()
     with repo.transaction() as tx:
@@ -723,7 +729,9 @@ def test_service_without_portals_does_not_touch_portal_ingress(
 
     assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
 
-    assert runtime.service_portals == []
+    assert runtime.service_portals
+    assert all(call["portals"] == [] for call in runtime.service_portals)
+    assert all(call["service_slug"] == "postgres" for call in runtime.service_portals)
 
 
 def test_service_destroy_deletes_portal_ingress(tmp_path: Path) -> None:

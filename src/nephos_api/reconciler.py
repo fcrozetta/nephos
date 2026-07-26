@@ -628,20 +628,20 @@ class Reconciler:
         )
         return manifest.spec.provisioning.engine
 
-    def _service_portals(self, slug: str) -> list[dict[str, object]]:
+    def _service_portals(self, slug: str) -> list[dict[str, object]] | None:
         row = self._repository.get_service_row(slug)
         if row is None:
             raise RuntimeBlockedError(
                 reason="service_not_found",
                 message="Service desired state was not found.",
             )
-        # A removed catalog source cannot tell us what portals were declared.
-        # Returning none keeps teardown and reconcile from raising here; an
-        # orphaned Ingress is bounded by its Service namespace and goes away with
-        # it on destroy.
+        # None means "desired state unknown", which is different from "declares no
+        # portals". An unreadable manifest must not be read as an instruction to
+        # prune, or a temporarily unavailable registry would tear down a working
+        # portal; an empty list must prune, or a removed portal stays served.
         manifest = _optional_service_manifest_from_row(row)
         if manifest is None:
-            return []
+            return None
         return [
             {
                 "name": portal.name,
@@ -662,7 +662,7 @@ class Reconciler:
         if self._platform_domains_for_portals():
             return
         portals = self._service_portals(slug)
-        if not portals:
+        if portals is None:
             return
         self._runtime.ensure_service_portals(
             service_slug=slug,
@@ -680,7 +680,9 @@ class Reconciler:
         """
         assert self._runtime is not None
         portals = self._service_portals(slug)
-        if not portals:
+        # An empty list still goes to the runtime: that is what prunes an Ingress
+        # whose portal a registry revision removed.
+        if portals is None:
             return
         self._runtime.ensure_service_portals(
             service_slug=slug,

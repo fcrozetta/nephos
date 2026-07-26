@@ -294,6 +294,16 @@ class KubernetesRuntime:
             service_slug,
         )
         ingress_class_name = self._resolve_ingress_class_name()
+        # Prune first. Iterating only the declared portals leaves an Ingress
+        # behind whenever a registry revision removes or renames one, and that
+        # orphan keeps serving the admin backend. The desired set is the source of
+        # truth for which owned portal Ingresses may exist, so anything owned and
+        # not desired goes -- including when the desired set is empty.
+        self._prune_service_portals(
+            namespace=namespace,
+            service_slug=service_slug,
+            keep={str(portal["name"]) for portal in portals},
+        )
         for index, portal in enumerate(portals):
             portal_name = str(portal["name"])
             ingress_name = ingress_name_for_route(portal_name)
@@ -372,6 +382,44 @@ class KubernetesRuntime:
             self._delete_owned_ingress(
                 namespace=namespace,
                 ingress_name=ingress_name_for_route(portal_name),
+                labels=service_portal_labels(
+                    service_slug=service_slug,
+                    portal_name=portal_name,
+                ),
+            )
+
+    def _prune_service_portals(
+        self,
+        *,
+        namespace: str,
+        service_slug: str,
+        keep: set[str],
+    ) -> None:
+        """Delete owned portal Ingresses whose portal is no longer declared.
+
+        Enumerates by label rather than by the declared list, which is the only
+        way to see an Ingress the manifest no longer mentions. `keep` empty is a
+        legitimate instruction to remove them all.
+        """
+        assert self._networking_v1_api is not None
+        selector = f"{MANAGED_BY_LABEL}=nephos,{SERVICE_INSTANCE_LABEL}={service_slug}"
+        try:
+            existing = self._networking_v1_api.list_namespaced_ingress(
+                namespace=namespace,
+                label_selector=selector,
+            ).items
+        except ApiException:
+            return
+        for ingress in existing:
+            metadata = ingress.metadata
+            if metadata is None or not metadata.name:
+                continue
+            portal_name = (metadata.labels or {}).get(ROUTE_LABEL)
+            if portal_name is None or portal_name in keep:
+                continue
+            self._delete_owned_ingress(
+                namespace=namespace,
+                ingress_name=str(metadata.name),
                 labels=service_portal_labels(
                     service_slug=service_slug,
                     portal_name=portal_name,

@@ -422,3 +422,45 @@ def test_install_allows_distinct_hostnames(tmp_path: Path) -> None:
 
     assert installed.status_code == 202
     assert installed.json()["resource"]["slug"] == "auth"
+
+
+def test_install_keeps_a_host_claim_when_the_catalog_entry_is_gone(
+    tmp_path: Path,
+) -> None:
+    """A vanished catalog entry does not release the host.
+
+    The resource's generated Ingress survives until remove/destroy, so treating a
+    failed lookup as "claims nothing" would let the opposite kind take the same
+    host and leave two live Ingresses serving it.
+    """
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    write_routed_app(catalog_root, name="auth")
+    write_service_with_portal(catalog_root, name="auth")
+    migrate_database(db_path=db_path)
+    client = TestClient(
+        create_app(
+            settings=Settings(
+                db_path=db_path,
+                catalog_roots=(catalog_root,),
+                kubeconfig=None,
+                kube_context=None,
+            )
+        )
+    )
+    assert (
+        client.post(
+            "/apps", json={"catalogRef": {"kind": "App", "name": "auth"}}
+        ).status_code
+        == 202
+    )
+
+    # The App's catalog entry disappears, as if its registry were removed.
+    (catalog_root / "apps" / "auth" / "app.yaml").unlink()
+
+    response = client.post(
+        "/services", json={"catalogRef": {"kind": "Service", "name": "auth"}}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "hostname_conflict"

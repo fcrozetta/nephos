@@ -1147,6 +1147,35 @@ def _route_snapshots(
     return snapshots
 
 
+def _stored_host_prefixes(
+    row: dict[str, object],
+    *,
+    kind: Literal["App", "Service"],
+) -> set[str]:
+    """Host prefixes from the manifest still on disk, or empty if unreadable.
+
+    Used only when the catalog lookup fails, so a resource whose registry went
+    away still keeps the hostnames its live Ingress is serving.
+    """
+    path = Path(str(row["catalog_source_path"]))
+    if not path.exists():
+        return set()
+    try:
+        if kind == "App":
+            manifest = _load_app_manifest(path)
+            return app_route_host_prefixes(
+                app_slug=str(row["slug"]),
+                routes=[{"name": route.name} for route in manifest.spec.routes],
+            )
+        service = _load_service_manifest(path)
+        return service_portal_host_prefixes(
+            service_slug=str(row["slug"]),
+            portals=[{"name": portal.name} for portal in service.spec.portals],
+        )
+    except (CatalogValidationError, ValueError, OSError, yaml.YAMLError):
+        return set()
+
+
 def _reject_hostname_collision(
     request: Request,
     *,
@@ -1187,19 +1216,25 @@ def _reject_hostname_collision(
                         str(row["catalog_name"]), source=str(row["catalog_source_id"])
                     )
                 )
+                other_prefixes = (
+                    app_route_host_prefixes(
+                        app_slug=str(row["slug"]), routes=entry["routes"]
+                    )
+                    if other_kind == "App"
+                    else service_portal_host_prefixes(
+                        service_slug=str(row["slug"]), portals=entry["portals"]
+                    )
+                )
             except (CatalogEntryNotFoundError, CatalogSourceNotFoundError):
-                # A resource whose catalog entry is gone cannot be re-derived; it
-                # is also not reconciling routes, so it claims no hostname.
-                continue
-            other_prefixes = (
-                app_route_host_prefixes(
-                    app_slug=str(row["slug"]), routes=entry["routes"]
-                )
-                if other_kind == "App"
-                else service_portal_host_prefixes(
-                    service_slug=str(row["slug"]), portals=entry["portals"]
-                )
-            )
+                # A missing catalog entry is not proof the resource claims no
+                # hostname: its generated Ingress survives until remove/destroy.
+                # Treating lookup failure as "no claim" would let the opposite kind
+                # take the same host and leave two live Ingresses for it. Fall back
+                # to the manifest still on disk; if that is gone too, retain the
+                # bare-slug claim, which is the prefix both kinds always generate.
+                other_prefixes = _stored_host_prefixes(row, kind=other_kind) or {
+                    str(row["slug"])
+                }
             conflicts = sorted(prefixes & other_prefixes)
             if conflicts:
                 raise NephosError(
