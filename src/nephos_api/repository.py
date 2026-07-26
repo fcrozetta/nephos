@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -20,6 +21,7 @@ from nephos_api.domain import (
     validate_dns_suffix,
     validate_machine_identifier,
 )
+from nephos_api.passwords import generate_auth_token, hash_auth_token
 
 
 class DesiredStateRepository:
@@ -60,6 +62,33 @@ class DesiredStateRepository:
                 (username,),
             ).fetchone()
         return dict(row) if row else None
+
+    def resolve_admin_token_subject(self, token: str) -> str | None:
+        """The subject a bearer token authenticates, or None (ADR 20260726).
+
+        Looks up by hash, so the plaintext token is never compared against stored
+        data. An expired row is deleted on the way out rather than left to
+        accumulate; there is no separate reaper.
+        """
+        token_hash = hash_auth_token(token)
+        with connect_database(self.db_path) as connection:
+            row = connection.execute(
+                """
+                SELECT subject, expires_at
+                FROM admin_tokens
+                WHERE token_hash = ?
+                """,
+                (token_hash,),
+            ).fetchone()
+            if row is None:
+                return None
+            if str(row["expires_at"]) <= utc_now():
+                connection.execute(
+                    "DELETE FROM admin_tokens WHERE token_hash = ?",
+                    (token_hash,),
+                )
+                return None
+        return str(row["subject"])
 
     def list_platform_domains(self) -> list[PlatformDomain]:
         with connect_database(self.db_path) as connection:
@@ -448,6 +477,50 @@ class StateTransaction:
             "SELECT count(*) AS count FROM admin_accounts"
         ).fetchone()
         return int(row["count"])
+
+    def create_admin_token(
+        self,
+        *,
+        subject: str,
+        ttl_seconds: int,
+    ) -> tuple[str, str]:
+        """Mint a bearer token, returning (token, expires_at) (ADR 20260726).
+
+        The plaintext token is returned exactly once and never stored; only its
+        hash lands in the table.
+        """
+        token = generate_auth_token()
+        now = datetime.now(UTC).replace(microsecond=0)
+        expires_at = (
+            (now + timedelta(seconds=ttl_seconds)).isoformat().replace("+00:00", "Z")
+        )
+        self._connection.execute(
+            """
+            INSERT INTO admin_tokens(
+                id,
+                token_hash,
+                subject,
+                expires_at,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                generate_id("admtok"),
+                hash_auth_token(token),
+                subject,
+                expires_at,
+                utc_now(),
+            ),
+        )
+        return token, expires_at
+
+    def delete_admin_token(self, token: str) -> bool:
+        cursor = self._connection.execute(
+            "DELETE FROM admin_tokens WHERE token_hash = ?",
+            (hash_auth_token(token),),
+        )
+        return cursor.rowcount > 0
 
     def create_admin_account(
         self,

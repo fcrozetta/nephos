@@ -37,6 +37,7 @@ def test_migrations_are_packaged_resources() -> None:
         "0001_add_binding_protocol.sql",
         "0002_add_admin_accounts.sql",
         "0003_add_platform_domain_service_portals.sql",
+        "0004_add_admin_tokens.sql",
     ]
 
 
@@ -50,6 +51,7 @@ def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
         "0001_add_binding_protocol",
         "0002_add_admin_accounts",
         "0003_add_platform_domain_service_portals",
+        "0004_add_admin_tokens",
     ]
     assert {
         "app_instances",
@@ -74,6 +76,7 @@ def test_migrate_database_is_idempotent(tmp_path: Path) -> None:
         "0001_add_binding_protocol",
         "0002_add_admin_accounts",
         "0003_add_platform_domain_service_portals",
+        "0004_add_admin_tokens",
     ]
 
 

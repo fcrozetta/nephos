@@ -925,22 +925,16 @@ Need to decide later:
 - remote access model
 - whether multi-user is ever needed
 - whether roles/RBAC are needed
-- how an operator retrieves a Service config secret, and specifically **not**
-  through an unauthenticated API. `nephos-api` has no request authentication (the
-  admin-account bootstrap comment says so outright, and an arbitrary in-cluster pod
-  with no credentials gets `200` from `/services`). Adding a reveal endpoint would
-  therefore let any pod read every Service's admin credential, where today that
-  needs cluster-admin RBAC to read Secrets cross-namespace — a real privilege
-  escalation, not merely undoing redaction. Two distinct gaps sit behind this:
-  - operator-supplied secrets (e.g. ArcadeDB `root-password`) are stored verbatim
-    in `config_json` and shown as `[REDACTED]`; the operator already knows them.
-  - generated secrets (e.g. PostgreSQL `admin-password`) are absent from desired
-    state entirely (`config_json` is `{}`) and live only in the secrets provider
-    and the runtime Secret, so Nephos offers the operator **no** path to a value it
-    generated on their behalf. This is the real usability hole.
-  Prerequisite: API authentication (the first item in this list). A CLI-side
-  reveal, gated by the same filesystem/cluster access that already grants Secret
-  reads, would be safe without it but is a new CLI contract and needs an ADR.
+- whether the rest of the API gains authentication, and on what model. ADR
+  20260726 gates **one** endpoint (secret reveal) behind a bearer token from
+  `/auth/login`, deliberately without settling this. Everything else remains
+  unauthenticated: an arbitrary in-cluster pod with no credentials still gets `200`
+  from `/services`. One gated endpoint alongside an otherwise open API is an
+  inconsistency that stands until this is decided.
+- whether reveal should be audited. It is an audit-relevant action and ADR 20260726
+  adds no trail; the status/evidence model is the obvious home.
+- whether reveal extends to App config secrets. Only Services have it today,
+  because that is where the generated-credential gap was.
 
 ## Concrete Backup Implementation Design
 

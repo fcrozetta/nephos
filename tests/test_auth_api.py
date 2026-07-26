@@ -95,7 +95,13 @@ def test_login_succeeds_with_correct_credentials(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json() == {"authenticated": True, "subject": "admin"}
+    body = response.json()
+    # ADR 20260726 added token/expiresAt additively; the pre-existing fields must
+    # keep their shape so the console's login path is unaffected.
+    assert body["authenticated"] is True
+    assert body["subject"] == "admin"
+    assert isinstance(body["token"], str) and len(body["token"]) >= 32
+    assert body["expiresAt"].endswith("Z")
 
 
 def test_login_rejects_wrong_password(tmp_path: Path) -> None:
