@@ -244,9 +244,12 @@ User-managed systems such as Cloudflare Tunnel may terminate TLS outside Nephos.
 
 If generated hostnames collide, Nephos fails and requires an explicit route, App instance, or domain policy change.
 
-Services do not expose admin routes through Nephos ingress in Phase 1.
+Services expose browser surfaces as `spec.portals`, generated at
+`<portal>.<service-slug>.<root-domain>` and gated default-deny per root domain
+(ADR 20260726). Superseded the earlier Phase 1 rule that Services expose no
+routes through Nephos ingress.
 
-Service management stays through Nephos API/CLI operations and future typed Service operations.
+Service management otherwise stays through Nephos API/CLI operations and future typed Service operations.
 
 Phase 1 root domain operations:
 

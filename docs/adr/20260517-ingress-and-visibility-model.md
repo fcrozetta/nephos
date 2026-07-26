@@ -172,6 +172,14 @@ Services do not expose admin routes through Nephos ingress in Phase 1.
 
 Service management stays through Nephos API/CLI operations and future typed Service operations.
 
+**Amended 2026-07-26 by [Service Portals](./20260726-service-portals.md).** This
+clause no longer holds. A Service declares browser surfaces as `spec.portals`, and
+Nephos generates their Ingress at `<portal>.<service-slug>.<root-domain>`. Exposure
+is default-deny per root domain, so a portal publishes only on root domains an
+operator has explicitly opted in. The rest of this ADR — visibility modes, root
+domain configuration, collision behavior, HTTP-only, and stopped/removed semantics
+— continues to apply to portals.
+
 ## Root Domain Operations
 
 Phase 1 needs platform configuration operations for:

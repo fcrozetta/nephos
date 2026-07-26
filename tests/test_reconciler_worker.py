@@ -21,6 +21,8 @@ class FakeRuntime:
         self.binding_secrets: list[dict[str, object]] = []
         self.deleted_binding_secrets: list[dict[str, object]] = []
         self.app_ingresses: list[dict[str, object]] = []
+        self.service_portals: list[dict[str, object]] = []
+        self.deleted_service_portals: list[dict[str, object]] = []
         self.scaled_workloads: list[tuple[str, str, int]] = []
 
     def ensure_namespace(self, resource_type: str, slug: str) -> None:
@@ -78,6 +80,29 @@ class FakeRuntime:
     ) -> None:
         self.app_ingresses.append(
             {"app_slug": app_slug, "routes": routes, "domains": domains}
+        )
+
+    # Reached even for a Service that declares no portals: an empty desired set is
+    # what prunes an Ingress whose portal a registry revision removed.
+    def ensure_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+        domains: list[dict[str, object]],
+    ) -> None:
+        self.service_portals.append(
+            {"service_slug": service_slug, "portals": portals, "domains": domains}
+        )
+
+    def delete_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+    ) -> None:
+        self.deleted_service_portals.append(
+            {"service_slug": service_slug, "portals": portals}
         )
 
     def delete_app_ingresses(

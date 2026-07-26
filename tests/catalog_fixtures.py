@@ -46,6 +46,81 @@ spec:
     return path
 
 
+def write_routed_app(root: Path, *, name: str) -> Path:
+    """An App with a route but no capability requirements.
+
+    Lets a test exercise hostname generation without first installing a provider
+    to satisfy bindings.
+    """
+    path = root / "apps" / name / "app.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: App
+metadata:
+  name: {name}
+spec:
+  routes:
+    - name: web
+      visibility: local
+      target:
+        port: http
+  config:
+    options: []
+  runtime:
+    type: provider
+    provider:
+      name: {name}
+    values:
+      mappings: []
+""".strip()
+    )
+    return path
+
+
+def write_service_with_portal(
+    root: Path,
+    *,
+    name: str = "arcadedb",
+    portal_name: str = "studio",
+    portal_display_name: str = "ArcadeDB Studio",
+    port: str | int = "http",
+) -> Path:
+    """A Service manifest declaring one portal (ADR 20260726)."""
+    path = root / "services" / name / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: {name}
+  displayName: ArcadeDB
+spec:
+  provides:
+    - capability: sql
+      protocol: arcadedb
+      as: sql
+  portals:
+    - name: {portal_name}
+      displayName: {portal_display_name}
+      target:
+        port: {port}
+  provisioning:
+    mode: app-scoped-resource
+  operations: []
+  runtime:
+    type: provider
+    provider:
+      name: {name}
+    values:
+      mappings: []
+""".strip()
+    )
+    return path
+
+
 def write_service(
     root: Path,
     name: str = "postgres",

@@ -65,23 +65,19 @@ class DesiredStateRepository:
         with connect_database(self.db_path) as connection:
             rows = connection.execute(
                 """
-                SELECT id, name, domain, is_default, generation, created_at, updated_at
+                SELECT id,
+                       name,
+                       domain,
+                       is_default,
+                       generation,
+                       allows_service_portals,
+                       created_at,
+                       updated_at
                 FROM platform_domains
                 ORDER BY name
                 """
             ).fetchall()
-        return [
-            PlatformDomain(
-                id=row["id"],
-                name=row["name"],
-                domain=row["domain"],
-                is_default=bool(row["is_default"]),
-                generation=row["generation"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
-            for row in rows
-        ]
+        return [_platform_domain_from_row(row) for row in rows]
 
     def list_app_rows(self) -> list[dict[str, object]]:
         with connect_database(self.db_path) as connection:
@@ -493,6 +489,7 @@ class StateTransaction:
         name: str,
         domain: str,
         is_default: bool,
+        allows_service_portals: bool = False,
     ) -> PlatformDomain:
         validate_machine_identifier(name)
         validate_dns_suffix(domain)
@@ -503,6 +500,7 @@ class StateTransaction:
             domain=domain,
             is_default=is_default,
             generation=1,
+            allows_service_portals=allows_service_portals,
             created_at=now,
             updated_at=now,
         )
@@ -514,10 +512,11 @@ class StateTransaction:
                 domain,
                 is_default,
                 generation,
+                allows_service_portals,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 platform_domain.id,
@@ -525,6 +524,7 @@ class StateTransaction:
                 platform_domain.domain,
                 1 if platform_domain.is_default else 0,
                 platform_domain.generation,
+                1 if platform_domain.allows_service_portals else 0,
                 now,
                 now,
             ),
@@ -553,7 +553,14 @@ class StateTransaction:
     def get_platform_domain_by_name(self, name: str) -> PlatformDomain | None:
         row = self._connection.execute(
             """
-            SELECT id, name, domain, is_default, generation, created_at, updated_at
+            SELECT id,
+                   name,
+                   domain,
+                   is_default,
+                   generation,
+                   allows_service_portals,
+                   created_at,
+                   updated_at
             FROM platform_domains
             WHERE name = ?
             """,
@@ -561,15 +568,29 @@ class StateTransaction:
         ).fetchone()
         if row is None:
             return None
-        return PlatformDomain(
-            id=row["id"],
-            name=row["name"],
-            domain=row["domain"],
-            is_default=bool(row["is_default"]),
-            generation=row["generation"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
+        return _platform_domain_from_row(row)
+
+    def set_platform_domain_service_portals(
+        self,
+        name: str,
+        *,
+        allowed: bool,
+    ) -> PlatformDomain:
+        now = utc_now()
+        self._connection.execute(
+            """
+            UPDATE platform_domains
+            SET allows_service_portals = ?,
+                generation = generation + 1,
+                updated_at = ?
+            WHERE name = ?
+            """,
+            (1 if allowed else 0, now, name),
         )
+        domain = self.get_platform_domain_by_name(name)
+        if domain is None:
+            raise KeyError(name)
+        return domain
 
     def set_default_platform_domain(self, name: str) -> PlatformDomain:
         self.clear_default_platform_domains()
@@ -888,6 +909,19 @@ class StateTransaction:
             """,
             (state, error, now, request_id),
         )
+
+
+def _platform_domain_from_row(row: sqlite3.Row) -> PlatformDomain:
+    return PlatformDomain(
+        id=row["id"],
+        name=row["name"],
+        domain=row["domain"],
+        is_default=bool(row["is_default"]),
+        generation=row["generation"],
+        allows_service_portals=bool(row["allows_service_portals"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
 
 
 def _json_object(value: Mapping[str, object] | None) -> str:

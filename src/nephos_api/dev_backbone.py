@@ -145,15 +145,6 @@ def write_alpha_backbone_catalog(root: Path, internal_domain: str) -> None:
                 "default": "ghcr.io/zitadel/zitadel:v2.58.0",
             },
             {
-                "name": "external-host",
-                "type": "string",
-                "default": f"zitadel.{internal_domain}",
-            },
-            {"name": "external-port", "type": "integer", "default": 8080},
-            {"name": "external-secure", "type": "boolean", "default": False},
-            {"name": "ingress-enabled", "type": "boolean", "default": False},
-            {"name": "ingress-class-name", "type": "string", "default": ""},
-            {
                 "name": "admin-username",
                 "type": "string",
                 "default": f"root@zitadel.{internal_domain}",
@@ -188,13 +179,16 @@ def write_alpha_backbone_catalog(root: Path, internal_domain: str) -> None:
             },
             {"name": "storage-size", "type": "string", "default": "1Gi"},
         ],
+        portals=[("console", "Zitadel Console", "http")],
+        # ADR 20260726: the platform owns the Ingress and the host; Zitadel's
+        # external identity is derived from it rather than configured alongside it.
+        portal_runtime_mappings=[
+            ("console", "host", "externalHost"),
+            ("console", "port", "externalPort"),
+            ("console", "secure", "externalSecure"),
+        ],
         runtime_mappings=[
             ("image", "image"),
-            ("external-host", "externalHost"),
-            ("external-port", "externalPort"),
-            ("external-secure", "externalSecure"),
-            ("ingress-enabled", "ingressEnabled"),
-            ("ingress-class-name", "ingressClassName"),
             ("admin-username", "adminUsername"),
             ("admin-password", "adminPassword"),
             ("master-key", "masterKey"),
@@ -343,7 +337,14 @@ def _install_backbone_desired_state(
     resolved_service_slugs = service_slugs or {
         service_name: service_name for service_name in BACKBONE_SERVICE_NAMES
     }
-    _ensure_platform_domain(api, domain=internal_domain, name_hint="local")
+    # Zitadel declares a portal and derives externalHost from it, so the local
+    # domain must be portal-eligible for the backbone to deploy at all.
+    _ensure_platform_domain(
+        api,
+        domain=internal_domain,
+        name_hint="local",
+        allow_service_portals=True,
+    )
     for service_name in BACKBONE_SERVICE_NAMES:
         service_slug = resolved_service_slugs[service_name]
         log(f"installing Service {service_slug}")
@@ -442,6 +443,8 @@ def _write_service(
     runtime_mappings: list[tuple[str, str]],
     requires: list[tuple[str, str, str, tuple[str, ...]]] | None = None,
     binding_runtime_mappings: list[tuple[str, str, str]] | None = None,
+    portals: list[tuple[str, str, str | int]] | None = None,
+    portal_runtime_mappings: list[tuple[str, str, str]] | None = None,
     provisioning_mode: str = "app-scoped-resource",
     binding_outputs: bool = True,
 ) -> None:
@@ -490,9 +493,29 @@ def _write_service(
                     }
                     for alias, field, target in binding_runtime_mappings or []
                 ]
+                + [
+                    {
+                        "from": {
+                            "kind": "portal",
+                            "name": portal_name,
+                            "field": field,
+                        },
+                        "to": {"helmValue": target},
+                    }
+                    for portal_name, field, target in portal_runtime_mappings or []
+                ]
             },
         },
     }
+    if portals:
+        spec["portals"] = [
+            {
+                "name": portal_name,
+                "displayName": portal_display_name,
+                "target": {"port": port},
+            }
+            for portal_name, portal_display_name, port in portals
+        ]
     if binding_outputs:
         spec["bindings"] = {"outputs": [{"name": "connection", "target": "app-secret"}]}
     manifest = {

@@ -100,6 +100,35 @@ def test_reference_smoke_uses_unique_platform_domain_name_on_name_conflict() -> 
                 "name": "local-smoke",
                 "domain": "nephos.localhost",
                 "default": True,
+                # ADR 20260726: portals stay default-deny unless a caller opts in.
+                "allowsServicePortals": False,
             },
+        )
+    ]
+
+
+def test_ensure_platform_domain_opts_existing_domain_in_to_service_portals() -> None:
+    api = FakeApi(
+        [
+            {
+                "name": "local",
+                "domain": "nephos.localhost",
+                "default": True,
+                "allowsServicePortals": False,
+            }
+        ]
+    )
+
+    _ensure_platform_domain(
+        api,
+        domain="nephos.localhost",
+        name_hint="local",
+        allow_service_portals=True,
+    )
+
+    assert api.posts == [
+        (
+            "/platform/config/domains/local/actions/set-service-portals",
+            {"allowed": True},
         )
     ]

@@ -24,6 +24,13 @@ from nephos_api.errors import NephosError
 from nephos_api.kubernetes_runtime import ResourceType, namespace_name
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
+from nephos_api.routing import (
+    app_route_host_prefixes,
+    portal_canonical_domain,
+    portal_eligible_domains,
+    service_portal_host_prefixes,
+    service_portal_url,
+)
 
 router = APIRouter(tags=["resources"])
 
@@ -105,6 +112,15 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
     manifest = _load_service_manifest(source_path)
     _validate_service_config(manifest, payload.config)
     repo = _repo(request)
+    _reject_hostname_collision(
+        request,
+        kind="Service",
+        slug=slug,
+        prefixes=service_portal_host_prefixes(
+            service_slug=slug,
+            portals=catalog_entry["portals"],
+        ),
+    )
 
     try:
         with repo.transaction() as tx:
@@ -214,6 +230,15 @@ def install_app(payload: InstallRequest, request: Request) -> dict[str, Any]:
     )
     manifest = _load_app_manifest(source_path)
     _validate_app_config(manifest, payload.config)
+    _reject_hostname_collision(
+        request,
+        kind="App",
+        slug=slug,
+        prefixes=app_route_host_prefixes(
+            app_slug=slug,
+            routes=catalog_entry["routes"],
+        ),
+    )
     requirements_by_alias = _requirements_by_alias(catalog_entry)
     _reject_unknown_binding_aliases(payload.bindings, requirements_by_alias)
     install_selections = {
@@ -889,6 +914,12 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
         "catalogRef": _catalog_ref(row),
         "config": _redacted_config(manifest_config_values(row, manifest)),
         "provides": catalog_entry["provides"],
+        "portals": _portal_snapshots(
+            request,
+            service_slug=str(row["slug"]),
+            service_instance_id=str(row["id"]),
+            portals=catalog_entry["portals"],
+        ),
         "dependents": [
             {
                 "appInstance": dependent["app_instance_slug"],
@@ -1114,6 +1145,172 @@ def _route_snapshots(
             }
         )
     return snapshots
+
+
+def _stored_host_prefixes(
+    row: dict[str, object],
+    *,
+    kind: Literal["App", "Service"],
+) -> set[str]:
+    """Host prefixes from the manifest still on disk, or empty if unreadable.
+
+    Used only when the catalog lookup fails, so a resource whose registry went
+    away still keeps the hostnames its live Ingress is serving.
+    """
+    path = Path(str(row["catalog_source_path"]))
+    if not path.exists():
+        return set()
+    try:
+        if kind == "App":
+            manifest = _load_app_manifest(path)
+            return app_route_host_prefixes(
+                app_slug=str(row["slug"]),
+                routes=[{"name": route.name} for route in manifest.spec.routes],
+            )
+        service = _load_service_manifest(path)
+        return service_portal_host_prefixes(
+            service_slug=str(row["slug"]),
+            portals=[{"name": portal.name} for portal in service.spec.portals],
+        )
+    except (CatalogValidationError, ValueError, OSError, yaml.YAMLError):
+        return set()
+
+
+def _reject_hostname_collision(
+    request: Request,
+    *,
+    kind: Literal["App", "Service"],
+    slug: str,
+    prefixes: set[str],
+) -> None:
+    """Fail an install whose generated hostnames would collide (ADR 20260517).
+
+    Service portals became App-symmetric (first portal bare) so an operator can
+    name a portal host by its instance slug -- installing Zitadel as `auth` yields
+    `auth.<domain>`. That puts Service portal hosts in the same namespace as App
+    routes, so `auth` can no longer be both an App and a portal-bearing Service.
+
+    ADR 20260517 requires failing here rather than suffixing or silently
+    overriding. Compare host *prefixes*, not full hosts: every root domain gets the
+    same prefixes, so a collision on one is a collision on all.
+    """
+    if not prefixes:
+        return
+    repo = _repo(request)
+    loader = _loader(request)
+    installed = (
+        ("App", repo.list_app_rows()),
+        ("Service", repo.list_service_rows()),
+    )
+    for other_kind, rows in installed:
+        for row in rows:
+            if other_kind == kind and str(row["slug"]) == slug:
+                continue
+            try:
+                entry = (
+                    loader.get_app(
+                        str(row["catalog_name"]), source=str(row["catalog_source_id"])
+                    )
+                    if other_kind == "App"
+                    else loader.get_service(
+                        str(row["catalog_name"]), source=str(row["catalog_source_id"])
+                    )
+                )
+                other_prefixes = (
+                    app_route_host_prefixes(
+                        app_slug=str(row["slug"]), routes=entry["routes"]
+                    )
+                    if other_kind == "App"
+                    else service_portal_host_prefixes(
+                        service_slug=str(row["slug"]), portals=entry["portals"]
+                    )
+                )
+            except (CatalogEntryNotFoundError, CatalogSourceNotFoundError):
+                # A missing catalog entry is not proof the resource claims no
+                # hostname: its generated Ingress survives until remove/destroy.
+                # Treating lookup failure as "no claim" would let the opposite kind
+                # take the same host and leave two live Ingresses for it. Fall back
+                # to the manifest still on disk; if that is gone too, retain the
+                # bare-slug claim, which is the prefix both kinds always generate.
+                other_prefixes = _stored_host_prefixes(row, kind=other_kind) or {
+                    str(row["slug"])
+                }
+            conflicts = sorted(prefixes & other_prefixes)
+            if conflicts:
+                raise NephosError(
+                    status_code=409,
+                    code="hostname_conflict",
+                    message=(
+                        f"{kind} {slug!r} would generate hostnames already claimed "
+                        f"by {other_kind} {row['slug']!r}."
+                    ),
+                    details={
+                        "conflicts": conflicts,
+                        "conflictingKind": other_kind,
+                        "conflictingInstance": row["slug"],
+                    },
+                )
+
+
+def _portal_snapshots(
+    request: Request,
+    *,
+    service_slug: str,
+    service_instance_id: str,
+    portals: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Service portal snapshots (ADR 20260726).
+
+    A portal with no eligible root domain is reported `published: false` with a
+    reason rather than omitted or given a URL that resolves nowhere: default-deny
+    means unpublished is the normal state on a fresh install, and a silent absence
+    reads as "the feature is broken".
+    """
+    repo = _repo(request)
+    domains = repo.list_platform_domains()
+    canonical = portal_canonical_domain(domains)
+    alias_domains = [
+        domain
+        for domain in portal_eligible_domains(domains)
+        if canonical is None or domain.name != canonical.name
+    ]
+    portal_status = compact_status_snapshot(
+        repo,
+        resource_type="service_instance",
+        resource_id=service_instance_id,
+    )
+    return [
+        {
+            "name": portal["name"],
+            "displayName": portal["displayName"],
+            "target": portal["target"],
+            "published": canonical is not None,
+            "unpublishedReason": (
+                None if canonical is not None else "no_portal_eligible_domain"
+            ),
+            "canonicalUrl": (
+                service_portal_url(
+                    service_slug=service_slug,
+                    portal_name=portal["name"],
+                    domain=canonical.domain,
+                    is_first_portal=index == 0,
+                )
+                if canonical is not None
+                else None
+            ),
+            "aliases": [
+                service_portal_url(
+                    service_slug=service_slug,
+                    portal_name=portal["name"],
+                    domain=domain.domain,
+                    is_first_portal=index == 0,
+                )
+                for domain in alias_domains
+            ],
+            "status": portal_status,
+        }
+        for index, portal in enumerate(portals)
+    ]
 
 
 def _catalog_ref(row: dict[str, object]) -> dict[str, Any]:

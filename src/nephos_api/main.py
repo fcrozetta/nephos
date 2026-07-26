@@ -243,6 +243,30 @@ class _LazyRuntimeAdapter:
     ) -> object:
         return self._get().delete_app_ingresses(app_slug=app_slug, routes=routes)
 
+    def ensure_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+        domains: list[dict[str, object]],
+    ) -> object:
+        return self._get().ensure_service_portals(
+            service_slug=service_slug,
+            portals=portals,
+            domains=domains,
+        )
+
+    def delete_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+    ) -> object:
+        return self._get().delete_service_portals(
+            service_slug=service_slug,
+            portals=portals,
+        )
+
     def _get(self) -> RuntimeAdapter:
         if self._runtime is None:
             self._runtime = self._factory(self._settings)

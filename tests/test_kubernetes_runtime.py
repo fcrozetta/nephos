@@ -8,6 +8,10 @@ from kubernetes.client import (
     V1Namespace,
     V1ObjectMeta,
     V1Secret,
+    V1Service,
+    V1ServiceList,
+    V1ServicePort,
+    V1ServiceSpec,
     V1StatefulSet,
 )
 from kubernetes.client.rest import ApiException
@@ -31,6 +35,57 @@ class FakeCoreV1Api:
         self.created_secrets: list[V1Secret] = []
         self.replaced_secrets: list[V1Secret] = []
         self.deleted_secrets: list[tuple[str, str]] = []
+        self.services: dict[str, list[V1Service]] = {}
+
+    def add_service(
+        self,
+        namespace: str,
+        name: str,
+        *,
+        ports: list[V1ServicePort],
+        labels: dict[str, str] | None = None,
+    ) -> None:
+        """Register a provider-created Service for portal backend resolution.
+
+        Providers name Services `<runtime-name>-<component>`, so the default
+        labels mirror what they actually set rather than the release name.
+        """
+        self.services.setdefault(namespace, []).append(
+            V1Service(
+                metadata=V1ObjectMeta(
+                    name=name,
+                    namespace=namespace,
+                    labels=(
+                        labels
+                        if labels is not None
+                        else {
+                            "app.kubernetes.io/managed-by": "nephos",
+                            "nephos.pro/runtime-name": namespace,
+                        }
+                    ),
+                ),
+                spec=V1ServiceSpec(ports=ports),
+            )
+        )
+
+    def list_namespaced_service(
+        self,
+        namespace: str,
+        label_selector: str = "",
+    ) -> V1ServiceList:
+        required = dict(
+            pair.split("=", 1) for pair in label_selector.split(",") if "=" in pair
+        )
+        return V1ServiceList(
+            items=[
+                service
+                for service in self.services.get(namespace, [])
+                if all(
+                    (service.metadata.labels or {}).get(key) == value
+                    for key, value in required.items()
+                )
+            ]
+        )
 
     def create_namespace(self, body: V1Namespace) -> V1Namespace:
         assert body.metadata is not None
@@ -122,6 +177,22 @@ class FakeNetworkingV1Api:
         if ingress is None:
             raise ApiException(status=404)
         return ingress
+
+    def list_namespaced_ingress(self, namespace: str, label_selector: str = ""):
+        required = dict(
+            pair.split("=", 1) for pair in label_selector.split(",") if "=" in pair
+        )
+
+        def labels_of(ingress: V1Ingress) -> dict[str, str]:
+            return (ingress.metadata.labels or {}) if ingress.metadata else {}
+
+        items = [
+            ingress
+            for (ns, _name), ingress in self.ingresses.items()
+            if ns == namespace
+            and all(labels_of(ingress).get(k) == v for k, v in required.items())
+        ]
+        return type("Result", (), {"items": items})()
 
     def create_namespaced_ingress(
         self,
@@ -945,3 +1016,340 @@ def test_kubernetes_secret_binding_value_source_refuses_unowned_secret() -> None
             alias="database",
             capability="postgres",
         )
+
+
+def test_runtime_creates_service_portal_ingress_in_the_service_namespace() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": "http"}}],
+        domains=[
+            {"domain": "nephos.lcl", "default": True},
+            {"domain": "nephos.other", "default": False},
+        ],
+    )
+
+    assert len(networking.created_ingresses) == 1
+    studio = networking.created_ingresses[0]
+    assert studio.metadata is not None
+    assert studio.metadata.name == "nephos-route-studio"
+    assert studio.metadata.namespace == "svc-arcadedb"
+    assert studio.metadata.labels == {
+        "app.kubernetes.io/managed-by": "nephos",
+        "nephos.pro/service-instance": "arcadedb",
+        "nephos.pro/route": "studio",
+    }
+    # Always portal-prefixed: no bare `arcadedb.<domain>` first-portal case, so an
+    # App named `arcadedb` cannot collide with it.
+    # First portal is bare: the host is the instance slug, not the portal name.
+    assert [rule.host for rule in studio.spec.rules] == [
+        "arcadedb.nephos.lcl",
+        "arcadedb.nephos.other",
+    ]
+    backend = studio.spec.rules[0].http.paths[0].backend.service
+    # Resolved from provider labels, not assumed to be the release name:
+    # the provider names it <runtime-name>-<component>.
+    assert backend.name == "svc-arcadedb-arcadedb"
+    assert backend.port.name == "http"
+
+
+def test_runtime_deletes_portal_ingress_when_no_domain_is_eligible() -> None:
+    # Revoking a domain's portal eligibility must actually unpublish the surface,
+    # not leave a stale Ingress serving an admin console.
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    portals = [{"name": "studio", "target": {"port": "http"}}]
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=portals,
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=portals,
+        domains=[],
+    )
+
+    assert networking.deleted_ingresses == [("svc-arcadedb", "nephos-route-studio")]
+
+
+def test_runtime_replaces_owned_service_portal_ingress() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    portals = [{"name": "studio", "target": {"port": "http"}}]
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=portals,
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=portals,
+        domains=[{"domain": "nephos.changed", "default": True}],
+    )
+
+    assert len(networking.replaced_ingresses) == 1
+    replaced = networking.replaced_ingresses[0]
+    assert [rule.host for rule in replaced.spec.rules] == ["arcadedb.nephos.changed"]
+
+
+def test_runtime_refuses_to_replace_unowned_service_portal_ingress() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    networking.ingresses[("svc-arcadedb", "nephos-route-studio")] = V1Ingress(
+        metadata=V1ObjectMeta(name="nephos-route-studio", labels={})
+    )
+
+    with pytest.raises(KubernetesRuntimeSafetyError, match="refusing to replace"):
+        runtime.ensure_service_portals(
+            service_slug="arcadedb",
+            portals=[{"name": "studio", "target": {"port": "http"}}],
+            domains=[{"domain": "nephos.lcl", "default": True}],
+        )
+
+
+def test_runtime_refuses_portal_ingress_in_unowned_namespace() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+
+    with pytest.raises(KubernetesRuntimeSafetyError, match="unowned namespace"):
+        runtime.ensure_service_portals(
+            service_slug="arcadedb",
+            portals=[{"name": "studio", "target": {"port": "http"}}],
+            domains=[{"domain": "nephos.lcl", "default": True}],
+        )
+
+
+def test_runtime_deletes_owned_service_portals() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": "http"}}],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    runtime.delete_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio"}],
+    )
+
+    assert networking.deleted_ingresses == [("svc-arcadedb", "nephos-route-studio")]
+
+
+def test_runtime_blocks_portal_when_no_service_exposes_the_target_port() -> None:
+    # Fail loudly rather than emitting an Ingress that resolves to nothing and
+    # serves 404 -- the exact failure that hardcoding `svc-<slug>` produced.
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="bolt", port=7687)],
+    )
+
+    with pytest.raises(KubernetesRuntimeSafetyError, match="exposes port"):
+        runtime.ensure_service_portals(
+            service_slug="arcadedb",
+            portals=[{"name": "studio", "target": {"port": "http"}}],
+            domains=[{"domain": "nephos.lcl", "default": True}],
+        )
+
+    assert networking.created_ingresses == []
+
+
+def test_runtime_blocks_portal_when_the_target_port_is_ambiguous() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    for name in ("svc-arcadedb-arcadedb", "svc-arcadedb-headless"):
+        core.add_service(
+            "svc-arcadedb",
+            name,
+            ports=[V1ServicePort(name="http", port=2480)],
+        )
+
+    with pytest.raises(KubernetesRuntimeSafetyError, match="more than"):
+        runtime.ensure_service_portals(
+            service_slug="arcadedb",
+            portals=[{"name": "studio", "target": {"port": "http"}}],
+            domains=[{"domain": "nephos.lcl", "default": True}],
+        )
+
+
+def test_runtime_ignores_unowned_services_when_resolving_a_portal_backend() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "someone-elses-service",
+        ports=[V1ServicePort(name="http", port=2480)],
+        labels={},
+    )
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": "http"}}],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    backend = networking.created_ingresses[0].spec.rules[0].http.paths[0].backend
+    assert backend.service.name == "svc-arcadedb-arcadedb"
+
+
+def test_runtime_resolves_portal_backend_by_numeric_target_port() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": 2480}}],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    backend = networking.created_ingresses[0].spec.rules[0].http.paths[0].backend
+    assert backend.service.name == "svc-arcadedb-arcadedb"
+    assert backend.service.port.number == 2480
+
+
+def test_runtime_prunes_a_portal_removed_from_the_manifest() -> None:
+    """A registry revision that drops a portal must unpublish it.
+
+    Iterating only the declared portals left the old Ingress serving the admin
+    backend, so the desired set has to be compared against what is owned.
+    """
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": "http"}}],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+    assert ("svc-arcadedb", "nephos-route-studio") in networking.ingresses
+
+    # The manifest no longer declares any portal.
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    assert networking.deleted_ingresses == [("svc-arcadedb", "nephos-route-studio")]
+    assert ("svc-arcadedb", "nephos-route-studio") not in networking.ingresses
+
+
+def test_runtime_prunes_a_renamed_portal_and_keeps_the_new_one() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    domains = [{"domain": "nephos.lcl", "default": True}]
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": "http"}}],
+        domains=domains,
+    )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "console", "target": {"port": "http"}}],
+        domains=domains,
+    )
+
+    assert ("svc-arcadedb", "nephos-route-studio") not in networking.ingresses
+    assert ("svc-arcadedb", "nephos-route-console") in networking.ingresses
+
+
+def test_runtime_pruning_leaves_another_services_portals_alone() -> None:
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    pairs = (("arcadedb", "svc-arcadedb-arcadedb"), ("auth", "svc-auth-zitadel"))
+    for slug, svc in pairs:
+        runtime.ensure_namespace("service_instance", slug)
+        core.add_service(
+            f"svc-{slug}", svc, ports=[V1ServicePort(name="http", port=8080)]
+        )
+        runtime.ensure_service_portals(
+            service_slug=slug,
+            portals=[{"name": "console", "target": {"port": "http"}}],
+            domains=[{"domain": "nephos.lcl", "default": True}],
+        )
+
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    assert ("svc-arcadedb", "nephos-route-console") not in networking.ingresses
+    assert ("svc-auth", "nephos-route-console") in networking.ingresses

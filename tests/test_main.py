@@ -3,10 +3,13 @@ from fastapi.testclient import TestClient
 from nephos_api.config import ManagedCatalogRegistry, Settings
 from nephos_api.main import (
     _default_runtime_factory,
+    _LazyRuntimeAdapter,
+    _LazyRuntimeDeployer,
     app,
     create_app,
     default_provider_deployer_factory,
 )
+from nephos_api.reconciler import RuntimeAdapter, RuntimeDeployer
 from nephos_api.repository import DesiredStateRepository
 
 
@@ -196,3 +199,38 @@ def test_default_runtime_factory_provides_apps_api_for_scaling(
     assert isinstance(captured["apps"], FakeAppsV1Api)
     assert isinstance(captured["networking"], FakeNetworkingV1Api)
     assert captured["ingress_class_name"] == "nginx"
+
+
+def _protocol_methods(protocol: type) -> set[str]:
+    return {
+        name
+        for name, value in vars(protocol).items()
+        if callable(value) and not name.startswith("_")
+    }
+
+
+def test_lazy_runtime_adapter_forwards_every_runtime_protocol_method() -> None:
+    """The lazy adapter must cover the whole RuntimeAdapter surface.
+
+    It forwards call-by-call rather than delegating via __getattr__, so a method
+    added to the Protocol is silently missing here until a reconcile hits it at
+    runtime -- which is how `ensure_service_portals` reached a live cluster as
+    "'_LazyRuntimeAdapter' object has no attribute ensure_service_portals".
+    """
+    missing = sorted(
+        name
+        for name in _protocol_methods(RuntimeAdapter)
+        if not callable(getattr(_LazyRuntimeAdapter, name, None))
+    )
+
+    assert missing == []
+
+
+def test_lazy_runtime_deployer_forwards_every_deployer_protocol_method() -> None:
+    missing = sorted(
+        name
+        for name in _protocol_methods(RuntimeDeployer)
+        if not callable(getattr(_LazyRuntimeDeployer, name, None))
+    )
+
+    assert missing == []

@@ -258,3 +258,73 @@ def test_platform_domain_actions_return_not_found(tmp_path: Path) -> None:
     assert remove.status_code == 404
     assert set_default.json()["error"]["code"] == "platform_domain_not_found"
     assert remove.json()["error"]["code"] == "platform_domain_not_found"
+
+
+def test_add_platform_domain_defaults_service_portals_to_denied(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/platform/config/domains",
+        json={"name": "local", "domain": "nephos.lcl", "default": True},
+    )
+
+    # ADR 20260726: adding a root domain must never publish an admin UI as a
+    # side effect, so eligibility is opt-in even for the default domain.
+    assert response.json()["resource"]["allowsServicePortals"] is False
+
+
+def test_add_platform_domain_accepts_service_portal_opt_in(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/platform/config/domains",
+        json={
+            "name": "local",
+            "domain": "nephos.lcl",
+            "default": True,
+            "allowsServicePortals": True,
+        },
+    )
+
+    assert response.json()["resource"]["allowsServicePortals"] is True
+
+
+def test_set_service_portals_action_toggles_eligibility(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    client.post(
+        "/platform/config/domains",
+        json={"name": "local", "domain": "nephos.lcl", "default": True},
+    )
+
+    enabled = client.post(
+        "/platform/config/domains/local/actions/set-service-portals",
+        json={"allowed": True},
+    )
+
+    assert enabled.status_code == 202
+    assert enabled.json()["resource"]["allowsServicePortals"] is True
+    assert enabled.json()["resource"]["generation"] == 2
+    assert enabled.json()["reconciliation"]["state"] == "pending"
+
+    disabled = client.post(
+        "/platform/config/domains/local/actions/set-service-portals",
+        json={"allowed": False},
+    )
+
+    assert disabled.json()["resource"]["allowsServicePortals"] is False
+
+
+def test_set_service_portals_action_returns_404_for_unknown_domain(
+    tmp_path: Path,
+) -> None:
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/platform/config/domains/missing/actions/set-service-portals",
+        json={"allowed": True},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "platform_domain_not_found"

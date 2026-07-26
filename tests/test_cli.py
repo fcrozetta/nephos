@@ -14,6 +14,7 @@ _MIGRATION_ROWS = [
     ("0000_initial",),
     ("0001_add_binding_protocol",),
     ("0002_add_admin_accounts",),
+    ("0003_add_platform_domain_service_portals",),
 ]
 
 

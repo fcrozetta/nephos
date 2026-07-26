@@ -2,6 +2,135 @@
 
 ---
 
+## Current Plan Addendum: Service portals
+
+Goal:
+
+- Let a Service declare its browser surface in the Service description so the
+  platform generates the Ingress and reports the URL, and update the
+  `arcadedb` and `zitadel` core-registry entries to use it.
+
+Decision (Fer, 2026-07-26): accepted `docs/adr/20260726-service-portals.md`.
+
+- host pattern is App-symmetric: first portal bare `<service-slug>.<root-domain>`,
+  later portals `<portal>.<service-slug>.<root-domain>`
+- exposure is default-deny, opt-in per root domain
+- Zitadel's `external-host` derives from its portal, not operator config
+- ADR + schema reviewed before wiring
+
+Revised (Fer, 2026-07-26, after the live deploy): the host pattern was originally
+always portal-prefixed, which made `console.zitadel.<domain>` the OIDC issuer and
+baked the implementation name into the one URL that is hardest to change. Reversed
+to App-symmetric so the operator names it via the instance slug (`auth`). A flat
+capability-style portal name (`auth` with no slug segment) was rejected: `zitadel`
+and `logto` both provide `oidc/oidc`, so both would claim the same host and could
+never coexist. Consequence: Service portal hosts joined the App hostname namespace,
+so install now enforces the ADR 20260517 collision rule (`409 hostname_conflict`).
+
+Current understanding:
+
+- `ServiceSpec` has no `routes`; the whole ingress path is app-only
+  (`_app_routes`, `ensure_app_ingresses` asserting an `app_instance` namespace,
+  `_route_snapshots` reachable only from the App payload).
+- Zitadel reinvented ingress inside its provider via `ingress-enabled` /
+  `ingress-class-name` / `external-host` config feeding
+  `providers/kubernetes._service_ingress`. ArcadeDB Studio (Service port `http`
+  on 2480) has no route at all.
+- `runtime_name("service_instance", slug)` is already `svc-<slug>`, so the
+  backend Service name and namespace need no new convention, and
+  `nephos-route-<portal>` cannot collide with an App Ingress.
+- `_runtime_mapping_value` dispatches on `source.kind`, so `portal` is a
+  contained third branch; the deployer already holds a repository handle and can
+  read `platform_domains`.
+
+Scheme (issue #61):
+
+- ADR 20260517 is accepted and explicit: Phase 1 Nephos-managed ingress is
+  HTTP-only and Nephos-generated URLs use `http://`. `_route_snapshots` conforms;
+  `zitadel._route_scheme` does not (it guesses `https` for any suffix that is not
+  `.local`/`.localhost`, so `nephos.lcl` yields `https` today).
+- The portal path uses one shared helper that conforms to the accepted ADR. It
+  does not extend the suffix guess, and it does not change
+  `zitadel._route_base_urls` (App OIDC redirect URIs), which stays #61's scope.
+
+Refinement of the ADR text:
+
+- Canonical portal URL is the default root domain when that domain is
+  portal-eligible, otherwise the first eligible domain by name. The ADR draft
+  implied canonical is only ever the default domain, which would leave
+  `canonicalUrl` null in the expected setup (default = public tunnel domain,
+  eligible = local only).
+
+Non-goals:
+
+- Do not block install/reconcile when a portal has no eligible domain. The
+  Service still works; only its UI is unreachable. Report it unpublished.
+- Do not change App route exposure (still every configured root domain).
+- Do not resolve #61 for the App redirect-URI path.
+
+Increments (all landed; 498 tests green, ruff clean):
+
+1. `catalog.py`: `ServicePortal`, `ServiceSpec.portals`, portal validation,
+   `MappingSource.kind += "portal"` with declared-portal/known-field checks,
+   `_service_summary` exposes `portals`.
+2. `domain.py` + `0003_add_platform_domain_service_portals.sql` +
+   `repository.py`: `allows_service_portals`, default 0.
+3. `api/platform.py`: expose and accept `allowsServicePortals`, add a toggle
+   action.
+4. `kubernetes_runtime.py`: `ensure_service_portals` / `delete_service_portals`,
+   portal host pattern, owned-portal labels.
+5. `reconciler.py`: `_service_portals`, wire install/start/reconcile/stop and
+   remove/destroy, enqueue service reconciliations on platform-domain changes.
+6. `providers/deployer.py`: `kind: portal` resolution.
+7. `api/resources.py`: Service `portals` snapshots with
+   `published` / `unpublishedReason`.
+8. `providers/kubernetes.py` + `dev_backbone.py`: Zitadel stops owning its
+   Ingress.
+9. Tests.
+10. core-registry: `arcadedb` and `zitadel` manifests + READMEs.
+
+Architecture files changed:
+
+- new ADR: `docs/adr/20260726-service-portals.md` (accepted)
+- `docs/adr/20260517-ingress-and-visibility-model.md`: amendment note on the
+  superseded "Service Admin Routes" clause
+- `.agents/context/nephos-open-questions.md`: both Service-surface questions moved
+  to resolved; decisions digest updated
+- `.agents/context/nephos-architecture.md`,
+  `.agents/context/nephos-runtime-boundaries.md`,
+  `.agents/context/nephos-decisions.md`: the superseded no-Service-routes clause
+  was duplicated in all three and would have read as current
+
+Bugs the live deploy found that the tests did not:
+
+- `_LazyRuntimeAdapter` forwards call-by-call, so it silently lacked the two new
+  Protocol methods until a reconcile hit them. Fixed, plus a test that asserts the
+  adapter covers every `RuntimeAdapter` method.
+- The portal Ingress backend cannot be derived from the release name: Service
+  providers append a component suffix (`svc-arcadedb-arcadedb`). Hardcoding
+  `svc-<slug>` produced a valid Ingress that served 404. Now resolved via the
+  `nephos.pro/runtime-name` label, failing loudly on zero or multiple matches.
+- Revoking a domain's portal eligibility did not unpublish Zitadel: its deploy
+  blocks on `portal_domain_not_eligible`, which aborted the reconcile before the
+  portal teardown and left the console serving. Teardown now runs before deploy.
+
+Follow-up not in scope:
+
+- Zitadel's `admin-username` default is still the literal
+  `root@zitadel.nephos.local`, which names no real host. It is a login identity
+  rather than a URL, so changing the default changes who the admin is. Set it
+  explicitly at install.
+- Removing `external-host` resolves the core of #45 (the
+  `zitadel.{internal_domain}` default that produced `zitadel.zitadel.<domain>`);
+  the remaining hardcoded domain is `admin-username` above.
+- #61 remains open for `zitadel._route_scheme` (App OIDC redirect URIs).
+- nephos-console renders `routes[].canonicalUrl` for Apps but has no `portals`
+  support, so Service portal URLs are not shown. Separate repo.
+- Retrieving a config secret through the console is blocked by deliberate API
+  redaction (`_redacted_config`); exposing it needs a secrets-model decision.
+
+---
+
 ## Current Plan Addendum: Guard managed registry refresh against remote-URL drift
 
 Issue:

@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from catalog_fixtures import write_app, write_service
+from catalog_fixtures import (
+    write_app,
+    write_routed_app,
+    write_service,
+    write_service_with_portal,
+)
 from fastapi.testclient import TestClient
 
 from nephos_api.config import Settings
@@ -191,3 +196,271 @@ def test_app_and_service_nested_binding_entries_include_compact_status(
         "observedAt": binding_status["observedAt"],
     }
     assert dependent_status == binding_status
+
+
+def _portal_client_and_repo(
+    tmp_path: Path,
+) -> tuple[TestClient, DesiredStateRepository]:
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    write_service_with_portal(catalog_root)
+    migrate_database(db_path=db_path)
+    app = create_app(
+        settings=Settings(
+            db_path=db_path,
+            catalog_roots=(catalog_root,),
+            kubeconfig=None,
+            kube_context=None,
+        )
+    )
+    client = TestClient(app)
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "arcadedb"}},
+        ).status_code
+        == 202
+    )
+    return client, DesiredStateRepository(db_path)
+
+
+def test_service_portal_reports_canonical_url_on_eligible_domain(
+    tmp_path: Path,
+) -> None:
+    client, _repo = _portal_client_and_repo(tmp_path)
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={
+                "name": "local",
+                "domain": "nephos.lcl",
+                "default": True,
+                "allowsServicePortals": True,
+            },
+        ).status_code
+        == 202
+    )
+
+    portal = client.get("/services/arcadedb").json()["portals"][0]
+
+    assert portal == {
+        "name": "studio",
+        "displayName": "ArcadeDB Studio",
+        "target": {"port": "http"},
+        "published": True,
+        "unpublishedReason": None,
+        "canonicalUrl": "http://arcadedb.nephos.lcl",
+        "aliases": [],
+        "status": None,
+    }
+
+
+def test_service_portal_reports_unpublished_when_no_domain_is_eligible(
+    tmp_path: Path,
+) -> None:
+    client, _repo = _portal_client_and_repo(tmp_path)
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.lcl", "default": True},
+        ).status_code
+        == 202
+    )
+
+    portal = client.get("/services/arcadedb").json()["portals"][0]
+
+    # Default-deny makes unpublished the normal fresh-install state, so it is
+    # reported explicitly rather than shown as a URL that resolves nowhere.
+    assert portal["published"] is False
+    assert portal["unpublishedReason"] == "no_portal_eligible_domain"
+    assert portal["canonicalUrl"] is None
+    assert portal["aliases"] == []
+
+
+def test_service_portal_excludes_ineligible_domains_from_aliases(
+    tmp_path: Path,
+) -> None:
+    client, _repo = _portal_client_and_repo(tmp_path)
+    # The realistic shape: the default domain is the public tunnelled one and only
+    # the local domain carries portals. The admin UI must not appear on the public
+    # host, and canonical must still resolve to the local one.
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "public", "domain": "nephos.example", "default": True},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={
+                "name": "local",
+                "domain": "nephos.lcl",
+                "default": False,
+                "allowsServicePortals": True,
+            },
+        ).status_code
+        == 202
+    )
+
+    portal = client.get("/services/arcadedb").json()["portals"][0]
+
+    assert portal["canonicalUrl"] == "http://arcadedb.nephos.lcl"
+    assert portal["aliases"] == []
+
+
+def test_service_without_portals_reports_an_empty_portal_list(
+    tmp_path: Path,
+) -> None:
+    client, _repo = _client_and_repo(tmp_path)
+    assert (
+        client.post(
+            "/services",
+            json={"catalogRef": {"kind": "Service", "name": "postgres"}},
+        ).status_code
+        == 202
+    )
+
+    assert client.get("/services/postgres").json()["portals"] == []
+
+
+def _collision_client(tmp_path: Path) -> TestClient:
+    """Catalog with an App and a Service whose slugs both generate a bare host."""
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    write_routed_app(catalog_root, name="auth")
+    write_service_with_portal(catalog_root, name="auth")
+    migrate_database(db_path=db_path)
+    app = create_app(
+        settings=Settings(
+            db_path=db_path,
+            catalog_roots=(catalog_root,),
+            kubeconfig=None,
+            kube_context=None,
+        )
+    )
+    return TestClient(app)
+
+
+def test_service_portal_install_rejects_hostname_claimed_by_an_app(
+    tmp_path: Path,
+) -> None:
+    # ADR 20260517: collisions fail, never silently override. Reachable only since
+    # the first portal became bare and joined the App hostname namespace.
+    client = _collision_client(tmp_path)
+    assert (
+        client.post(
+            "/apps", json={"catalogRef": {"kind": "App", "name": "auth"}}
+        ).status_code
+        == 202
+    )
+
+    response = client.post(
+        "/services",
+        json={"catalogRef": {"kind": "Service", "name": "auth"}},
+    )
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "hostname_conflict"
+    assert error["details"]["conflicts"] == ["auth"]
+    assert error["details"]["conflictingKind"] == "App"
+
+
+def test_app_install_rejects_hostname_claimed_by_a_service_portal(
+    tmp_path: Path,
+) -> None:
+    client = _collision_client(tmp_path)
+    assert (
+        client.post(
+            "/services", json={"catalogRef": {"kind": "Service", "name": "auth"}}
+        ).status_code
+        == 202
+    )
+
+    response = client.post(
+        "/apps", json={"catalogRef": {"kind": "App", "name": "auth"}}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["details"]["conflictingKind"] == "Service"
+
+
+def test_install_allows_distinct_hostnames(tmp_path: Path) -> None:
+    # The realistic case this must not break: Zitadel installed as instance `auth`
+    # alongside an App on its own host.
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    write_routed_app(catalog_root, name="paperless")
+    write_service_with_portal(catalog_root, name="zitadel")
+    migrate_database(db_path=db_path)
+    client = TestClient(
+        create_app(
+            settings=Settings(
+                db_path=db_path,
+                catalog_roots=(catalog_root,),
+                kubeconfig=None,
+                kube_context=None,
+            )
+        )
+    )
+
+    assert (
+        client.post(
+            "/apps", json={"catalogRef": {"kind": "App", "name": "paperless"}}
+        ).status_code
+        == 202
+    )
+    installed = client.post(
+        "/services",
+        json={
+            "catalogRef": {"kind": "Service", "name": "zitadel"},
+            "instanceName": "auth",
+        },
+    )
+
+    assert installed.status_code == 202
+    assert installed.json()["resource"]["slug"] == "auth"
+
+
+def test_install_keeps_a_host_claim_when_the_catalog_entry_is_gone(
+    tmp_path: Path,
+) -> None:
+    """A vanished catalog entry does not release the host.
+
+    The resource's generated Ingress survives until remove/destroy, so treating a
+    failed lookup as "claims nothing" would let the opposite kind take the same
+    host and leave two live Ingresses serving it.
+    """
+    db_path = tmp_path / "nephos.db"
+    catalog_root = tmp_path / "catalog"
+    write_routed_app(catalog_root, name="auth")
+    write_service_with_portal(catalog_root, name="auth")
+    migrate_database(db_path=db_path)
+    client = TestClient(
+        create_app(
+            settings=Settings(
+                db_path=db_path,
+                catalog_roots=(catalog_root,),
+                kubeconfig=None,
+                kube_context=None,
+            )
+        )
+    )
+    assert (
+        client.post(
+            "/apps", json={"catalogRef": {"kind": "App", "name": "auth"}}
+        ).status_code
+        == 202
+    )
+
+    # The App's catalog entry disappears, as if its registry were removed.
+    (catalog_root / "apps" / "auth" / "app.yaml").unlink()
+
+    response = client.post(
+        "/services", json={"catalogRef": {"kind": "Service", "name": "auth"}}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "hostname_conflict"

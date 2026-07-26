@@ -263,7 +263,20 @@ def _assert_accepted(response, label: str) -> None:
         raise RuntimeError(f"{label} failed: {response.status_code} {response.text}")
 
 
-def _ensure_platform_domain(api, *, domain: str, name_hint: str) -> None:
+def _ensure_platform_domain(
+    api,
+    *,
+    domain: str,
+    name_hint: str,
+    allow_service_portals: bool = False,
+) -> None:
+    """Ensure `domain` exists as the default platform root domain.
+
+    `allow_service_portals` opts the domain in to carrying Service portals
+    (ADR 20260726). Smokes that deploy a Service with a portal must pass it, since
+    portal exposure is default-deny and a portal-derived runtime mapping (e.g.
+    Zitadel's `externalHost`) blocks when no domain is eligible.
+    """
     response = api.get("/platform/config/domains")
     if response.status_code != 200:
         raise RuntimeError(
@@ -273,14 +286,22 @@ def _ensure_platform_domain(api, *, domain: str, name_hint: str) -> None:
     for existing in domains:
         if existing["domain"] != domain:
             continue
-        if existing["default"]:
-            return
-        _assert_accepted(
-            api.post(
-                f"/platform/config/domains/{existing['name']}/actions/set-default"
-            ),
-            "platform domain default",
-        )
+        if not existing["default"]:
+            _assert_accepted(
+                api.post(
+                    f"/platform/config/domains/{existing['name']}/actions/set-default"
+                ),
+                "platform domain default",
+            )
+        if allow_service_portals and not existing["allowsServicePortals"]:
+            _assert_accepted(
+                api.post(
+                    f"/platform/config/domains/{existing['name']}"
+                    "/actions/set-service-portals",
+                    json={"allowed": True},
+                ),
+                "platform domain service portals",
+            )
         return
 
     existing_names = {existing["name"] for existing in domains}
@@ -288,7 +309,12 @@ def _ensure_platform_domain(api, *, domain: str, name_hint: str) -> None:
     _assert_accepted(
         api.post(
             "/platform/config/domains",
-            json={"name": name, "domain": domain, "default": True},
+            json={
+                "name": name,
+                "domain": domain,
+                "default": True,
+                "allowsServicePortals": allow_service_portals,
+            },
         ),
         "platform domain",
     )

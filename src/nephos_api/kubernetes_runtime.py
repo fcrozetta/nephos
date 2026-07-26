@@ -8,6 +8,7 @@ from kubernetes import client
 from kubernetes.client.rest import ApiException
 
 from nephos_api.domain import validate_machine_identifier
+from nephos_api.routing import service_portal_host
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 ResourceType = Literal["app_instance", "service_instance"]
@@ -19,6 +20,10 @@ CAPABILITY_LABEL = "nephos.pro/capability"
 PROTOCOL_LABEL = "nephos.pro/protocol"
 BINDING_ALIAS_LABEL = "nephos.pro/binding-alias"
 ROUTE_LABEL = "nephos.pro/route"
+# Set by every Service runtime provider on the resources it creates, carrying the
+# runtime release name (`svc-<slug>`). Portal ingress resolves its backend Service
+# through this rather than assuming the Service is named after the release.
+RUNTIME_NAME_LABEL = "nephos.pro/runtime-name"
 
 
 class KubernetesRuntimeSafetyError(RuntimeBlockedError):
@@ -236,20 +241,7 @@ class KubernetesRuntime:
     ) -> None:
         if self._networking_v1_api is None:
             raise RuntimeError("NetworkingV1Api is required to reconcile Ingress")
-        namespace = namespace_name("app_instance", app_slug)
-        namespace_resource = self._read_namespace(namespace)
-        if namespace_resource is None or not _is_owned_namespace(
-            namespace_resource,
-            "app_instance",
-            app_slug,
-        ):
-            raise KubernetesRuntimeSafetyError(
-                f"refusing to reconcile Ingress in unowned namespace {namespace}"
-            )
-        if _is_terminating_namespace(namespace_resource):
-            raise KubernetesRuntimeSafetyError(
-                f"refusing to reconcile Ingress in terminating namespace {namespace}"
-            )
+        namespace = self._assert_active_owned_namespace_for("app_instance", app_slug)
         ingress_class_name = self._resolve_ingress_class_name()
         for index, route in enumerate(routes):
             route_name = str(route["name"])
@@ -282,6 +274,259 @@ class KubernetesRuntime:
                     f"refusing to replace unowned Ingress {namespace}/{ingress_name}"
                 )
 
+    def ensure_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+        domains: list[dict[str, object]],
+    ) -> None:
+        """Reconcile Ingress for a Service's portals (ADR 20260726).
+
+        `domains` must already be filtered to portal-eligible root domains. An
+        empty list deletes any previously generated portal Ingress, so revoking a
+        domain's eligibility takes effect instead of leaving the surface exposed.
+        """
+        if self._networking_v1_api is None:
+            raise RuntimeError("NetworkingV1Api is required to reconcile Ingress")
+        namespace = self._assert_active_owned_namespace_for(
+            "service_instance",
+            service_slug,
+        )
+        ingress_class_name = self._resolve_ingress_class_name()
+        # Prune first. Iterating only the declared portals leaves an Ingress
+        # behind whenever a registry revision removes or renames one, and that
+        # orphan keeps serving the admin backend. The desired set is the source of
+        # truth for which owned portal Ingresses may exist, so anything owned and
+        # not desired goes -- including when the desired set is empty.
+        self._prune_service_portals(
+            namespace=namespace,
+            service_slug=service_slug,
+            keep={str(portal["name"]) for portal in portals},
+        )
+        for index, portal in enumerate(portals):
+            portal_name = str(portal["name"])
+            ingress_name = ingress_name_for_route(portal_name)
+            if not domains:
+                self._delete_owned_ingress(
+                    namespace=namespace,
+                    ingress_name=ingress_name,
+                    labels=service_portal_labels(
+                        service_slug=service_slug,
+                        portal_name=portal_name,
+                    ),
+                )
+                continue
+            ingress = _service_portal_ingress(
+                service_slug=service_slug,
+                portal=portal,
+                domains=domains,
+                is_first_portal=index == 0,
+                ingress_class_name=ingress_class_name,
+                backend_service_name=self._resolve_portal_backend_service(
+                    namespace=namespace,
+                    service_slug=service_slug,
+                    portal_name=portal_name,
+                    port=portal["target"]["port"],  # type: ignore[index]
+                ),
+            )
+            existing = self._read_ingress(namespace=namespace, name=ingress_name)
+            if existing is None:
+                self._networking_v1_api.create_namespaced_ingress(
+                    namespace=namespace,
+                    body=ingress,
+                )
+            elif _has_labels(
+                existing,
+                service_portal_labels(
+                    service_slug=service_slug,
+                    portal_name=portal_name,
+                ),
+            ):
+                self._networking_v1_api.replace_namespaced_ingress(
+                    namespace=namespace,
+                    name=ingress_name,
+                    body=ingress,
+                )
+            else:
+                raise KubernetesRuntimeSafetyError(
+                    f"refusing to replace unowned Ingress {namespace}/{ingress_name}"
+                )
+
+    def delete_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+    ) -> None:
+        if self._networking_v1_api is None:
+            raise RuntimeError("NetworkingV1Api is required to reconcile Ingress")
+        namespace = namespace_name("service_instance", service_slug)
+        namespace_resource = self._read_namespace(namespace)
+        if namespace_resource is None:
+            return
+        if not _is_owned_namespace(
+            namespace_resource,
+            "service_instance",
+            service_slug,
+        ):
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to delete Ingress in unowned namespace {namespace}"
+            )
+        if _is_terminating_namespace(namespace_resource):
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to delete Ingress in terminating namespace {namespace}"
+            )
+        for portal in portals:
+            portal_name = str(portal["name"])
+            self._delete_owned_ingress(
+                namespace=namespace,
+                ingress_name=ingress_name_for_route(portal_name),
+                labels=service_portal_labels(
+                    service_slug=service_slug,
+                    portal_name=portal_name,
+                ),
+            )
+
+    def _prune_service_portals(
+        self,
+        *,
+        namespace: str,
+        service_slug: str,
+        keep: set[str],
+    ) -> None:
+        """Delete owned portal Ingresses whose portal is no longer declared.
+
+        Enumerates by label rather than by the declared list, which is the only
+        way to see an Ingress the manifest no longer mentions. `keep` empty is a
+        legitimate instruction to remove them all.
+        """
+        assert self._networking_v1_api is not None
+        selector = f"{MANAGED_BY_LABEL}=nephos,{SERVICE_INSTANCE_LABEL}={service_slug}"
+        try:
+            existing = self._networking_v1_api.list_namespaced_ingress(
+                namespace=namespace,
+                label_selector=selector,
+            ).items
+        except ApiException:
+            return
+        for ingress in existing:
+            metadata = ingress.metadata
+            if metadata is None or not metadata.name:
+                continue
+            portal_name = (metadata.labels or {}).get(ROUTE_LABEL)
+            if portal_name is None or portal_name in keep:
+                continue
+            self._delete_owned_ingress(
+                namespace=namespace,
+                ingress_name=str(metadata.name),
+                labels=service_portal_labels(
+                    service_slug=service_slug,
+                    portal_name=portal_name,
+                ),
+            )
+
+    def _resolve_portal_backend_service(
+        self,
+        *,
+        namespace: str,
+        service_slug: str,
+        portal_name: str,
+        port: object,
+    ) -> str:
+        """The Kubernetes Service a portal Ingress should route to.
+
+        Service providers do not name their Service after the runtime release:
+        they append a component suffix (`svc-postgres-postgresql`,
+        `svc-arcadedb-arcadedb`, `svc-zitadel-zitadel`). So unlike the App path —
+        where the backend name *is* the release name by convention — a portal
+        cannot derive it, and hardcoding `svc-<slug>` produces an Ingress that
+        resolves to nothing and serves 404.
+
+        Resolve instead by the labels every provider already sets, narrowed to the
+        Service actually exposing the portal's target port. Ambiguity and absence
+        both fail loudly rather than picking arbitrarily, and neither leaks a
+        Kubernetes Service name into the Service manifest.
+        """
+        selector = f"{MANAGED_BY_LABEL}=nephos,{RUNTIME_NAME_LABEL}={namespace}"
+        services = self._core_v1_api.list_namespaced_service(
+            namespace=namespace,
+            label_selector=selector,
+        ).items
+        matches = [
+            service
+            for service in services
+            if _service_exposes_port(service, port)
+        ]
+        if not matches:
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to reconcile Ingress for portal {portal_name!r} of "
+                f"Service {service_slug}: no Nephos-owned Service in {namespace} "
+                f"exposes port {port!r}"
+            )
+        if len(matches) > 1:
+            names = ", ".join(
+                sorted(
+                    service.metadata.name
+                    for service in matches
+                    if service.metadata is not None
+                )
+            )
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to reconcile Ingress for portal {portal_name!r} of "
+                f"Service {service_slug}: port {port!r} is exposed by more than "
+                f"one Nephos-owned Service in {namespace} ({names})"
+            )
+        metadata = matches[0].metadata
+        if metadata is None or not metadata.name:
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to reconcile Ingress for portal {portal_name!r} of "
+                f"Service {service_slug}: backend Service has no name"
+            )
+        return str(metadata.name)
+
+    def _assert_active_owned_namespace_for(
+        self,
+        resource_type: ResourceType,
+        slug: str,
+    ) -> str:
+        namespace = namespace_name(resource_type, slug)
+        namespace_resource = self._read_namespace(namespace)
+        if namespace_resource is None or not _is_owned_namespace(
+            namespace_resource,
+            resource_type,
+            slug,
+        ):
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to reconcile Ingress in unowned namespace {namespace}"
+            )
+        if _is_terminating_namespace(namespace_resource):
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to reconcile Ingress in terminating namespace {namespace}"
+            )
+        return namespace
+
+    def _delete_owned_ingress(
+        self,
+        *,
+        namespace: str,
+        ingress_name: str,
+        labels: dict[str, str],
+    ) -> None:
+        assert self._networking_v1_api is not None
+        existing = self._read_ingress(namespace=namespace, name=ingress_name)
+        if existing is None:
+            return
+        if not _has_labels(existing, labels):
+            raise KubernetesRuntimeSafetyError(
+                f"refusing to delete unowned Ingress {namespace}/{ingress_name}"
+            )
+        self._networking_v1_api.delete_namespaced_ingress(
+            namespace=namespace,
+            name=ingress_name,
+        )
+        self._wait_until_ingress_absent(namespace=namespace, name=ingress_name)
+
     def delete_app_ingresses(
         self,
         *,
@@ -304,23 +549,11 @@ class KubernetesRuntime:
             )
         for route in routes:
             route_name = str(route["name"])
-            ingress_name = ingress_name_for_route(route_name)
-            existing = self._read_ingress(namespace=namespace, name=ingress_name)
-            if existing is None:
-                continue
-            if not _is_owned_app_ingress(
-                existing,
-                app_slug=app_slug,
-                route_name=route_name,
-            ):
-                raise KubernetesRuntimeSafetyError(
-                    f"refusing to delete unowned Ingress {namespace}/{ingress_name}"
-                )
-            self._networking_v1_api.delete_namespaced_ingress(
+            self._delete_owned_ingress(
                 namespace=namespace,
-                name=ingress_name,
+                ingress_name=ingress_name_for_route(route_name),
+                labels=app_ingress_labels(app_slug=app_slug, route_name=route_name),
             )
-            self._wait_until_ingress_absent(namespace=namespace, name=ingress_name)
 
     def _read_namespace(self, name: str) -> client.V1Namespace | None:
         try:
@@ -578,6 +811,16 @@ def app_ingress_labels(*, app_slug: str, route_name: str) -> dict[str, str]:
     }
 
 
+def service_portal_labels(*, service_slug: str, portal_name: str) -> dict[str, str]:
+    validate_machine_identifier(service_slug)
+    validate_machine_identifier(portal_name)
+    return {
+        MANAGED_BY_LABEL: "nephos",
+        SERVICE_INSTANCE_LABEL: service_slug,
+        ROUTE_LABEL: portal_name,
+    }
+
+
 def _is_owned_namespace(
     namespace: client.V1Namespace,
     resource_type: ResourceType,
@@ -651,11 +894,76 @@ def _is_owned_app_ingress(
     app_slug: str,
     route_name: str,
 ) -> bool:
+    return _has_labels(
+        ingress,
+        app_ingress_labels(app_slug=app_slug, route_name=route_name),
+    )
+
+
+def _has_labels(ingress: client.V1Ingress, expected_labels: dict[str, str]) -> bool:
     if ingress.metadata is None:
         return False
     labels = ingress.metadata.labels or {}
-    expected_labels = app_ingress_labels(app_slug=app_slug, route_name=route_name)
     return all(labels.get(key) == value for key, value in expected_labels.items())
+
+
+def _service_exposes_port(service: client.V1Service, port: object) -> bool:
+    ports = (service.spec.ports or []) if service.spec is not None else []
+    if isinstance(port, int):
+        return any(item.port == port for item in ports)
+    return any(item.name == str(port) for item in ports)
+
+
+def _service_portal_ingress(
+    *,
+    service_slug: str,
+    portal: dict[str, object],
+    domains: list[dict[str, object]],
+    is_first_portal: bool,
+    ingress_class_name: str | None,
+    backend_service_name: str,
+) -> client.V1Ingress:
+    portal_name = str(portal["name"])
+    return client.V1Ingress(
+        metadata=client.V1ObjectMeta(
+            name=ingress_name_for_route(portal_name),
+            namespace=namespace_name("service_instance", service_slug),
+            labels=service_portal_labels(
+                service_slug=service_slug,
+                portal_name=portal_name,
+            ),
+        ),
+        spec=client.V1IngressSpec(
+            ingress_class_name=ingress_class_name,
+            rules=[
+                client.V1IngressRule(
+                    host=service_portal_host(
+                        service_slug=service_slug,
+                        portal_name=portal_name,
+                        domain=str(domain["domain"]),
+                        is_first_portal=is_first_portal,
+                    ),
+                    http=client.V1HTTPIngressRuleValue(
+                        paths=[
+                            client.V1HTTPIngressPath(
+                                path="/",
+                                path_type="Prefix",
+                                backend=client.V1IngressBackend(
+                                    service=client.V1IngressServiceBackend(
+                                        name=backend_service_name,
+                                        port=_service_backend_port(
+                                            portal["target"]["port"]  # type: ignore[index]
+                                        ),
+                                    )
+                                ),
+                            )
+                        ]
+                    ),
+                )
+                for domain in domains
+            ],
+        ),
+    )
 
 
 def _app_ingress(

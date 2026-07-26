@@ -363,8 +363,6 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
             "bootstrapMachineName": "Nephos Bot",
             "bootstrapMachineKeyPath": "/var/lib/zitadel-bootstrap/bot.json",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
-            "ingressEnabled": True,
-            "ingressClassName": "nginx",
             "storageSize": "4Gi",
         },
     )
@@ -374,7 +372,6 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     secret = k8s.secret.calls[0]
     stateful_set = k8s.stateful_set.calls[0]
     service = k8s.service.calls[0]
-    ingress = k8s.ingress.calls[0]
     stateful_pod_spec = stateful_set["spec"]["template"]["spec"]
     containers = stateful_pod_spec["containers"]
     container = next(item for item in containers if item["name"] == "zitadel")
@@ -460,34 +457,9 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 8080, "targetPort": "http"}
     ]
-    assert ingress["metadata"] == {
-        "name": "svc-zitadel-zitadel",
-        "namespace": "svc-zitadel",
-        "labels": service["metadata"]["labels"],
-        "annotations": {"pulumi.com/skipAwait": "true"},
-    }
-    assert ingress["spec"] == {
-        "ingressClassName": "nginx",
-        "rules": [
-            {
-                "host": "login.nephos.localhost",
-                "http": {
-                    "paths": [
-                        {
-                            "path": "/",
-                            "pathType": "Prefix",
-                            "backend": {
-                                "service": {
-                                    "name": "svc-zitadel-zitadel",
-                                    "port": {"number": 8080},
-                                }
-                            },
-                        }
-                    ]
-                },
-            }
-        ],
-    }
+    # ADR 20260726: the platform generates portal Ingress from the Service
+    # manifest, so the provider must not create one of its own.
+    assert k8s.ingress.calls == []
 
 
 def test_zitadel_service_can_use_external_postgres() -> None:
@@ -587,7 +559,14 @@ def test_zitadel_service_blocks_admin_password_without_symbol() -> None:
         raise AssertionError("expected Zitadel adminPassword complexity block")
 
 
-def test_zitadel_service_omits_ingress_by_default() -> None:
+def test_zitadel_service_never_creates_its_own_ingress() -> None:
+    """ADR 20260726: portal Ingress is platform-owned.
+
+    Guards against the provider re-growing a private ingress: legacy
+    `ingressEnabled` / `ingressClassName` values must no longer produce one, so a
+    stale manifest cannot resurrect a second ingress mechanism competing with the
+    platform-generated portal.
+    """
     k8s = RecordingKubernetes()
     spec = PulumiKubernetesWorkloadSpec(
         project_name="nephos-api",
@@ -602,10 +581,12 @@ def test_zitadel_service_omits_ingress_by_default() -> None:
         values={
             "adminPassword": "Local-secret1!",
             "masterKey": "0123456789abcdef0123456789abcdef",
-            "externalHost": "zitadel.nephos.lcl",
+            "externalHost": "console.zitadel.nephos.lcl",
             "adminUsername": "root@zitadel.nephos.lcl",
             "databasePassword": "db-secret",
             "bootstrapMachineKeyExpiration": "2037-01-01T00:00:00Z",
+            "ingressEnabled": True,
+            "ingressClassName": "nginx",
         },
     )
 
