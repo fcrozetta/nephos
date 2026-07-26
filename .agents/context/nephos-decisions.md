@@ -350,9 +350,12 @@ Phase 1 Nephos-managed ingress is HTTP-only.
 
 If generated hostnames collide, Nephos fails and requires an explicit route, App instance, or domain policy change.
 
-Services do not expose admin routes through Nephos ingress in Phase 1.
+Services expose browser surfaces as `spec.portals`, generated at
+`<portal>.<service-slug>.<root-domain>` and gated default-deny per root domain
+(ADR 20260726). Superseded the earlier Phase 1 rule that Services expose no
+routes through Nephos ingress.
 
-Root domain config uses `name`, `domain`, and `default`.
+Root domain config uses `name`, `domain`, `default`, and `allowsServicePortals`.
 
 The domain value is a DNS suffix.
 

@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from catalog_fixtures import write_app, write_service
+from catalog_fixtures import write_app, write_service, write_service_with_portal
 
 from nephos_api.db import migrate_database
 from nephos_api.kubernetes_runtime import KubernetesRuntimeSafetyError
@@ -21,6 +21,8 @@ class FakeRuntime:
         self.scaled_workloads: list[tuple[str, str, int]] = []
         self.app_ingresses: list[dict[str, object]] = []
         self.deleted_app_ingresses: list[dict[str, object]] = []
+        self.service_portals: list[dict[str, object]] = []
+        self.deleted_service_portals: list[dict[str, object]] = []
 
     def ensure_namespace(self, resource_type: str, slug: str) -> None:
         self.namespaces.append((resource_type, slug))
@@ -96,6 +98,27 @@ class FakeRuntime:
         routes: list[dict[str, object]],
     ) -> None:
         self.deleted_app_ingresses.append({"app_slug": app_slug, "routes": routes})
+
+    def ensure_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+        domains: list[dict[str, object]],
+    ) -> None:
+        self.service_portals.append(
+            {"service_slug": service_slug, "portals": portals, "domains": domains}
+        )
+
+    def delete_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+    ) -> None:
+        self.deleted_service_portals.append(
+            {"service_slug": service_slug, "portals": portals}
+        )
 
 
 class FailingRuntime:
@@ -557,6 +580,220 @@ def test_service_install_request_deploys_helm_runtime_when_deployer_is_present(
     _assert_reconciled_deployment_status(repo, request.id, service.id)
 
 
+def _install_portal_service(
+    repo: DesiredStateRepository,
+    tmp_path: Path,
+    *,
+    portal_eligible: bool,
+    action: str = "install",
+) -> tuple[object, object]:
+    catalog_root = tmp_path / "catalog"
+    manifest = write_service_with_portal(catalog_root)
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="arcadedb",
+            catalog_name="arcadedb",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest),
+            manifest_digest="sha256:arcadedb",
+        )
+        tx.create_platform_domain(
+            name="local",
+            domain="nephos.lcl",
+            is_default=True,
+            allows_service_portals=portal_eligible,
+        )
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action=action,
+            target_snapshot={"slug": service.slug},
+        )
+    return service, request
+
+
+def test_service_install_reconciles_portals_on_eligible_domains(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    _install_portal_service(repo, tmp_path, portal_eligible=True)
+
+    assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
+
+    assert runtime.service_portals == [
+        {
+            "service_slug": "arcadedb",
+            "portals": [
+                {
+                    "name": "studio",
+                    "displayName": "ArcadeDB Studio",
+                    "target": {"port": "http"},
+                }
+            ],
+            "domains": [
+                {
+                    "id": runtime.service_portals[0]["domains"][0]["id"],
+                    "name": "local",
+                    "domain": "nephos.lcl",
+                    "default": True,
+                }
+            ],
+        }
+    ]
+
+
+def test_service_install_succeeds_with_no_portal_eligible_domain(
+    tmp_path: Path,
+) -> None:
+    # Default-deny must not block install: the Service is healthy, only its UI is
+    # unreachable. The runtime is still called so a revoked domain deletes the
+    # previously generated Ingress instead of leaving it exposed.
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    service, request = _install_portal_service(repo, tmp_path, portal_eligible=False)
+
+    assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
+
+    assert runtime.service_portals[0]["domains"] == []
+    _assert_reconciled_deployment_status(repo, request.id, service.id)
+
+
+def test_ineligible_domain_unpublishes_portals_even_when_deploy_blocks(
+    tmp_path: Path,
+) -> None:
+    """Revoking portal eligibility must unpublish regardless of deploy outcome.
+
+    Zitadel maps its portal into the runtime, so once no domain is eligible its
+    deploy blocks with `portal_domain_not_eligible`. If the portal teardown ran
+    only after a successful deploy, the block would abort the reconcile and leave
+    the admin console still served -- observed live as HTTP 200 after revoke.
+    """
+
+    class BlockingDeployer(FakeDeployer):
+        def deploy(self, *, target_type: str, slug: str) -> None:
+            raise RuntimeBlockedError(
+                reason="portal_domain_not_eligible",
+                message="no platform domain allows Service portals",
+            )
+
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    _install_portal_service(repo, tmp_path, portal_eligible=False)
+
+    reconciler = Reconciler(repo, runtime=runtime, deployer=BlockingDeployer())
+
+    assert reconciler.run_once() == 1
+    assert runtime.service_portals == [
+        {
+            "service_slug": "arcadedb",
+            "portals": [
+                {
+                    "name": "studio",
+                    "displayName": "ArcadeDB Studio",
+                    "target": {"port": "http"},
+                }
+            ],
+            "domains": [],
+        }
+    ]
+
+
+def test_service_without_portals_does_not_touch_portal_ingress(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(write_service(tmp_path / "catalog")),
+            manifest_digest="sha256:postgres",
+        )
+        tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action="install",
+            target_snapshot={"slug": service.slug},
+        )
+
+    assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
+
+    assert runtime.service_portals == []
+
+
+def test_service_destroy_deletes_portal_ingress(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    service, _ = _install_portal_service(
+        repo,
+        tmp_path,
+        portal_eligible=True,
+        action="destroy",
+    )
+
+    assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
+
+    assert runtime.deleted_service_portals == [
+        {
+            "service_slug": "arcadedb",
+            "portals": [
+                {
+                    "name": "studio",
+                    "displayName": "ArcadeDB Studio",
+                    "target": {"port": "http"},
+                }
+            ],
+        }
+    ]
+
+
+def test_platform_domain_reconcile_enqueues_portal_service_reconciles(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    catalog_root = tmp_path / "catalog"
+    manifest = write_service_with_portal(catalog_root)
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="arcadedb",
+            catalog_name="arcadedb",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest),
+            manifest_digest="sha256:arcadedb",
+        )
+        domain = tx.create_platform_domain(
+            name="local",
+            domain="nephos.lcl",
+            is_default=True,
+        )
+        tx.create_reconciliation_request(
+            target_type="platform_domain",
+            target_id=domain.id,
+            target_generation=domain.generation,
+            action="set-service-portals",
+            target_snapshot={"name": domain.name},
+        )
+
+    assert Reconciler(repo, runtime=FakeRuntime()).run_once() == 1
+
+    with sqlite3.connect(repo.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        queued = connection.execute(
+            """
+            SELECT target_id, action, state
+            FROM reconciliation_requests
+            WHERE target_type = 'service_instance'
+            """
+        ).fetchall()
+
+    assert [tuple(row) for row in queued] == [(service.id, "reconcile", "pending")]
+
+
 def test_service_deployment_enqueues_dependent_binding_reconciles(
     tmp_path: Path,
 ) -> None:
@@ -945,6 +1182,49 @@ def test_stopped_app_reconcile_keeps_ingress_current_and_workloads_stopped(
     ]
     assert runtime.scaled_workloads == [("app_instance", "paperless", 0)]
     _assert_runtime_stopped_status(repo, request.id, app.id)
+
+
+def test_stopped_service_reconcile_keeps_portal_ingress_and_workloads_stopped(
+    tmp_path: Path,
+) -> None:
+    # Mirrors the stopped-App path: stop preserves route intent, so the portal
+    # Ingress stays and status reports the Service as stopped rather than the
+    # portal as healthy.
+    catalog_root = tmp_path / "catalog"
+    manifest_path = write_service_with_portal(catalog_root)
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    deployer = FakeDeployer()
+    with repo.transaction() as tx:
+        tx.create_platform_domain(
+            name="local",
+            domain="nephos.lcl",
+            is_default=True,
+            allows_service_portals=True,
+        )
+        service = tx.create_service_instance(
+            slug="arcadedb",
+            catalog_name="arcadedb",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:arcadedb",
+            lifecycle="stopped",
+        )
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action="reconcile",
+            target_snapshot={"slug": service.slug},
+        )
+
+    assert Reconciler(repo, runtime=runtime, deployer=deployer).run_once() == 1
+
+    assert deployer.deployed == []
+    assert runtime.service_portals[0]["service_slug"] == "arcadedb"
+    assert runtime.service_portals[0]["domains"][0]["domain"] == "nephos.lcl"
+    assert runtime.scaled_workloads == [("service_instance", "arcadedb", 0)]
+    _assert_runtime_stopped_status(repo, request.id, service.id)
 
 
 def test_service_remove_uninstalls_runtime_without_deleting_desired_state(
@@ -2206,7 +2486,7 @@ def _assert_platform_domain_reconciled_status(
         "platform_domain_reconciled",
         (
             "Platform domain desired state is recorded; "
-            "App route reconciliation is queued."
+            "App route and Service portal reconciliation is queued."
         ),
         1,
     )

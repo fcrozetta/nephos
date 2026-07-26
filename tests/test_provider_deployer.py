@@ -238,6 +238,132 @@ def test_provider_runtime_deployer_maps_service_config_defaults_and_overrides(
     }
 
 
+def _write_service_with_portal_mappings(root: Path) -> Path:
+    path = root / "services" / "zitadel" / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: zitadel
+  displayName: Zitadel
+spec:
+  provides:
+    - capability: oidc
+      protocol: oidc
+      as: oidc
+  portals:
+    - name: console
+      displayName: Zitadel Console
+      target:
+        port: http
+  provisioning:
+    mode: app-scoped-resource
+  operations: []
+  runtime:
+    type: provider
+    provider:
+      name: zitadel
+    values:
+      mappings:
+        - from:
+            kind: portal
+            name: console
+            field: host
+          to:
+            helmValue: externalHost
+        - from:
+            kind: portal
+            name: console
+            field: port
+          to:
+            helmValue: externalPort
+        - from:
+            kind: portal
+            name: console
+            field: secure
+          to:
+            helmValue: externalSecure
+        - from:
+            kind: portal
+            name: console
+            field: url
+          to:
+            helmValue: externalUrl
+""".strip()
+    )
+    return path
+
+
+def _install_zitadel_with_portal(
+    repo: DesiredStateRepository,
+    tmp_path: Path,
+    *,
+    portal_eligible: bool,
+) -> None:
+    manifest_path = _write_service_with_portal_mappings(tmp_path / "catalog")
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug="zitadel",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:zitadel",
+        )
+        tx.create_platform_domain(
+            name="local",
+            domain="nephos.lcl",
+            is_default=True,
+            allows_service_portals=portal_eligible,
+        )
+
+
+def test_provider_runtime_deployer_resolves_portal_mappings(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    service_provider = RecordingProvider()
+    _install_zitadel_with_portal(repo, tmp_path, portal_eligible=True)
+
+    ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=service_provider,
+    ).deploy(target_type="service_instance", slug="zitadel")
+
+    # ADR 20260726: the host the provider is told to identify as is the same host
+    # the platform-generated Ingress serves, so the OIDC issuer cannot drift.
+    # First portal is bare, so the host is the instance slug: installing this as
+    # instance `auth` would make the issuer auth.nephos.lcl.
+    assert service_provider.deployed[0].values == {
+        "externalHost": "zitadel.nephos.lcl",
+        "externalPort": 80,
+        "externalSecure": False,
+        "externalUrl": "http://zitadel.nephos.lcl",
+    }
+
+
+def test_provider_runtime_deployer_blocks_portal_mapping_without_eligible_domain(
+    tmp_path: Path,
+) -> None:
+    # Unlike the Ingress path (which tolerates an unpublished portal), a provider
+    # that binds its identity to the portal host must not deploy with a guess.
+    repo = _repo(tmp_path)
+    _install_zitadel_with_portal(repo, tmp_path, portal_eligible=False)
+
+    deployer = ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=RecordingProvider(),
+    )
+
+    try:
+        deployer.deploy(target_type="service_instance", slug="zitadel")
+    except RuntimeBlockedError as exc:
+        assert exc.reason == "portal_domain_not_eligible"
+    else:
+        raise AssertionError("expected an ineligible portal domain to block")
+
+
 def test_provider_runtime_deployer_resolves_onepassword_config_refs(
     tmp_path: Path,
 ) -> None:

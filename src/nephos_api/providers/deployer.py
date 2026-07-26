@@ -16,6 +16,13 @@ from nephos_api.manifest_config import manifest_config_values
 from nephos_api.providers.base import ProviderContext, RuntimeProvider
 from nephos_api.provisioners.base import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
+from nephos_api.routing import (
+    PLATFORM_ROUTE_PORT,
+    PLATFORM_ROUTE_SCHEME,
+    PLATFORM_ROUTE_SECURE,
+    portal_canonical_domain,
+    service_portal_host,
+)
 from nephos_api.runtime_errors import RuntimeBlockedError
 from nephos_api.secret_refs import (
     SECRETS_SCHEME,
@@ -196,9 +203,64 @@ class ProviderRuntimeDeployer:
                 bindings=bindings,
                 service_dependency_values=service_dependency_values,
                 genspecs=genspecs,
+                service_slug=slug if target_type == "service_instance" else None,
+                portal_names=(
+                    [portal.name for portal in manifest.spec.portals]
+                    if isinstance(manifest, ServiceManifest)
+                    else []
+                ),
             )
             set_helm_value(values, runtime_mapping.to.helmValue, value)
         return values
+
+    def _portal_mapping_value(
+        self,
+        *,
+        service_slug: str,
+        portal_name: str,
+        field: str | None,
+        portal_names: list[str],
+    ) -> object:
+        """Resolve a `kind: portal` mapping (ADR 20260726).
+
+        Blocks rather than guessing: a provider that consumes a portal host is
+        usually binding its own external identity to it (Zitadel's `externalHost`
+        is its OIDC issuer), so deploying with a placeholder would produce a
+        running Service that silently fails authentication.
+        """
+        domain = portal_canonical_domain(self._repository.list_platform_domains())
+        if domain is None:
+            raise RuntimeBlockedError(
+                reason="portal_domain_not_eligible",
+                message=(
+                    f"Portal {portal_name} is mapped into the runtime but no "
+                    "platform domain allows Service portals."
+                ),
+            )
+        host = service_portal_host(
+            service_slug=service_slug,
+            portal_name=portal_name,
+            domain=domain.domain,
+            # Must match the Ingress byte-for-byte, so the first-portal-is-bare
+            # rule is read from manifest order, not guessed.
+            is_first_portal=bool(portal_names) and portal_names[0] == portal_name,
+        )
+        if field == "host":
+            return host
+        if field == "url":
+            return f"{PLATFORM_ROUTE_SCHEME}://{host}"
+        if field == "scheme":
+            return PLATFORM_ROUTE_SCHEME
+        if field == "port":
+            return PLATFORM_ROUTE_PORT
+        if field == "secure":
+            return PLATFORM_ROUTE_SECURE
+        # Unreachable for a catalog-loaded manifest: the loader restricts portal
+        # mapping fields to PORTAL_MAPPING_FIELDS.
+        raise RuntimeBlockedError(
+            reason="runtime_mapping_source_missing",
+            message=f"Portal {portal_name} field {field!r} is not available.",
+        )
 
     def _service_dependency_values(
         self,
@@ -398,6 +460,8 @@ class ProviderRuntimeDeployer:
         bindings: list[dict[str, object]],
         service_dependency_values: dict[str, dict[str, str]],
         genspecs: dict[str, SecretGenSpec] | None = None,
+        service_slug: str | None = None,
+        portal_names: list[str] | None = None,
     ) -> object:
         source = mapping.from_
         if source.kind == "config":
@@ -409,6 +473,19 @@ class ProviderRuntimeDeployer:
             return self._resolve_config_value(
                 config[source.name],
                 genspec=(genspecs or {}).get(source.name),
+            )
+
+        if source.kind == "portal":
+            if service_slug is None:
+                raise RuntimeBlockedError(
+                    reason="runtime_mapping_source_missing",
+                    message="Portal mappings are only available to Services.",
+                )
+            return self._portal_mapping_value(
+                service_slug=service_slug,
+                portal_name=source.name,
+                field=source.field,
+                portal_names=portal_names or [],
             )
 
         if source.field is None:

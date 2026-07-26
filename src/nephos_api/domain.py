@@ -76,6 +76,11 @@ class PlatformDomain:
     domain: str
     is_default: bool
     generation: int
+    # ADR 20260726: Service portals are default-deny per root domain. Declaring a
+    # portal must never be enough to publish an admin UI on a tunnelled domain,
+    # so exposure is an explicit operator act recorded here. App routes are
+    # unaffected and still bind to every configured domain.
+    allows_service_portals: bool = False
     created_at: str | None = None
     updated_at: str | None = None
 

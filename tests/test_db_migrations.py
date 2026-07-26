@@ -36,6 +36,7 @@ def test_migrations_are_packaged_resources() -> None:
         "0000_initial.sql",
         "0001_add_binding_protocol.sql",
         "0002_add_admin_accounts.sql",
+        "0003_add_platform_domain_service_portals.sql",
     ]
 
 
@@ -48,6 +49,7 @@ def test_migrate_database_applies_initial_schema(tmp_path: Path) -> None:
         "0000_initial",
         "0001_add_binding_protocol",
         "0002_add_admin_accounts",
+        "0003_add_platform_domain_service_portals",
     ]
     assert {
         "app_instances",
@@ -71,6 +73,7 @@ def test_migrate_database_is_idempotent(tmp_path: Path) -> None:
         "0000_initial",
         "0001_add_binding_protocol",
         "0002_add_admin_accounts",
+        "0003_add_platform_domain_service_portals",
     ]
 
 
@@ -85,6 +88,30 @@ def test_binding_protocol_migration_adds_nullable_protocol(tmp_path: Path) -> No
             for row in connection.execute("PRAGMA table_info(bindings)").fetchall()
         }
     assert columns["protocol"] == "TEXT"
+
+
+def test_service_portal_migration_defaults_existing_domains_to_denied(
+    tmp_path: Path,
+) -> None:
+    # ADR 20260726: applying the migration must not expose a portal that was not
+    # already reachable, so the column defaults to 0 for pre-existing rows.
+    db_path = tmp_path / "nephos.db"
+
+    migrate_database(db_path=db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO platform_domains(
+                id, name, domain, is_default, generation, created_at, updated_at
+            )
+            VALUES ('domain_1', 'local', 'nephos.lcl', 1, 1, 'now', 'now')
+            """
+        )
+        allows_service_portals = connection.execute(
+            "SELECT allows_service_portals FROM platform_domains WHERE id = 'domain_1'"
+        ).fetchone()[0]
+    assert allows_service_portals == 0
 
 
 def test_migrate_database_rejects_unknown_applied_versions(tmp_path: Path) -> None:

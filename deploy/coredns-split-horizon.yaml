@@ -1,0 +1,35 @@
+# Split-horizon DNS for the Nephos internal root domain.
+#
+# Platform hostnames (App routes and Service portals) resolve on the host via
+# dnsmasq, but not inside the cluster -- so an in-cluster App could not reach
+# auth.nephos.lcl, and Zitadel refuses any other Host header because it looks up
+# its instance by domain. Point *.nephos.lcl at the ingress from inside the
+# cluster too, so the canonical OIDC issuer is byte-identical from the browser,
+# the pod, and the token validator.
+#
+# Consumed via the Corefile's `import /etc/coredns/custom/*.server` hook, so the
+# k3s-managed coredns ConfigMap stays untouched (k3s would revert edits to it).
+#
+# Rewrites to the Traefik Service name rather than its ClusterIP so this survives
+# a cluster rebuild; the answer rewrite restores the queried name so clients
+# accept the response.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  nephos-lcl.server: |
+    nephos.lcl:53 {
+        errors
+        cache 30
+        rewrite stop {
+            name regex (.*)\.nephos\.lcl\.$ traefik.kube-system.svc.cluster.local
+            answer auto
+        }
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+            pods insecure
+            fallthrough in-addr.arpa ip6.arpa
+        }
+        forward . /etc/resolv.conf
+    }

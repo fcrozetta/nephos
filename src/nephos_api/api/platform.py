@@ -21,6 +21,14 @@ class PlatformDomainCreate(BaseModel):
     name: str
     domain: str
     default: bool = Field(default=False)
+    # ADR 20260726: default-deny. A domain carries Service portals only when the
+    # operator says so, so adding a tunnelled root domain never publishes an
+    # admin UI as a side effect.
+    allowsServicePortals: bool = Field(default=False)
+
+
+class PlatformDomainServicePortals(BaseModel):
+    allowed: bool
 
 
 @router.get("")
@@ -47,6 +55,7 @@ def add_platform_domain(
                 name=payload.name,
                 domain=payload.domain,
                 is_default=is_default,
+                allows_service_portals=payload.allowsServicePortals,
             )
             reconciliation = tx.create_reconciliation_request(
                 target_type="platform_domain",
@@ -98,6 +107,30 @@ def set_default_platform_domain(name: str, request: Request) -> dict[str, Any]:
             target_id=domain.id,
             target_generation=domain.generation,
             action="set-default",
+            target_snapshot=_domain_payload(domain),
+        )
+    return _mutation_response(domain, reconciliation.id, reconciliation.state)
+
+
+@router.post(
+    "/{name}/actions/set-service-portals",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def set_platform_domain_service_portals(
+    name: str,
+    payload: PlatformDomainServicePortals,
+    request: Request,
+) -> dict[str, Any]:
+    repo = _repo(request)
+    with repo.transaction() as tx:
+        if tx.get_platform_domain_by_name(name) is None:
+            raise _not_found(name)
+        domain = tx.set_platform_domain_service_portals(name, allowed=payload.allowed)
+        reconciliation = tx.create_reconciliation_request(
+            target_type="platform_domain",
+            target_id=domain.id,
+            target_generation=domain.generation,
+            action="set-service-portals",
             target_snapshot=_domain_payload(domain),
         )
     return _mutation_response(domain, reconciliation.id, reconciliation.state)
@@ -193,6 +226,7 @@ def _domain_payload(domain: PlatformDomain) -> dict[str, Any]:
         "name": domain.name,
         "domain": domain.domain,
         "default": domain.is_default,
+        "allowsServicePortals": domain.allows_service_portals,
         "generation": domain.generation,
         "createdAt": domain.created_at,
         "updatedAt": domain.updated_at,

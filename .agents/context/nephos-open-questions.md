@@ -25,10 +25,20 @@ Need to decide:
 
 - exact OIDC client binding output fields and Secret key names
 - exact Zitadel service-account/JWT binding output fields and Secret key names
-- Service-surface route shape for Zitadel login/admin UI
-- whether generic Service surfaces need a shared response shape before the first implementation
 
 Resolved for this phase:
+
+- Service-surface route shape is `spec.portals` on `ServiceSpec`, with hosts
+  generated as `<portal>.<service-slug>.<root-domain>` and exposure gated
+  default-deny per root domain (`platform_domains.allows_service_portals`).
+  Zitadel's login/admin UI is the `console` portal, and its `externalHost` /
+  `externalPort` / `externalSecure` derive from that portal through a
+  `kind: portal` runtime mapping instead of operator config. See
+  `docs/adr/20260726-service-portals.md`.
+- Generic Service surfaces reuse the App route response shape rather than a
+  parallel one: Service payloads expose `portals` with `name`, `displayName`,
+  `target`, `canonicalUrl`, `aliases`, and `status`, plus `published` /
+  `unpublishedReason` for the default-deny unpublished state.
 
 - SeaweedFS S3 app binding output fields are `endpointUrl`, `bucket`,
   `accessKeyId`, `secretAccessKey`, and `region`.
@@ -106,8 +116,13 @@ Accepted direction:
 - Phase 1 Nephos-managed ingress is HTTP-only
 - Cloudflare Tunnel or other user-managed systems may terminate TLS outside Nephos
 - generated hostname collisions fail and require explicit route, App instance, or domain policy changes
-- Services do not expose admin routes through Nephos ingress in Phase 1
-- root domain operations are add, list, remove, and set default
+- Services expose browser surfaces as `spec.portals`, generated at
+  `<service-slug>.<root-domain>` for the first portal and
+  `<portal>.<service-slug>.<root-domain>` for later ones, gated default-deny per
+  root domain (ADR 20260726, superseding the earlier no-Service-routes rule)
+- App route and Service portal hostnames share one namespace, so install rejects a
+  collision with `409 hostname_conflict` rather than suffixing (ADR 20260517)
+- root domain operations are add, list, remove, set default, and set service portals
 - root domain API path is `/platform/config/domains`
 - removing a root domain removes that domain's generated host aliases from reconciled ingress after explicit confirmation when existing routes use it
 - Nephos setup creates initial platform configuration before Apps are installed
@@ -122,6 +137,17 @@ Need to decide:
 - whether setup is interactive, flag-driven, or both
 - future Cloudflare adapter shape
 - future Tailscale adapter shape
+- whether Nephos owns in-cluster resolution of the internal root domain, or leaves
+  it to the operator. Generated hostnames resolve on the host (dnsmasq) but not
+  inside the cluster, so an in-cluster App could not reach `auth.nephos.lcl`, and
+  Zitadel rejects any other Host header because it looks up its instance by
+  domain — a capability consumer therefore cannot fall back to an internal Service
+  URL. `deploy/coredns-split-horizon.yaml` is a working LCL manifest (a
+  `coredns-custom` zone rewriting `*.<internal-domain>` to the ingress Service),
+  applied manually. Open: whether `nephos setup` should apply it, whether it
+  generalizes beyond k3s/k3d's `coredns-custom` hook, and how it interacts with the
+  deferred Cloudflare/Tailscale adapters. Relates to the ADR 20260601 open question
+  "whether Nephos should provide a local DNS helper".
 
 ## Setup And Platform Config Commands
 
@@ -899,6 +925,22 @@ Need to decide later:
 - remote access model
 - whether multi-user is ever needed
 - whether roles/RBAC are needed
+- how an operator retrieves a Service config secret, and specifically **not**
+  through an unauthenticated API. `nephos-api` has no request authentication (the
+  admin-account bootstrap comment says so outright, and an arbitrary in-cluster pod
+  with no credentials gets `200` from `/services`). Adding a reveal endpoint would
+  therefore let any pod read every Service's admin credential, where today that
+  needs cluster-admin RBAC to read Secrets cross-namespace — a real privilege
+  escalation, not merely undoing redaction. Two distinct gaps sit behind this:
+  - operator-supplied secrets (e.g. ArcadeDB `root-password`) are stored verbatim
+    in `config_json` and shown as `[REDACTED]`; the operator already knows them.
+  - generated secrets (e.g. PostgreSQL `admin-password`) are absent from desired
+    state entirely (`config_json` is `{}`) and live only in the secrets provider
+    and the runtime Secret, so Nephos offers the operator **no** path to a value it
+    generated on their behalf. This is the real usability hole.
+  Prerequisite: API authentication (the first item in this list). A CLI-side
+  reveal, gated by the same filesystem/cluster access that already grants Secret
+  reads, would be safe without it but is a new CLI contract and needs an ADR.
 
 ## Concrete Backup Implementation Design
 

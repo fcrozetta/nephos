@@ -23,6 +23,12 @@ _KUBERNETES_DNS_LABEL_MAX_LENGTH = 63
 _BINDING_SECRET_NAME_PREFIX = "nephos-bind-"
 _ROUTE_INGRESS_NAME_PREFIX = "nephos-route-"
 
+# Fields a `kind: portal` runtime mapping may read off a resolved Service portal
+# (ADR 20260726). Closed set, unlike binding fields: these are computed by Nephos
+# from the portal and the platform domain, not returned by an engine, so an
+# unknown name is always a manifest error and is caught at catalog load.
+PORTAL_MAPPING_FIELDS = frozenset({"host", "port", "scheme", "secure", "url"})
+
 
 class CatalogValidationError(ValueError):
     pass
@@ -93,6 +99,21 @@ class AppRoute(BaseModel):
     target: RouteTarget
 
 
+class ServicePortal(BaseModel):
+    """A Service's browser surface (ADR 20260726).
+
+    Carries no `visibility`, unlike `AppRoute`: portal exposure is a property of
+    the root domain (`platform_domains.allows_service_portals`), not of the
+    manifest, so a registry author cannot publish their own admin UI.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    displayName: str | None = None
+    target: RouteTarget
+
+
 class GenerateSpec(BaseModel):
     """Generation policy for a config option whose value is a `secrets://` ref.
 
@@ -143,7 +164,7 @@ class RuntimeProvider(BaseModel):
 class MappingSource(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    kind: Literal["config", "binding"]
+    kind: Literal["config", "binding", "portal"]
     name: str
     field: str | None = None
 
@@ -252,6 +273,7 @@ class ServiceSpec(BaseModel):
     requires: list[CapabilityRequirement] = Field(default_factory=list)
     bindings: BindingOutputs | None = None
     config: AppConfig = Field(default_factory=AppConfig)
+    portals: list[ServicePortal] = Field(default_factory=list)
     provisioning: Provisioning
     operations: list[dict[str, Any]] = Field(default_factory=list)
     runtime: RuntimeRef
@@ -527,12 +549,25 @@ def _validate_app_manifest(*, path: Path, manifest: AppManifest) -> None:
             prefix=_ROUTE_INGRESS_NAME_PREFIX,
             resource_kind="Ingress",
         )
-        _validate_route_target_port(path=path, route=route)
+        _validate_target_port(
+            path=path,
+            label="route target port",
+            port=route.target.port,
+        )
         if route.name in route_names:
             raise CatalogValidationError(
                 f"invalid App manifest {path}: duplicate route name {route.name!r}"
             )
         route_names.add(route.name)
+
+    # Only Services declare portals, so an App portal mapping could never
+    # resolve. Reject at load rather than blocking at deploy time.
+    for mapping in manifest.spec.runtime.values.mappings:
+        if mapping.from_.kind == "portal":
+            raise CatalogValidationError(
+                f"invalid App manifest {path}: runtime mapping source "
+                "'portal' is only valid for Service manifests"
+            )
 
     _validate_config_options(
         kind="App",
@@ -610,11 +645,56 @@ def _validate_service_manifest(*, path: Path, manifest: ServiceManifest) -> None
                     f"duplicate binding output name {output.name!r}"
                 )
             output_names.add(output.name)
+    _validate_service_portals(path=path, manifest=manifest)
     _validate_config_options(
         kind="Service",
         path=path,
         options=manifest.spec.config.options,
     )
+
+
+def _validate_service_portals(*, path: Path, manifest: ServiceManifest) -> None:
+    portal_names: set[str] = set()
+    for portal in manifest.spec.portals:
+        _validate_catalog_identifier(
+            path=path,
+            label="portal name",
+            value=portal.name,
+        )
+        _validate_generated_kubernetes_name(
+            path=path,
+            label="portal name",
+            value=portal.name,
+            prefix=_ROUTE_INGRESS_NAME_PREFIX,
+            resource_kind="Ingress",
+        )
+        _validate_target_port(
+            path=path,
+            label="portal target port",
+            port=portal.target.port,
+        )
+        if portal.name in portal_names:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: duplicate portal name "
+                f"{portal.name!r}"
+            )
+        portal_names.add(portal.name)
+
+    for mapping in manifest.spec.runtime.values.mappings:
+        source = mapping.from_
+        if source.kind != "portal":
+            continue
+        if source.name not in portal_names:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: runtime mapping references "
+                f"undeclared portal {source.name!r}"
+            )
+        if source.field not in PORTAL_MAPPING_FIELDS:
+            allowed = ", ".join(sorted(PORTAL_MAPPING_FIELDS))
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: portal mapping field "
+                f"{source.field!r} is not one of {allowed}"
+            )
 
 
 def _validate_config_options(
@@ -702,12 +782,10 @@ def _validate_generated_kubernetes_name(
         )
 
 
-def _validate_route_target_port(*, path: Path, route: AppRoute) -> None:
-    port = route.target.port
+def _validate_target_port(*, path: Path, label: str, port: str | int) -> None:
     if isinstance(port, int) and not 1 <= port <= 65535:
         raise CatalogValidationError(
-            f"invalid App manifest {path}: route target port {port!r} "
-            "must be between 1 and 65535"
+            f"invalid manifest {path}: {label} {port!r} must be between 1 and 65535"
         )
 
 
@@ -815,6 +893,14 @@ def _service_summary(
                 "bindingOutputTargets": output_targets,
             }
             for provided in manifest.spec.provides
+        ],
+        "portals": [
+            {
+                "name": portal.name,
+                "displayName": portal.displayName,
+                "target": {"port": portal.target.port},
+            }
+            for portal in manifest.spec.portals
         ],
         "config": {"options": _config_options_summary(manifest.spec.config.options)},
     }

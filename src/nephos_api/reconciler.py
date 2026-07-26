@@ -12,6 +12,7 @@ from nephos_api.kubernetes_runtime import ResourceType
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
+from nephos_api.routing import portal_eligible_domains
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -51,6 +52,21 @@ class RuntimeAdapter(Protocol):
         slug: str,
         replicas: int,
     ) -> object: ...
+
+    def ensure_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+        domains: list[dict[str, object]],
+    ) -> None: ...
+
+    def delete_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+    ) -> None: ...
 
     def ensure_app_ingresses(
         self,
@@ -170,9 +186,7 @@ class Reconciler:
         if lifecycle == "stopped":
             if target_type == "app_instance":
                 return self._reconcile_stopped_app_request(request)
-            return self._reconcile_namespace_stop_request(
-                _request_with_action(request, "stop")
-            )
+            return self._reconcile_stopped_service_request(request)
         if lifecycle == "removed":
             if self._deployer is None:
                 message = f"No runtime handler is implemented for {target_type} remove."
@@ -228,6 +242,16 @@ class Reconciler:
             _request_with_action(request, "stop")
         )
 
+    def _reconcile_stopped_service_request(self, request: dict[str, object]) -> bool:
+        # Mirrors the stopped-App path: keep portal Ingress across stop/start so
+        # route intent is not lost (ADR 20260517). Workloads scale to zero, so the
+        # portal stops serving and status reports the Service as stopped.
+        assert self._runtime is not None
+        self._reconcile_service_portals(_target_slug(request))
+        return self._reconcile_namespace_stop_request(
+            _request_with_action(request, "stop")
+        )
+
     def _reconcile_namespace_request(self, request: dict[str, object]) -> bool:
         target_type = str(request["target_type"])
         action = str(request["action"])
@@ -250,6 +274,13 @@ class Reconciler:
                     message="App routes require a platform root domain.",
                 )
         self._runtime.ensure_namespace(_resource_type(target_type), slug)
+        # Unpublish before deploying. A Service whose runtime maps its portal
+        # (Zitadel derives its OIDC issuer from it) blocks in the deployer once no
+        # domain is portal-eligible, which would abort the reconcile before the
+        # teardown below and leave the admin console still served. Revoking a
+        # domain's eligibility must take effect regardless of deploy outcome.
+        if target_type == "service_instance":
+            self._unpublish_service_portals_if_ineligible(slug)
         reason = "runtime_namespace_ready"
         message = "Kubernetes namespace is present and owned by Nephos."
         if self._deployer is not None:
@@ -272,6 +303,8 @@ class Reconciler:
                 routes=app_routes,
                 domains=app_domains,
             )
+        if target_type == "service_instance":
+            self._reconcile_service_portals(slug)
         with self._repository.transaction() as tx:
             for binding in dependent_bindings:
                 tx.create_reconciliation_request_if_not_active(
@@ -424,6 +457,8 @@ class Reconciler:
         slug = _target_slug(request)
         if target_type == "app_instance":
             self._delete_app_ingresses(slug)
+        else:
+            self._delete_service_portals(slug)
         self._deployer.uninstall(target_type=target_type, slug=slug)
         message = "Runtime deployment is removed while desired state is preserved."
         with self._repository.transaction() as tx:
@@ -469,6 +504,7 @@ class Reconciler:
             self._delete_app_ingresses(slug)
         service_dependent_bindings: list[dict[str, object]] = []
         if target_type == "service_instance":
+            self._delete_service_portals(slug)
             service_dependent_bindings = self._cleanup_service_dependent_bindings(
                 service_instance_id=str(request["target_id"]),
             )
@@ -592,6 +628,73 @@ class Reconciler:
         )
         return manifest.spec.provisioning.engine
 
+    def _service_portals(self, slug: str) -> list[dict[str, object]]:
+        row = self._repository.get_service_row(slug)
+        if row is None:
+            raise RuntimeBlockedError(
+                reason="service_not_found",
+                message="Service desired state was not found.",
+            )
+        # A removed catalog source cannot tell us what portals were declared.
+        # Returning none keeps teardown and reconcile from raising here; an
+        # orphaned Ingress is bounded by its Service namespace and goes away with
+        # it on destroy.
+        manifest = _optional_service_manifest_from_row(row)
+        if manifest is None:
+            return []
+        return [
+            {
+                "name": portal.name,
+                "displayName": portal.displayName,
+                "target": {"port": portal.target.port},
+            }
+            for portal in manifest.spec.portals
+        ]
+
+    def _unpublish_service_portals_if_ineligible(self, slug: str) -> None:
+        """Tear down portal Ingress when no root domain is portal-eligible.
+
+        Safe to run before the deployer: `ensure_service_portals` with no domains
+        only deletes, and never resolves a backend Service, so it does not require
+        the workload to exist yet.
+        """
+        assert self._runtime is not None
+        if self._platform_domains_for_portals():
+            return
+        portals = self._service_portals(slug)
+        if not portals:
+            return
+        self._runtime.ensure_service_portals(
+            service_slug=slug,
+            portals=portals,
+            domains=[],
+        )
+
+    def _reconcile_service_portals(self, slug: str) -> None:
+        """Reconcile a Service's portal Ingress against eligible root domains.
+
+        Deliberately does not block when no domain is portal-eligible (unlike App
+        routes, which block on a missing root domain): the Service itself is
+        healthy and only its UI is unreachable, so blocking install would punish
+        the default-deny default. The API reports the portal as unpublished.
+        """
+        assert self._runtime is not None
+        portals = self._service_portals(slug)
+        if not portals:
+            return
+        self._runtime.ensure_service_portals(
+            service_slug=slug,
+            portals=portals,
+            domains=self._platform_domains_for_portals(),
+        )
+
+    def _delete_service_portals(self, slug: str) -> None:
+        assert self._runtime is not None
+        portals = self._service_portals(slug)
+        if not portals:
+            return
+        self._runtime.delete_service_portals(service_slug=slug, portals=portals)
+
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
             {
@@ -601,6 +704,19 @@ class Reconciler:
                 "default": domain.is_default,
             }
             for domain in self._repository.list_platform_domains()
+        ]
+
+    def _platform_domains_for_portals(self) -> list[dict[str, object]]:
+        return [
+            {
+                "id": domain.id,
+                "name": domain.name,
+                "domain": domain.domain,
+                "default": domain.is_default,
+            }
+            for domain in portal_eligible_domains(
+                self._repository.list_platform_domains()
+            )
         ]
 
     def _delete_app_ingresses(self, slug: str) -> None:
@@ -689,6 +805,7 @@ class Reconciler:
         if target_type != "platform_domain" or action not in {
             "create",
             "set-default",
+            "set-service-portals",
             "remove",
             "reconcile",
         }:
@@ -699,9 +816,17 @@ class Reconciler:
             for row in self._repository.list_app_rows()
             if _app_row_should_reconcile_routes(row)
         ]
+        # Portal eligibility is per domain, so any domain change can publish or
+        # unpublish a portal. Enqueue every Service that declares one; the Service
+        # reconcile then deletes its Ingress when no eligible domain remains.
+        portal_services = [
+            row
+            for row in self._repository.list_service_rows()
+            if _service_row_should_reconcile_portals(row)
+        ]
         message = (
             "Platform domain desired state is recorded; "
-            "App route reconciliation is queued."
+            "App route and Service portal reconciliation is queued."
         )
         with self._repository.transaction() as tx:
             for app in routed_apps:
@@ -711,6 +836,14 @@ class Reconciler:
                     target_generation=int(app["generation"]),
                     action="reconcile",
                     target_snapshot={"slug": str(app["slug"])},
+                )
+            for service in portal_services:
+                tx.create_reconciliation_request(
+                    target_type="service_instance",
+                    target_id=str(service["id"]),
+                    target_generation=int(service["generation"]),
+                    action="reconcile",
+                    target_snapshot={"slug": str(service["slug"])},
                 )
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),
@@ -731,6 +864,7 @@ class Reconciler:
                         "reason": "platform_domain_reconciled",
                         "message": message,
                         "enqueuedAppReconciliations": len(routed_apps),
+                        "enqueuedServicePortalReconciliations": len(portal_services),
                     }
                 ],
                 observed_generation=int(request["target_generation"]),
@@ -1074,6 +1208,13 @@ def _app_row_should_reconcile_routes(row: dict[str, object]) -> bool:
     if row.get("lifecycle") == "removed" or row.get("delete_requested_at") is not None:
         return False
     return bool(_app_manifest_from_row(row).spec.routes)
+
+
+def _service_row_should_reconcile_portals(row: dict[str, object]) -> bool:
+    if row.get("lifecycle") == "removed" or row.get("delete_requested_at") is not None:
+        return False
+    manifest = _optional_service_manifest_from_row(row)
+    return manifest is not None and bool(manifest.spec.portals)
 
 
 def _resource_type(value: str) -> ResourceType:

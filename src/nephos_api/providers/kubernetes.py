@@ -623,8 +623,10 @@ def _zitadel_service(
         spec.values,
         "bootstrapMachineKeyExpiration",
     )
-    ingress_enabled = _bool_value(spec.values, "ingressEnabled", False)
-    ingress_class_name = _optional_string_value(spec.values, "ingressClassName")
+    # ADR 20260726: Zitadel no longer owns its own Ingress. The platform generates
+    # it from the Service's `console` portal, and `externalHost` is derived from
+    # that same portal, so the issuer identity cannot disagree with the host the
+    # ingress actually serves.
     bootstrap_mount_path = bootstrap_machine_key_path.rsplit("/", 1)[0]
     bootstrap_reader_image = _string_value(
         spec.values,
@@ -662,18 +664,6 @@ def _zitadel_service(
         },
         opts=opts,
     )
-    if ingress_enabled:
-        _service_ingress(
-            name=name,
-            namespace=spec.namespace,
-            labels=labels,
-            host=external_host,
-            service_name=name,
-            service_port=8080,
-            ingress_class_name=ingress_class_name,
-            k8s=k8s,
-            opts=opts,
-        )
     k8s.apps.v1.StatefulSet(
         name,
         metadata={
@@ -977,54 +967,6 @@ def _zitadel_service(
                 ),
             ],
         },
-        opts=opts,
-    )
-
-
-def _service_ingress(
-    *,
-    name: str,
-    namespace: str,
-    labels: Mapping[str, str],
-    host: str,
-    service_name: str,
-    service_port: int,
-    ingress_class_name: str | None,
-    k8s,
-    opts,
-) -> None:
-    spec: dict[str, object] = {
-        "rules": [
-            {
-                "host": host,
-                "http": {
-                    "paths": [
-                        {
-                            "path": "/",
-                            "pathType": "Prefix",
-                            "backend": {
-                                "service": {
-                                    "name": service_name,
-                                    "port": {"number": service_port},
-                                }
-                            },
-                        }
-                    ]
-                },
-            }
-        ],
-    }
-    if ingress_class_name is not None:
-        spec["ingressClassName"] = ingress_class_name
-    k8s.networking.v1.Ingress(
-        name,
-        metadata={
-            "name": name,
-            "namespace": namespace,
-            "labels": dict(labels),
-            "annotations": {"pulumi.com/skipAwait": "true"},
-        },
-        spec=spec,
         opts=opts,
     )
 
