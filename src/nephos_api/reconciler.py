@@ -677,9 +677,9 @@ class Reconciler:
         rerunning hooks and restarting workloads that have nothing to do with
         routing. This action does the routing work and nothing else.
 
-        No status snapshot: this pass never inspected the workload, so it has
-        nothing truthful to say about the Service's health. The request state is
-        the observable outcome.
+        No status snapshot, on success or failure: this pass never inspected the
+        workload, so it has nothing truthful to say about the Service's health. The
+        request state is the observable outcome.
         """
         if (
             self._runtime is None
@@ -689,8 +689,42 @@ class Reconciler:
             return False
 
         slug = _target_slug(request)
-        self._unpublish_service_portals_if_ineligible(slug)
-        self._reconcile_service_portals(slug)
+        # Revalidate the target. This request is queued by a platform-domain change
+        # and sits in a FIFO queue, so an operator can remove or destroy the Service
+        # after it was queued but before it is claimed. Applying the manifest then
+        # republishes an Ingress for a Service whose desired state says the runtime
+        # objects should be gone.
+        row = self._repository.get_service_row(slug)
+        if row is None or not _service_row_still_wants_portals(row):
+            with self._repository.transaction() as tx:
+                tx.update_reconciliation_request_state(
+                    request_id=str(request["id"]),
+                    state="succeeded",
+                )
+            return True
+
+        # Once, not twice. `_reconcile_service_portals` already passes the eligible
+        # domains, which is the empty list when none allow portals, so it does
+        # exactly what `_unpublish_service_portals_if_ineligible` would do here.
+        # Calling both doubled the Ingress listing for every Service on a domain
+        # revocation, and let the second pass block the request after the first had
+        # already removed the Ingress.
+        try:
+            self._reconcile_service_portals(slug)
+        except Exception as exc:
+            # Deliberately not letting this reach `_mark_blocked`. That overwrites
+            # the Service's only status snapshot, erasing `runtime_deployed`, which
+            # makes `_service_provider_runtime_ready` reject a provider that is in
+            # fact running and blocks dependent Service deploys. A routing failure
+            # must not restate the workload's health.
+            with self._repository.transaction() as tx:
+                tx.update_reconciliation_request_state(
+                    request_id=str(request["id"]),
+                    state="blocked",
+                    error=str(exc),
+                )
+            return True
+
         with self._repository.transaction() as tx:
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),
@@ -1262,6 +1296,18 @@ def _app_row_should_reconcile_routes(row: dict[str, object]) -> bool:
     if row.get("lifecycle") == "removed" or row.get("delete_requested_at") is not None:
         return False
     return bool(_app_manifest_from_row(row).spec.routes)
+
+
+def _service_row_still_wants_portals(row: dict[str, object]) -> bool:
+    """Whether desired state still wants this Service's runtime objects present.
+
+    Checked when the routing-only request is claimed, not when it is queued: the
+    two are separated by the FIFO queue, and a remove or destroy landing in between
+    means an Ingress must not be republished.
+    """
+    return (
+        row.get("lifecycle") != "removed" and row.get("delete_requested_at") is None
+    )
 
 
 def _service_row_should_reconcile_portals(row: dict[str, object]) -> bool:
