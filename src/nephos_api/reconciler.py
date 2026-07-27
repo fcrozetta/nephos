@@ -12,14 +12,8 @@ from nephos_api.kubernetes_runtime import ResourceType
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
-from nephos_api.routing import portal_eligible_domains
+from nephos_api.routing import PORTAL_RECONCILE_ACTION, portal_eligible_domains
 from nephos_api.runtime_errors import RuntimeBlockedError
-
-# Routing-only reconciliation. Distinct from `reconcile` on purpose: every other
-# handler guards on its own action, so a new verb is inert everywhere it is not
-# wanted, and a platform-domain change can reach a Service's Ingress without
-# deploying the Service. Not a lifecycle action, so it is never operator-requested.
-PORTAL_RECONCILE_ACTION = "reconcile-portals"
 
 
 class RuntimeAdapter(Protocol):

@@ -101,6 +101,34 @@ class DesiredStateRepository:
             ).fetchone()
         return dict(row) if row else None
 
+    def latest_request_for_target_action(
+        self,
+        *,
+        target_type: str,
+        target_id: str,
+        action: str,
+    ) -> dict[str, object] | None:
+        """The most recent request for one target and action, whatever its state.
+
+        Routing-only reconciliation deliberately writes no status snapshot, since it
+        never inspects the workload and must not restate its health. That left a
+        failure recorded only on a request nothing exposed, so a portal could be
+        reported unpublished while its Ingress was still serving. This is how the
+        read path finds that outcome without inventing a second place to store it.
+        """
+        with connect_database(self.db_path) as connection:
+            row = connection.execute(
+                """
+                SELECT id, action, state, error, updated_at
+                FROM reconciliation_requests
+                WHERE target_type = ? AND target_id = ? AND action = ?
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT 1
+                """,
+                (target_type, target_id, action),
+            ).fetchone()
+        return dict(row) if row else None
+
     def get_service_row(self, slug: str) -> dict[str, object] | None:
         with connect_database(self.db_path) as connection:
             row = connection.execute(

@@ -161,3 +161,14 @@ def portal_canonical_domain(
         (domain for domain in eligible if domain.is_default),
         eligible[0],
     )
+
+
+# Routing-only reconciliation. Distinct from `reconcile` on purpose: every other
+# handler guards on its own action, so a new verb is inert everywhere it is not
+# wanted, and a platform-domain change can reach a Service's Ingress without
+# deploying the Service. Not a lifecycle action, so it is never operator-requested.
+#
+# Lives here rather than in the reconciler because the read path needs it too: the
+# API surfaces a failed routing pass by looking up the last request with this
+# action, and importing the reconciler from an endpoint module would be backwards.
+PORTAL_RECONCILE_ACTION = "reconcile-portals"

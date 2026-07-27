@@ -25,6 +25,7 @@ from nephos_api.kubernetes_runtime import ResourceType, namespace_name
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.routing import (
+    PORTAL_RECONCILE_ACTION,
     app_route_host_prefixes,
     portal_canonical_domain,
     portal_eligible_domains,
@@ -1265,6 +1266,11 @@ def _portal_snapshots(
     reason rather than omitted or given a URL that resolves nowhere: default-deny
     means unpublished is the normal state on a fresh install, and a silent absence
     reads as "the feature is broken".
+
+    Domain eligibility alone is desired state, not observed state. When the routing
+    reconcile that should have applied it failed, the Ingress may still be serving,
+    so reporting a clean `published: false` would tell an operator the UI is off the
+    network while it is live. A failed routing pass is surfaced here instead.
     """
     repo = _repo(request)
     domains = repo.list_platform_domains()
@@ -1279,14 +1285,36 @@ def _portal_snapshots(
         resource_type="service_instance",
         resource_id=service_instance_id,
     )
+    # Routing-only reconciliation writes no status snapshot on purpose: it never
+    # inspects the workload, so it must not restate its health. The consequence was
+    # that its failures were recorded only on a request no endpoint exposed. Read
+    # that request here rather than adding a second place to store portal state.
+    routing = repo.latest_request_for_target_action(
+        target_type="service_instance",
+        target_id=service_instance_id,
+        action=PORTAL_RECONCILE_ACTION,
+    )
+    routing_failed = routing is not None and str(routing["state"]) == "blocked"
+    if routing_failed:
+        portal_status = {
+            "level": "blocked",
+            "reason": "portal_routing_failed",
+            "message": str(routing["error"] or "Portal routing did not converge."),
+            "observedAt": str(routing["updated_at"]),
+        }
     return [
         {
             "name": portal["name"],
             "displayName": portal["displayName"],
             "target": portal["target"],
             "published": canonical is not None,
+            # `published` states desired exposure. When routing failed we do not
+            # know the live state, so the reason says that instead of the flat
+            # "no eligible domain", which would read as a completed teardown.
             "unpublishedReason": (
-                None if canonical is not None else "no_portal_eligible_domain"
+                "portal_routing_failed"
+                if routing_failed and canonical is None
+                else (None if canonical is not None else "no_portal_eligible_domain")
             ),
             "canonicalUrl": (
                 service_portal_url(
