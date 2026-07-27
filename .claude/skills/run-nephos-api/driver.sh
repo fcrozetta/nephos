@@ -39,6 +39,21 @@ ADMIN_PASS="Driver-P@ss1"
 say() { printf '\n== %s\n' "$*"; }
 die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
+# Every kubectl call goes through this, pinned to an explicit context.
+#
+# Bare `kubectl` follows whatever context the caller happens to have selected. The
+# image is imported into k3d `nephos` regardless, so with an unrelated context
+# current, `cluster-deploy` would `set image` and `rollout restart` a *different*
+# cluster's nephos-api to a tag that exists only in k3d. ADR 20260715 pins LCL to
+# k3d-nephos and `hostctl.py` already passes --context for exactly this reason.
+KCTX="${NEPHOS_DRIVER_CONTEXT:-k3d-nephos}"
+kc() { kubectl --context "$KCTX" "$@"; }
+
+require_context() {
+  kubectl config get-contexts -o name 2>/dev/null | grep -qx "$KCTX" ||
+    die "kube context '${KCTX}' not found; create the k3d cluster or set NEPHOS_DRIVER_CONTEXT"
+}
+
 # `local-down` ends in `rm -rf "$RUN_DIR"`, and RUN_DIR is caller-supplied, so
 # `NEPHOS_DRIVER_DIR=$HOME driver.sh local-down` would have deleted a home
 # directory. Two independent guards: reject paths that are obviously not scratch
@@ -161,14 +176,28 @@ cmd_local_up() {
     || { cat "${RUN_DIR}/init.log"; die "init"; }
 
   say "serving on ${BASE}"
+  # `cmd_local_down` above only pkills the exact serve command line, so an API
+  # started some other way still holds the port. Our `uv run` would then fail to
+  # bind while the health check below succeeded against *that* server, and
+  # local-smoke would go on to mutate its real database. Refuse instead.
+  if curl -fsS -o /dev/null --max-time 2 "${BASE}/healthz" 2>/dev/null; then
+    die "something is already serving ${BASE}; free port ${PORT} or set NEPHOS_DRIVER_PORT"
+  fi
   env NEPHOS_API_DB_PATH="$DB" \
       NEPHOS_API_CATALOG_ROOTS="$CATALOG" \
       NEPHOS_API_INTERNAL_DOMAIN="$DOMAIN" \
     uv run nephos-api serve --host 127.0.0.1 --port "$PORT" \
       >"${RUN_DIR}/serve.log" 2>&1 &
-  echo $! >"$PIDFILE"
+  local serve_pid=$!
+  echo "$serve_pid" >"$PIDFILE"
 
   for _ in $(seq 1 60); do
+    # Liveness before health: a dead server plus a healthy answer means something
+    # else is bound to this port, which is the fail-open this replaces.
+    if ! kill -0 "$serve_pid" 2>/dev/null; then
+      tail -30 "${RUN_DIR}/serve.log"
+      die "server exited; ${BASE} is not ours"
+    fi
     # One request, captured. Probing and then re-fetching for the message meant a
     # failed second call still printed an empty body and returned 0, so `local-up`
     # reported a healthy server it had never actually read.
@@ -184,18 +213,27 @@ cmd_local_up() {
 
 cmd_local_down() {
   reject_unsafe_run_dir
-  for f in "$PFFILE" "$PIDFILE"; do
-    [ -f "$f" ] && { kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; }
-  done
-  pkill -f "nephos-api serve --host 127.0.0.1 --port ${PORT}" 2>/dev/null
-  # Absent marker means this driver never created the directory. Stopping the
-  # processes is still correct; deleting someone else's tree is not.
+  # Marker first, before reading anything out of the directory. `serve.pid` and
+  # `portforward.pid` are generic names: pointed at someone else's directory, this
+  # would have killed their process from their pid file. Preserving the tree was
+  # not enough, because the kill happened before the ownership check.
   if [ -e "${RUN_DIR}/${MARKER}" ]; then
+    for f in "$PFFILE" "$PIDFILE"; do
+      [ -f "$f" ] && { kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; }
+    done
+    pkill -f "nephos-api serve --host 127.0.0.1 --port ${PORT}" 2>/dev/null
     rm -rf "$RUN_DIR"
-  elif [ -d "$RUN_DIR" ]; then
+    echo "stopped"
+    return 0
+  fi
+  if [ -d "$RUN_DIR" ]; then
     printf 'kept %s: no %s marker, so this driver did not create it\n' \
       "$RUN_DIR" "$MARKER"
+    return 0
   fi
+  # Nothing of ours on disk. Still reap a server matching our exact serve command
+  # line, which is the one thing we can attribute without the directory.
+  pkill -f "nephos-api serve --host 127.0.0.1 --port ${PORT}" 2>/dev/null
   echo "stopped"
 }
 
@@ -255,8 +293,9 @@ PY
 # cannot reach it. Exec into the pod instead. Same trick, same reason: it avoids
 # the driver ever holding the operator's password.
 cmd_cluster_mint_token() {
+  require_context
   local minutes="${1:-20}"
-  kubectl -n nephos-system exec deploy/nephos-api -c nephos-api -- python3 -c "
+  kc -n nephos-system exec deploy/nephos-api -c nephos-api -- python3 -c "
 import datetime, hashlib, secrets, sqlite3
 tok = secrets.token_urlsafe(32)
 exp = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=${minutes}))
@@ -272,7 +311,8 @@ print(tok)
 }
 
 cmd_cluster_revoke_tokens() {
-  kubectl -n nephos-system exec deploy/nephos-api -c nephos-api -- python3 -c "
+  require_context
+  kc -n nephos-system exec deploy/nephos-api -c nephos-api -- python3 -c "
 import sqlite3
 c = sqlite3.connect('/data/state/nephos.db')
 c.execute(\"DELETE FROM admin_tokens WHERE subject='driver'\")
@@ -354,6 +394,7 @@ else:
 
 # ----------------------------------------------------------------- cluster verbs
 cmd_cluster_deploy() {
+  require_context
   cd "$UNIT" || die "cannot cd $UNIT"
   k3d cluster list 2>/dev/null | grep -q '^nephos' || die "no k3d cluster named nephos"
   # A stopped cluster shows 0/1 servers; start beats recreate.
@@ -374,16 +415,16 @@ cmd_cluster_deploy() {
   printf '%s\n' "$import_log" | tail -1
 
   say "point the Deployment at it"
-  kubectl -n nephos-system set image deploy/nephos-api \
+  kc -n nephos-system set image deploy/nephos-api \
     nephos-api="$IMAGE" init="$IMAGE" >/dev/null || die "kubectl set image"
   # The manifest defaults to :latest, so imagePullPolicy is Always and `set image`
   # does not change it: a locally-imported tag would ImagePullBackOff.
-  kubectl -n nephos-system patch deploy/nephos-api --type=json -p '[
+  kc -n nephos-system patch deploy/nephos-api --type=json -p '[
     {"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"},
     {"op":"replace","path":"/spec/template/spec/initContainers/0/imagePullPolicy","value":"IfNotPresent"}]' >/dev/null || die "kubectl patch imagePullPolicy"
-  kubectl -n nephos-system rollout restart deploy/nephos-api >/dev/null || die "rollout restart"
+  kc -n nephos-system rollout restart deploy/nephos-api >/dev/null || die "rollout restart"
   local rollout_log
-  rollout_log=$(kubectl -n nephos-system rollout status deploy/nephos-api \
+  rollout_log=$(kc -n nephos-system rollout status deploy/nephos-api \
     --timeout=300s 2>&1) || die "rollout did not complete"
   printf '%s\n' "$rollout_log" | tail -1
 
@@ -403,7 +444,7 @@ cmd_cluster_deploy() {
   if curl -fsS -o /dev/null --max-time 2 "${BASE}/healthz" 2>/dev/null; then
     die "something is already serving ${BASE}; free port ${PORT} before cluster-deploy"
   fi
-  kubectl -n nephos-system port-forward svc/nephos-api "${PORT}:8099" \
+  kc -n nephos-system port-forward svc/nephos-api "${PORT}:8099" \
     >"${RUN_DIR}/pf.log" 2>&1 &
   local pf_pid=$!
   echo "$pf_pid" >"$PFFILE"
@@ -427,6 +468,7 @@ cmd_cluster_deploy() {
 }
 
 cmd_cluster_smoke() {
+  require_context
   curl -fsS -o /dev/null --max-time 3 "${BASE}/healthz" ||
     die "no API on ${BASE}; run cluster-deploy first"
   say "installed services"
@@ -444,7 +486,7 @@ for s in rows:
   # Captured, not piped: awk succeeds on empty input, so piping straight into it
   # discarded kubectl's exit status. An API error rendered as "(none)" — identical
   # to "the portal Ingress was never created" — and the run still printed PASS.
-  ingresses="$(kubectl get ingress -A --no-headers)" || die "list ingresses"
+  ingresses="$(kc get ingress -A --no-headers)" || die "list ingresses"
   if [ -z "$ingresses" ]; then
     echo "  (none)"
   else
