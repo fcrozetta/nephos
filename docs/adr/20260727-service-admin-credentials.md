@@ -1,6 +1,6 @@
 # Service admin credentials in the manifest
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-27
 - Tags: catalog, manifest-schema, secrets, console, usability
 

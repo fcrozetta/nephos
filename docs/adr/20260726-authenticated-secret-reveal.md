@@ -1,6 +1,6 @@
 # Authenticated secret reveal for operator-owned credentials
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-26
 - Tags: auth, secrets, api, console, security
 
