@@ -411,6 +411,12 @@ class Reconciler:
             return False
 
         slug = _target_slug(request)
+        # Stop keeps route intent (ADR 20260517), but the desired set still has to
+        # be applied: a manifest revision that removed a portal before the operator
+        # stopped the Service would otherwise leave the Ingress serving until some
+        # later reconcile happened to run.
+        if target_type == "service_instance":
+            self._reconcile_service_portals(slug)
         self._runtime.scale_workloads(_resource_type(target_type), slug, 0)
         message = "Runtime workloads are scaled to zero."
         with self._repository.transaction() as tx:
@@ -1208,10 +1214,13 @@ def _app_row_should_reconcile_routes(row: dict[str, object]) -> bool:
 
 
 def _service_row_should_reconcile_portals(row: dict[str, object]) -> bool:
+    # Deliberately not gated on `spec.portals` being non-empty. A Service whose
+    # manifest now declares none is exactly the one carrying an orphan Ingress, so
+    # excluding it skipped the case pruning exists for. Any readable manifest
+    # qualifies; the reconcile itself is cheap when there is nothing to do.
     if row.get("lifecycle") == "removed" or row.get("delete_requested_at") is not None:
         return False
-    manifest = _optional_service_manifest_from_row(row)
-    return manifest is not None and bool(manifest.spec.portals)
+    return _optional_service_manifest_from_row(row) is not None
 
 
 def _resource_type(value: str) -> ResourceType:

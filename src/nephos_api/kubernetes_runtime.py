@@ -375,9 +375,10 @@ class KubernetesRuntime:
                 f"refusing to delete Ingress in unowned namespace {namespace}"
             )
         if _is_terminating_namespace(namespace_resource):
-            raise KubernetesRuntimeSafetyError(
-                f"refusing to delete Ingress in terminating namespace {namespace}"
-            )
+            # Cascading namespace deletion removes these Ingresses anyway, and
+            # raising here blocked the request before namespace and desired-state
+            # cleanup could run, so a destroy could never complete.
+            return
         self._prune_service_portals(
             namespace=namespace,
             service_slug=service_slug,
@@ -405,10 +406,14 @@ class KubernetesRuntime:
                 label_selector=selector,
             ).items
         except ApiException as exc:
-            # Do not swallow this. With an empty desired set the caller has no
-            # other operation that can fail, so a transient list error would mark
-            # the reconcile succeeded while the obsolete admin Ingress kept
-            # serving. Raise so reconciliation retries instead of failing open.
+            # Do not swallow this. With an empty desired set nothing else in the
+            # reconcile can fail, so a transient list error would mark the request
+            # succeeded while the obsolete admin Ingress kept serving.
+            #
+            # ! This surfaces the failure, it does not retry it: the reconciler has
+            # ! no retry path, and both `blocked` and `failed` are terminal because
+            # ! the worker only claims `pending`. An operator has to re-trigger.
+            # ! Visibly blocked still beats silently succeeded.
             raise KubernetesRuntimeSafetyError(
                 f"could not list portal Ingresses in {namespace}: {exc.reason}"
             ) from exc

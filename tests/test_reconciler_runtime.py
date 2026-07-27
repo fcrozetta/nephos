@@ -2657,3 +2657,74 @@ spec:
 """.strip()
     )
     return path
+
+
+def test_explicit_stop_reconciles_service_portals(tmp_path: Path) -> None:
+    """Stop keeps route intent but must still apply the desired set.
+
+    A manifest revision that removed a portal before the operator stopped the
+    Service would otherwise leave the Ingress serving until some later reconcile.
+    """
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    catalog_root = tmp_path / "catalog"
+    manifest = write_service_with_portal(catalog_root)
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="arcadedb",
+            catalog_name="arcadedb",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest),
+            manifest_digest="sha256:arcadedb",
+        )
+        tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action="stop",
+            target_snapshot={"slug": service.slug},
+        )
+
+    assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
+
+    assert runtime.service_portals
+    assert runtime.scaled_workloads == [("service_instance", "arcadedb", 0)]
+
+
+def test_platform_domain_reconcile_includes_services_declaring_no_portals(
+    tmp_path: Path,
+) -> None:
+    """The Service with an orphan is the one declaring none.
+
+    Gating enqueue on a non-empty portal list skipped exactly the case pruning
+    exists for.
+    """
+    repo = _repo(tmp_path)
+    catalog_root = tmp_path / "catalog"
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="postgres",
+            catalog_name="postgres",
+            catalog_source_id="default",
+            catalog_source_path=str(write_service(catalog_root)),
+            manifest_digest="sha256:postgres",
+        )
+        domain = tx.create_platform_domain(
+            name="local", domain="nephos.lcl", is_default=True
+        )
+        tx.create_reconciliation_request(
+            target_type="platform_domain",
+            target_id=domain.id,
+            target_generation=domain.generation,
+            action="set-service-portals",
+            target_snapshot={"name": domain.name},
+        )
+
+    assert Reconciler(repo, runtime=FakeRuntime()).run_once() == 1
+
+    with sqlite3.connect(repo.db_path) as connection:
+        queued = connection.execute(
+            "SELECT target_id FROM reconciliation_requests"
+            " WHERE target_type = 'service_instance'"
+        ).fetchall()
+    assert [row[0] for row in queued] == [service.id]
