@@ -58,13 +58,35 @@ reject_unsafe_run_dir() {
     /*) : ;;
     *) die "NEPHOS_DRIVER_DIR must be an absolute path, got '${RUN_DIR}'" ;;
   esac
+  # `..` makes the literal path a poor guide to what gets deleted: /tmp/../etc
+  # passes every check above and is not /tmp.
+  case "$RUN_DIR" in
+    *"/../"*|*"/..") die "NEPHOS_DRIVER_DIR must not contain '..', got '${RUN_DIR}'" ;;
+  esac
 }
 
 # Called by every path that creates RUN_DIR, so teardown can tell a directory the
 # driver owns from one the caller merely pointed at.
+#
+# A blocklist of obviously-wrong paths is not enough on its own: rejecting only
+# `$HOME` and `/` still let `NEPHOS_DRIVER_DIR=/tmp` be stamped as driver-owned,
+# and `local-down` would then have deleted all of /tmp. Ownership has to be
+# positive, so claim only a directory this driver created or one that is empty.
 claim_run_dir() {
   reject_unsafe_run_dir
-  mkdir -p "$RUN_DIR" || die "could not create ${RUN_DIR}"
+  if [ -e "${RUN_DIR}/${MARKER}" ]; then
+    return 0
+  fi
+  if [ -d "$RUN_DIR" ]; then
+    if [ -n "$(ls -A "$RUN_DIR" 2>/dev/null)" ]; then
+      die "${RUN_DIR} already exists, is not empty, and is not driver-owned;" \
+        "point NEPHOS_DRIVER_DIR at a new or empty path"
+    fi
+  elif [ -e "$RUN_DIR" ]; then
+    die "${RUN_DIR} exists and is not a directory"
+  else
+    mkdir -p "$RUN_DIR" || die "could not create ${RUN_DIR}"
+  fi
   : >"${RUN_DIR}/${MARKER}" || die "could not claim ${RUN_DIR}"
 }
 
@@ -368,13 +390,33 @@ cmd_cluster_deploy() {
   say "port-forward ${BASE}"
   claim_run_dir
   [ -f "$PFFILE" ] && { kill "$(cat "$PFFILE")" 2>/dev/null; rm -f "$PFFILE"; }
+  # A local-up server left running holds ${PORT}, so port-forward would exit
+  # immediately and every check below would silently talk to the local throwaway
+  # SQLite instead of the cluster. Stop it rather than reporting a cluster that
+  # was never reached.
+  if [ -f "$PIDFILE" ]; then
+    say "stopping the local server holding port ${PORT}"
+    kill "$(cat "$PIDFILE")" 2>/dev/null
+    rm -f "$PIDFILE"
+    sleep 1
+  fi
+  if curl -fsS -o /dev/null --max-time 2 "${BASE}/healthz" 2>/dev/null; then
+    die "something is already serving ${BASE}; free port ${PORT} before cluster-deploy"
+  fi
   kubectl -n nephos-system port-forward svc/nephos-api "${PORT}:8099" \
     >"${RUN_DIR}/pf.log" 2>&1 &
-  echo $! >"$PFFILE"
+  local pf_pid=$!
+  echo "$pf_pid" >"$PFFILE"
   # One request, not two. Probing and then re-fetching for the message let a
   # port-forward that died in between report success anyway.
   local health
   for _ in $(seq 1 40); do
+    # Liveness first: a dead port-forward plus a healthy answer means the answer
+    # came from something else bound to this port, not the cluster.
+    if ! kill -0 "$pf_pid" 2>/dev/null; then
+      tail -5 "${RUN_DIR}/pf.log" 2>/dev/null
+      die "port-forward exited; ${BASE} is not the cluster"
+    fi
     if health=$(curl -fsS --max-time 2 "${BASE}/healthz" 2>/dev/null); then
       printf 'healthz: %s\n' "$health"
       return 0
