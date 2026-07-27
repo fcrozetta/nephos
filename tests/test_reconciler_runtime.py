@@ -7,7 +7,7 @@ from catalog_fixtures import write_app, write_service, write_service_with_portal
 from nephos_api.db import migrate_database
 from nephos_api.kubernetes_runtime import KubernetesRuntimeSafetyError
 from nephos_api.provisioning import BindingProvisioningContext
-from nephos_api.reconciler import Reconciler
+from nephos_api.reconciler import PORTAL_RECONCILE_ACTION, Reconciler
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -796,7 +796,12 @@ def test_platform_domain_reconcile_enqueues_portal_service_reconciles(
             """
         ).fetchall()
 
-    assert [tuple(row) for row in queued] == [(service.id, "reconcile", "pending")]
+    # Routing-only, not `reconcile`. The queued set deliberately includes Services
+    # that declare no portal, so a plain reconcile would have made a domain toggle
+    # run the deployer against every Service on the platform.
+    assert [tuple(row) for row in queued] == [
+        (service.id, PORTAL_RECONCILE_ACTION, "pending")
+    ]
 
 
 def test_service_deployment_enqueues_dependent_binding_reconciles(
@@ -2794,3 +2799,61 @@ def test_platform_domain_reconcile_includes_services_declaring_no_portals(
             " WHERE target_type = 'service_instance'"
         ).fetchall()
     assert [row[0] for row in queued] == [service.id]
+
+
+def test_portal_reconcile_action_never_runs_the_deployer(tmp_path: Path) -> None:
+    """A domain change must not redeploy the platform.
+
+    The queued set is deliberately wide: it includes Services whose manifest
+    declares no portal, because those are the ones holding an orphan Ingress. When
+    that set was queued as a plain `reconcile`, toggling one domain ran
+    `_deployer.deploy` for every Service, rerunning hooks and restarting workloads
+    that have nothing to do with routing.
+    """
+    catalog_root = tmp_path / "catalog"
+    manifest_path = write_service_with_portal(catalog_root)
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    deployer = FakeDeployer()
+    with repo.transaction() as tx:
+        tx.create_platform_domain(
+            name="local",
+            domain="nephos.lcl",
+            is_default=True,
+            allows_service_portals=True,
+        )
+        service = tx.create_service_instance(
+            slug="arcadedb",
+            catalog_name="arcadedb",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:arcadedb",
+        )
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action=PORTAL_RECONCILE_ACTION,
+            target_snapshot={"slug": service.slug},
+        )
+
+    assert Reconciler(repo, runtime=runtime, deployer=deployer).run_once() == 1
+
+    assert deployer.deployed == []
+    assert runtime.scaled_workloads == []
+    # The routing work still happened.
+    assert len(runtime.service_portals) == 1
+    assert runtime.service_portals[0]["service_slug"] == "arcadedb"
+    with sqlite3.connect(repo.db_path) as connection:
+        state = connection.execute(
+            "SELECT state FROM reconciliation_requests WHERE id = ?",
+            (request.id,),
+        ).fetchone()[0]
+        # No status snapshot: this pass never looked at the workload, so it has
+        # nothing truthful to say about the Service's health.
+        status_rows = connection.execute(
+            "SELECT COUNT(*) FROM status_snapshots WHERE resource_id = ?",
+            (service.id,),
+        ).fetchone()[0]
+    assert state == "succeeded"
+    assert status_rows == 0

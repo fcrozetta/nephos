@@ -15,6 +15,12 @@ from nephos_api.repository import DesiredStateRepository
 from nephos_api.routing import portal_eligible_domains
 from nephos_api.runtime_errors import RuntimeBlockedError
 
+# Routing-only reconciliation. Distinct from `reconcile` on purpose: every other
+# handler guards on its own action, so a new verb is inert everywhere it is not
+# wanted, and a platform-domain change can reach a Service's Ingress without
+# deploying the Service. Not a lifecycle action, so it is never operator-requested.
+PORTAL_RECONCILE_ACTION = "reconcile-portals"
+
 
 class RuntimeAdapter(Protocol):
     def ensure_namespace(self, resource_type: ResourceType, slug: str) -> object: ...
@@ -114,6 +120,8 @@ class Reconciler:
             if self._reconcile_namespace_remove_request(request):
                 return 1
             if self._reconcile_namespace_destroy_request(request):
+                return 1
+            if self._reconcile_service_portals_request(request):
                 return 1
             if self._reconcile_platform_domain_request(request):
                 return 1
@@ -659,6 +667,37 @@ class Reconciler:
             for portal in manifest.spec.portals
         ]
 
+    def _reconcile_service_portals_request(self, request: dict[str, object]) -> bool:
+        """Apply a Service's portal Ingress without touching its workload.
+
+        A platform-domain change has to reach every Service that might own a portal
+        Ingress, including one whose manifest no longer declares any -- that is the
+        Service carrying an orphan. Queueing a normal `reconcile` for that set made
+        a domain toggle run `_deployer.deploy` for every Service on the platform,
+        rerunning hooks and restarting workloads that have nothing to do with
+        routing. This action does the routing work and nothing else.
+
+        No status snapshot: this pass never inspected the workload, so it has
+        nothing truthful to say about the Service's health. The request state is
+        the observable outcome.
+        """
+        if (
+            self._runtime is None
+            or str(request["target_type"]) != "service_instance"
+            or str(request["action"]) != PORTAL_RECONCILE_ACTION
+        ):
+            return False
+
+        slug = _target_slug(request)
+        self._unpublish_service_portals_if_ineligible(slug)
+        self._reconcile_service_portals(slug)
+        with self._repository.transaction() as tx:
+            tx.update_reconciliation_request_state(
+                request_id=str(request["id"]),
+                state="succeeded",
+            )
+        return True
+
     def _unpublish_service_portals_if_ineligible(self, slug: str) -> None:
         """Tear down portal Ingress when no root domain is portal-eligible.
 
@@ -827,8 +866,10 @@ class Reconciler:
             if _app_row_should_reconcile_routes(row)
         ]
         # Portal eligibility is per domain, so any domain change can publish or
-        # unpublish a portal. Enqueue every Service that declares one; the Service
-        # reconcile then deletes its Ingress when no eligible domain remains.
+        # unpublish a portal. The set has to include Services whose manifest now
+        # declares no portal, since those are the ones holding an orphan Ingress,
+        # which is why this queues a routing-only action rather than a full
+        # reconcile: the wide set must not turn a domain toggle into a redeploy.
         portal_services = [
             row
             for row in self._repository.list_service_rows()
@@ -852,7 +893,10 @@ class Reconciler:
                     target_type="service_instance",
                     target_id=str(service["id"]),
                     target_generation=int(service["generation"]),
-                    action="reconcile",
+                    # Routing only. A plain `reconcile` here would deploy every
+                    # Service in the set, and the set is deliberately wide enough
+                    # to include Services that declare no portal at all.
+                    action=PORTAL_RECONCILE_ACTION,
                     target_snapshot={"slug": str(service["slug"])},
                 )
             tx.update_reconciliation_request_state(
