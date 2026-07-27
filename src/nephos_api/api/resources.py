@@ -1378,13 +1378,14 @@ def _credentials_snapshot(
     if username is None:
         resolved = config.get(str(declared["usernameOption"]))
         username = None if resolved is None else str(resolved)
-        # An install override can still put an `op://`/`bao://`/`secrets://`
-        # reference here. Publishing it would be wrong twice: the operator gets a
-        # username the workload is not using, and an unauthenticated response
-        # leaks a provider coordinate. Catalog validation rejects a referenced
-        # default; this covers the override, and omitting is better than lying.
-        if is_secret_reference(username):
-            username = None
+    # Applies to both spellings. Catalog validation rejects a referenced literal and
+    # a referenced option default, but an install override can still supply one, so
+    # the check sits after resolution rather than inside the option branch.
+    # Publishing it would be wrong twice: the operator gets a username the workload
+    # is not using, and an unauthenticated response leaks a provider coordinate.
+    # Omitting is better than lying.
+    if is_secret_reference(username):
+        username = None
     return {
         "username": username,
         "passwordOption": declared["passwordOption"],

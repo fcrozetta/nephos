@@ -738,6 +738,16 @@ def _validate_service_credentials(*, path: Path, manifest: ServiceManifest) -> N
             f"{credentials.usernameOption!r} names a secret; the username is "
             "returned in clear text and must not be one"
         )
+    # Both spellings of "the username is a secret reference" are rejected. A fixed
+    # `username: op://vault/item/user` is the shorter path to the same defect: the
+    # runtime resolves it, this payload does not, and an unauthenticated
+    # `GET /services` would publish the provider coordinate as the account name.
+    if is_secret_reference(credentials.username):
+        raise CatalogValidationError(
+            f"invalid Service manifest {path}: credentials username "
+            f"{credentials.username!r} is a secret reference; the username is "
+            "published in clear text and must be a literal"
+        )
     # A referenced default is resolved for the workload but not for this payload,
     # so the operator would be shown the reference instead of the account name --
     # a username the Service is not using, plus a provider coordinate on an

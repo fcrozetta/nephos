@@ -546,3 +546,26 @@ def test_catalog_rejects_an_optional_username_option_with_no_default(
 
     with pytest.raises(CatalogValidationError, match="optional with no default"):
         CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_fixed_username_that_is_a_secret_reference(
+    tmp_path: Path,
+) -> None:
+    """The shorter path to the same defect as a referenced usernameOption.
+
+    A fixed `username: op://vault/item/user` is resolved by the runtime but not by
+    the Service payload, so unauthenticated `GET /services` would publish the
+    provider coordinate as the account name.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n"
+            "    username: op://vault/arcadedb/user\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="is a secret reference"):
+        CatalogLoader((root,)).get_service("arcadedb")
