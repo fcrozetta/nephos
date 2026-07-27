@@ -18,6 +18,7 @@ from nephos_api.domain import (
     InvalidMachineIdentifierError,
     validate_machine_identifier,
 )
+from nephos_api.secret_refs import is_secret_reference
 
 _KUBERNETES_DNS_LABEL_MAX_LENGTH = 63
 _BINDING_SECRET_NAME_PREFIX = "nephos-bind-"
@@ -737,6 +738,22 @@ def _validate_service_credentials(*, path: Path, manifest: ServiceManifest) -> N
             f"{credentials.usernameOption!r} names a secret; the username is "
             "returned in clear text and must not be one"
         )
+    # A referenced default is resolved for the workload but not for this payload,
+    # so the operator would be shown the reference instead of the account name --
+    # a username the Service is not using, plus a provider coordinate on an
+    # unauthenticated response. A username that has to live in a vault is not one
+    # Nephos can publish, so reject it at authoring time.
+    if credentials.usernameOption is not None:
+        for option in manifest.spec.config.options:
+            if option.name == credentials.usernameOption and is_secret_reference(
+                option.default
+            ):
+                raise CatalogValidationError(
+                    f"invalid Service manifest {path}: credentials usernameOption "
+                    f"{credentials.usernameOption!r} defaults to a secret "
+                    "reference; the username is published in clear text and must "
+                    "be a literal"
+                )
 
 
 def _validate_service_portals(*, path: Path, manifest: ServiceManifest) -> None:

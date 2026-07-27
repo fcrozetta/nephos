@@ -484,3 +484,35 @@ def test_catalog_rejects_a_username_option_that_names_a_secret(tmp_path: Path) -
 
     with pytest.raises(CatalogValidationError, match="names a secret"):
         CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_username_option_defaulting_to_a_secret_reference(
+    tmp_path: Path,
+) -> None:
+    """A referenced username resolves for the workload but not for the payload.
+
+    The deployer resolves `op://`/`bao://`/`secrets://` before configuring the
+    workload, so publishing the raw reference would hand the operator a username
+    the Service is not using and leak a provider coordinate on an unauthenticated
+    response. A username that has to live in a vault is not one Nephos can show.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "      required: true\n"
+            "    - name: admin-username\n"
+            "      type: string\n"
+            "      default: op://vault/arcadedb/username"
+        ),
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="defaults to a secret reference"):
+        CatalogLoader((root,)).get_service("arcadedb")

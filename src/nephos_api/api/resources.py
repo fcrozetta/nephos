@@ -38,6 +38,7 @@ from nephos_api.secret_refs import (
     SECRET_REFERENCE_SCHEMES,
     SECRETS_SCHEME,
     RuntimeSecretResolver,
+    is_secret_reference,
 )
 
 router = APIRouter(tags=["resources"])
@@ -1377,6 +1378,13 @@ def _credentials_snapshot(
     if username is None:
         resolved = config.get(str(declared["usernameOption"]))
         username = None if resolved is None else str(resolved)
+        # An install override can still put an `op://`/`bao://`/`secrets://`
+        # reference here. Publishing it would be wrong twice: the operator gets a
+        # username the workload is not using, and an unauthenticated response
+        # leaks a provider coordinate. Catalog validation rejects a referenced
+        # default; this covers the override, and omitting is better than lying.
+        if is_secret_reference(username):
+            username = None
     return {
         "username": username,
         "passwordOption": declared["passwordOption"],
