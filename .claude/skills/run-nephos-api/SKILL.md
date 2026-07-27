@@ -186,6 +186,11 @@ number reads as a failure. The 3 deselected tests need a live cluster and
   `admin-password` must satisfy length plus lower, upper, digit and symbol. Both
   fail at deploy time inside Pulumi, not at install, so the API returns `202` and
   the service goes `degraded`.
+- **`cluster-deploy` guards every step explicitly.** The driver sets `pipefail`
+  but not `errexit`, so an unguarded failure would be skipped and the final
+  health check would still pass against the old, still-running deployment:
+  exit 0 having deployed nothing. Keep the `|| die` and `PIPESTATUS` checks if
+  you add steps.
 - **A stopped k3d cluster looks like `0/1` servers, not absent.** `k3d cluster
   start nephos` is far cheaper than recreating; the driver checks for this.
 

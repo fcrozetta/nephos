@@ -299,18 +299,24 @@ cmd_cluster_deploy() {
   say "build ${IMAGE}"
   docker build -q -t "$IMAGE" . >/dev/null || die "docker build"
   say "import into k3d"
+  # Every step below is guarded. `pipefail` alone does not stop the script, and an
+  # unguarded failure here is the worst kind: an older cached image under the same
+  # tag keeps the old deployment healthy, the final health check passes, and
+  # cluster-deploy exits 0 having deployed nothing new.
   k3d image import "$IMAGE" -c nephos 2>&1 | tail -1
+  [ "${PIPESTATUS[0]}" -eq 0 ] || die "k3d image import"
 
   say "point the Deployment at it"
   kubectl -n nephos-system set image deploy/nephos-api \
-    nephos-api="$IMAGE" init="$IMAGE" >/dev/null
+    nephos-api="$IMAGE" init="$IMAGE" >/dev/null || die "kubectl set image"
   # The manifest defaults to :latest, so imagePullPolicy is Always and `set image`
   # does not change it: a locally-imported tag would ImagePullBackOff.
   kubectl -n nephos-system patch deploy/nephos-api --type=json -p '[
     {"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"},
-    {"op":"replace","path":"/spec/template/spec/initContainers/0/imagePullPolicy","value":"IfNotPresent"}]' >/dev/null
-  kubectl -n nephos-system rollout restart deploy/nephos-api >/dev/null
+    {"op":"replace","path":"/spec/template/spec/initContainers/0/imagePullPolicy","value":"IfNotPresent"}]' >/dev/null || die "kubectl patch imagePullPolicy"
+  kubectl -n nephos-system rollout restart deploy/nephos-api >/dev/null || die "rollout restart"
   kubectl -n nephos-system rollout status deploy/nephos-api --timeout=300s | tail -1
+  [ "${PIPESTATUS[0]}" -eq 0 ] || die "rollout did not complete"
 
   say "port-forward ${BASE}"
   mkdir -p "$RUN_DIR"
