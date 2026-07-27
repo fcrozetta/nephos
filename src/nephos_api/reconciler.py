@@ -15,6 +15,12 @@ from nephos_api.repository import DesiredStateRepository
 from nephos_api.routing import portal_eligible_domains
 from nephos_api.runtime_errors import RuntimeBlockedError
 
+# Routing-only reconciliation. Distinct from `reconcile` on purpose: every other
+# handler guards on its own action, so a new verb is inert everywhere it is not
+# wanted, and a platform-domain change can reach a Service's Ingress without
+# deploying the Service. Not a lifecycle action, so it is never operator-requested.
+PORTAL_RECONCILE_ACTION = "reconcile-portals"
+
 
 class RuntimeAdapter(Protocol):
     def ensure_namespace(self, resource_type: ResourceType, slug: str) -> object: ...
@@ -61,12 +67,7 @@ class RuntimeAdapter(Protocol):
         domains: list[dict[str, object]],
     ) -> None: ...
 
-    def delete_service_portals(
-        self,
-        *,
-        service_slug: str,
-        portals: list[dict[str, object]],
-    ) -> None: ...
+    def delete_service_portals(self, *, service_slug: str) -> None: ...
 
     def ensure_app_ingresses(
         self,
@@ -119,6 +120,8 @@ class Reconciler:
             if self._reconcile_namespace_remove_request(request):
                 return 1
             if self._reconcile_namespace_destroy_request(request):
+                return 1
+            if self._reconcile_service_portals_request(request):
                 return 1
             if self._reconcile_platform_domain_request(request):
                 return 1
@@ -246,8 +249,10 @@ class Reconciler:
         # Mirrors the stopped-App path: keep portal Ingress across stop/start so
         # route intent is not lost (ADR 20260517). Workloads scale to zero, so the
         # portal stops serving and status reports the Service as stopped.
-        assert self._runtime is not None
-        self._reconcile_service_portals(_target_slug(request))
+        #
+        # The portal reconcile lives in the delegate, not here: doing it in both
+        # places ran it twice for a lifecycle `reconcile` of an already-stopped
+        # Service, and the second run could fail after the first had succeeded.
         return self._reconcile_namespace_stop_request(
             _request_with_action(request, "stop")
         )
@@ -416,7 +421,18 @@ class Reconciler:
             return False
 
         slug = _target_slug(request)
+        # Scale first. Stopping the workload is what the operator asked for, and a
+        # portal reconcile that raises is fail-closed with no retry path, so doing
+        # it first left the request terminally blocked with pods still running --
+        # reporting `stopped` while serving traffic. Scaled-to-zero workloads mean
+        # the portal stops serving regardless of what its Ingress still says.
         self._runtime.scale_workloads(_resource_type(target_type), slug, 0)
+        # Stop keeps route intent (ADR 20260517), but the desired set still has to
+        # be applied: a manifest revision that removed a portal before the operator
+        # stopped the Service would otherwise leave the Ingress serving until some
+        # later reconcile happened to run.
+        if target_type == "service_instance":
+            self._reconcile_service_portals(slug)
         message = "Runtime workloads are scaled to zero."
         with self._repository.transaction() as tx:
             tx.update_reconciliation_request_state(
@@ -651,6 +667,71 @@ class Reconciler:
             for portal in manifest.spec.portals
         ]
 
+    def _reconcile_service_portals_request(self, request: dict[str, object]) -> bool:
+        """Apply a Service's portal Ingress without touching its workload.
+
+        A platform-domain change has to reach every Service that might own a portal
+        Ingress, including one whose manifest no longer declares any -- that is the
+        Service carrying an orphan. Queueing a normal `reconcile` for that set made
+        a domain toggle run `_deployer.deploy` for every Service on the platform,
+        rerunning hooks and restarting workloads that have nothing to do with
+        routing. This action does the routing work and nothing else.
+
+        No status snapshot, on success or failure: this pass never inspected the
+        workload, so it has nothing truthful to say about the Service's health. The
+        request state is the observable outcome.
+        """
+        if (
+            self._runtime is None
+            or str(request["target_type"]) != "service_instance"
+            or str(request["action"]) != PORTAL_RECONCILE_ACTION
+        ):
+            return False
+
+        slug = _target_slug(request)
+        # Revalidate the target. This request is queued by a platform-domain change
+        # and sits in a FIFO queue, so an operator can remove or destroy the Service
+        # after it was queued but before it is claimed. Applying the manifest then
+        # republishes an Ingress for a Service whose desired state says the runtime
+        # objects should be gone.
+        row = self._repository.get_service_row(slug)
+        if row is None or not _service_row_still_wants_portals(row):
+            with self._repository.transaction() as tx:
+                tx.update_reconciliation_request_state(
+                    request_id=str(request["id"]),
+                    state="succeeded",
+                )
+            return True
+
+        # Once, not twice. `_reconcile_service_portals` already passes the eligible
+        # domains, which is the empty list when none allow portals, so it does
+        # exactly what `_unpublish_service_portals_if_ineligible` would do here.
+        # Calling both doubled the Ingress listing for every Service on a domain
+        # revocation, and let the second pass block the request after the first had
+        # already removed the Ingress.
+        try:
+            self._reconcile_service_portals(slug)
+        except Exception as exc:
+            # Deliberately not letting this reach `_mark_blocked`. That overwrites
+            # the Service's only status snapshot, erasing `runtime_deployed`, which
+            # makes `_service_provider_runtime_ready` reject a provider that is in
+            # fact running and blocks dependent Service deploys. A routing failure
+            # must not restate the workload's health.
+            with self._repository.transaction() as tx:
+                tx.update_reconciliation_request_state(
+                    request_id=str(request["id"]),
+                    state="blocked",
+                    error=str(exc),
+                )
+            return True
+
+        with self._repository.transaction() as tx:
+            tx.update_reconciliation_request_state(
+                request_id=str(request["id"]),
+                state="succeeded",
+            )
+        return True
+
     def _unpublish_service_portals_if_ineligible(self, slug: str) -> None:
         """Tear down portal Ingress when no root domain is portal-eligible.
 
@@ -691,11 +772,11 @@ class Reconciler:
         )
 
     def _delete_service_portals(self, slug: str) -> None:
+        # Unconditional, and takes no manifest: the runtime enumerates what it
+        # owns. Gating on the current declarations left an orphan behind whenever
+        # a registry revision had already removed the portal.
         assert self._runtime is not None
-        portals = self._service_portals(slug)
-        if not portals:
-            return
-        self._runtime.delete_service_portals(service_slug=slug, portals=portals)
+        self._runtime.delete_service_portals(service_slug=slug)
 
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
@@ -819,8 +900,10 @@ class Reconciler:
             if _app_row_should_reconcile_routes(row)
         ]
         # Portal eligibility is per domain, so any domain change can publish or
-        # unpublish a portal. Enqueue every Service that declares one; the Service
-        # reconcile then deletes its Ingress when no eligible domain remains.
+        # unpublish a portal. The set has to include Services whose manifest now
+        # declares no portal, since those are the ones holding an orphan Ingress,
+        # which is why this queues a routing-only action rather than a full
+        # reconcile: the wide set must not turn a domain toggle into a redeploy.
         portal_services = [
             row
             for row in self._repository.list_service_rows()
@@ -844,7 +927,10 @@ class Reconciler:
                     target_type="service_instance",
                     target_id=str(service["id"]),
                     target_generation=int(service["generation"]),
-                    action="reconcile",
+                    # Routing only. A plain `reconcile` here would deploy every
+                    # Service in the set, and the set is deliberately wide enough
+                    # to include Services that declare no portal at all.
+                    action=PORTAL_RECONCILE_ACTION,
                     target_snapshot={"slug": str(service["slug"])},
                 )
             tx.update_reconciliation_request_state(
@@ -1212,11 +1298,26 @@ def _app_row_should_reconcile_routes(row: dict[str, object]) -> bool:
     return bool(_app_manifest_from_row(row).spec.routes)
 
 
+def _service_row_still_wants_portals(row: dict[str, object]) -> bool:
+    """Whether desired state still wants this Service's runtime objects present.
+
+    Checked when the routing-only request is claimed, not when it is queued: the
+    two are separated by the FIFO queue, and a remove or destroy landing in between
+    means an Ingress must not be republished.
+    """
+    return (
+        row.get("lifecycle") != "removed" and row.get("delete_requested_at") is None
+    )
+
+
 def _service_row_should_reconcile_portals(row: dict[str, object]) -> bool:
+    # Deliberately not gated on `spec.portals` being non-empty. A Service whose
+    # manifest now declares none is exactly the one carrying an orphan Ingress, so
+    # excluding it skipped the case pruning exists for. Any readable manifest
+    # qualifies; the reconcile itself is cheap when there is nothing to do.
     if row.get("lifecycle") == "removed" or row.get("delete_requested_at") is not None:
         return False
-    manifest = _optional_service_manifest_from_row(row)
-    return manifest is not None and bool(manifest.spec.portals)
+    return _optional_service_manifest_from_row(row) is not None
 
 
 def _resource_type(value: str) -> ResourceType:

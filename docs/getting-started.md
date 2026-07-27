@@ -149,6 +149,76 @@ secret.
 > resolve read-only for existing installs, but new manifests should use generated
 > options as above.
 
+## 5. Portals: reaching a Service's own UI
+
+Some Services ship a browser UI: ArcadeDB has Studio, Zitadel has its console. A
+Service declares those in its manifest and Nephos generates the Ingress, reports
+the URL, and feeds the resolved host back to the provider so the Service agrees
+with the platform about its own address.
+
+```yaml
+spec:
+  portals:
+    - name: studio
+      displayName: ArcadeDB Studio
+      target:
+        port: http
+```
+
+The first portal gets the bare instance host and later ones are prefixed under it,
+matching how App routes work:
+
+- `arcadedb.nephos.lcl` for the first portal
+- `metrics.arcadedb.nephos.lcl` for a second
+
+The first host is bare on purpose. Install Zitadel as instance `auth` and the
+issuer is `auth.nephos.lcl`, named for the role rather than the implementation.
+
+### Portals are default-deny per root domain
+
+Nothing is exposed until you allow it. On a fresh install every portal reports
+`unpublished` with reason `no_portal_eligible_domain`, which is the expected state
+and not a failure. The console's Platform page has a toggle.
+
+Over the API instead, noting that the in-cluster API has no Ingress of its own, so
+reach it through a port-forward:
+
+```bash
+kubectl -n nephos-system port-forward svc/nephos-api 8099:8099
+```
+
+```bash
+curl -sS -X POST http://127.0.0.1:8099/platform/config/domains/internal/actions/set-service-portals -H 'content-type: application/json' -d '{"allowed":true}'
+```
+
+`internal` there is the **name of the domain record**, not the domain itself. On a
+default LCL install the record is named `internal` and its domain is `nephos.lcl`,
+so this is the one place the two are easy to confuse. `GET
+/platform/config/domains` lists both if you are unsure.
+
+Revoking is the same call with `false`, and it tears the Ingress down. Workloads
+are left alone: the portal host is derived from the instance slug and the domain,
+so it does not change across a toggle and nothing needs redeploying.
+
+### In-cluster DNS needs one more step
+
+`scripts/setup-local-routing.sh` makes `*.nephos.lcl` resolve on your **host**, but
+not inside the cluster, where those names land on the pod's own loopback. Anything
+server-side that calls a platform host then fails, and Zitadel in particular
+refuses a request whose Host header is not its configured domain, so its own
+console breaks. Point the names at the ingress from inside the cluster too:
+
+```bash
+kubectl apply -f deploy/coredns-split-horizon.yaml
+```
+
+```bash
+kubectl -n kube-system rollout restart deploy/coredns
+```
+
+That rewrites `*.<internal-domain>` to the Traefik Service, so the canonical issuer
+URL is byte-identical from the browser, from a pod, and from a token validator.
+
 ## What's still rough
 
 Honest edges you will hit today:
@@ -168,3 +238,18 @@ Honest edges you will hit today:
   browser. Requires host ports 80/443 to be free.
 - **Single admin, password login.** Roles and OIDC (via Zitadel) are planned, not
   here yet.
+- **"You never type a service password" does not hold for the backbone yet.** It is
+  true for a Service that declares a generated option, which is what section 4
+  describes. It is not true for the two you install by hand: `arcadedb` requires
+  `root-password`, and `zitadel` requires `admin-password`, a 32 character
+  `master-key`, and `bootstrap-machine-key-expiration`. None declare a `generate`
+  policy, so install rejects the request until you supply them.
+- **A wrong config value means destroy and reinstall.** There is no config update
+  endpoint, so a rejected value cannot be corrected in place. Zitadel is the easy
+  way to find this out: it validates admin password complexity at deploy time
+  rather than at install, so a password missing a symbol returns `202` and then
+  fails inside the Pulumi run minutes later.
+- **`nephos setup` cannot run unattended.** The routing step shells out to `sudo`
+  for dnsmasq and `/etc/resolver`, and it runs even when routing is already
+  configured, so there is no way to complete setup non-interactively today. If the
+  host is already routed, `nephos up lcl` converges the control plane without it.

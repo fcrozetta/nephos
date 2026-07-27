@@ -353,12 +353,13 @@ class KubernetesRuntime:
                     f"refusing to replace unowned Ingress {namespace}/{ingress_name}"
                 )
 
-    def delete_service_portals(
-        self,
-        *,
-        service_slug: str,
-        portals: list[dict[str, object]],
-    ) -> None:
+    def delete_service_portals(self, *, service_slug: str) -> None:
+        """Delete every owned portal Ingress for a Service.
+
+        Takes no portal list on purpose. Teardown that trusted the current
+        manifest missed an Ingress whose portal a registry revision had already
+        removed, leaving an orphan in the preserved namespace after remove.
+        """
         if self._networking_v1_api is None:
             raise RuntimeError("NetworkingV1Api is required to reconcile Ingress")
         namespace = namespace_name("service_instance", service_slug)
@@ -374,19 +375,15 @@ class KubernetesRuntime:
                 f"refusing to delete Ingress in unowned namespace {namespace}"
             )
         if _is_terminating_namespace(namespace_resource):
-            raise KubernetesRuntimeSafetyError(
-                f"refusing to delete Ingress in terminating namespace {namespace}"
-            )
-        for portal in portals:
-            portal_name = str(portal["name"])
-            self._delete_owned_ingress(
-                namespace=namespace,
-                ingress_name=ingress_name_for_route(portal_name),
-                labels=service_portal_labels(
-                    service_slug=service_slug,
-                    portal_name=portal_name,
-                ),
-            )
+            # Cascading namespace deletion removes these Ingresses anyway, and
+            # raising here blocked the request before namespace and desired-state
+            # cleanup could run, so a destroy could never complete.
+            return
+        self._prune_service_portals(
+            namespace=namespace,
+            service_slug=service_slug,
+            keep=set(),
+        )
 
     def _prune_service_portals(
         self,
@@ -408,8 +405,18 @@ class KubernetesRuntime:
                 namespace=namespace,
                 label_selector=selector,
             ).items
-        except ApiException:
-            return
+        except ApiException as exc:
+            # Do not swallow this. With an empty desired set nothing else in the
+            # reconcile can fail, so a transient list error would mark the request
+            # succeeded while the obsolete admin Ingress kept serving.
+            #
+            # ! This surfaces the failure, it does not retry it: the reconciler has
+            # ! no retry path, and both `blocked` and `failed` are terminal because
+            # ! the worker only claims `pending`. An operator has to re-trigger.
+            # ! Visibly blocked still beats silently succeeded.
+            raise KubernetesRuntimeSafetyError(
+                f"could not list portal Ingresses in {namespace}: {exc.reason}"
+            ) from exc
         for ingress in existing:
             metadata = ingress.metadata
             if metadata is None or not metadata.name:

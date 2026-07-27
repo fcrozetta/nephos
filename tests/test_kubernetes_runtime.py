@@ -1169,10 +1169,7 @@ def test_runtime_deletes_owned_service_portals() -> None:
         domains=[{"domain": "nephos.lcl", "default": True}],
     )
 
-    runtime.delete_service_portals(
-        service_slug="arcadedb",
-        portals=[{"name": "studio"}],
-    )
+    runtime.delete_service_portals(service_slug="arcadedb")
 
     assert networking.deleted_ingresses == [("svc-arcadedb", "nephos-route-studio")]
 
@@ -1353,3 +1350,55 @@ def test_runtime_pruning_leaves_another_services_portals_alone() -> None:
 
     assert ("svc-arcadedb", "nephos-route-console") not in networking.ingresses
     assert ("svc-auth", "nephos-route-console") in networking.ingresses
+
+
+class ListFailingNetworkingV1Api(FakeNetworkingV1Api):
+    def list_namespaced_ingress(self, namespace: str, label_selector: str = ""):
+        raise ApiException(status=500, reason="Internal Server Error")
+
+
+def test_runtime_teardown_removes_a_portal_the_manifest_no_longer_declares() -> None:
+    """Remove must not trust the current manifest.
+
+    If a registry revision dropped the portal before the operator removed the
+    Service, a teardown driven by current declarations left the Ingress serving in
+    the preserved namespace.
+    """
+    core = FakeCoreV1Api()
+    networking = FakeNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+    core.add_service(
+        "svc-arcadedb",
+        "svc-arcadedb-arcadedb",
+        ports=[V1ServicePort(name="http", port=2480)],
+    )
+    runtime.ensure_service_portals(
+        service_slug="arcadedb",
+        portals=[{"name": "studio", "target": {"port": "http"}}],
+        domains=[{"domain": "nephos.lcl", "default": True}],
+    )
+
+    runtime.delete_service_portals(service_slug="arcadedb")
+
+    assert networking.deleted_ingresses == [("svc-arcadedb", "nephos-route-studio")]
+
+
+def test_runtime_raises_when_it_cannot_list_portal_ingresses() -> None:
+    """Failing to list must not read as "nothing to prune".
+
+    With an empty desired set there is no other operation that can fail, so
+    swallowing this marked the reconcile succeeded while the obsolete admin
+    Ingress kept serving.
+    """
+    core = FakeCoreV1Api()
+    networking = ListFailingNetworkingV1Api()
+    runtime = KubernetesRuntime(core, networking_v1_api=networking)
+    runtime.ensure_namespace("service_instance", "arcadedb")
+
+    with pytest.raises(KubernetesRuntimeSafetyError, match="could not list portal"):
+        runtime.ensure_service_portals(
+            service_slug="arcadedb",
+            portals=[],
+            domains=[{"domain": "nephos.lcl", "default": True}],
+        )

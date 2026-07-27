@@ -95,15 +95,8 @@ class FakeRuntime:
             {"service_slug": service_slug, "portals": portals, "domains": domains}
         )
 
-    def delete_service_portals(
-        self,
-        *,
-        service_slug: str,
-        portals: list[dict[str, object]],
-    ) -> None:
-        self.deleted_service_portals.append(
-            {"service_slug": service_slug, "portals": portals}
-        )
+    def delete_service_portals(self, *, service_slug: str) -> None:
+        self.deleted_service_portals.append({"service_slug": service_slug})
 
     def delete_app_ingresses(
         self,
