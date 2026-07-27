@@ -39,11 +39,41 @@ ADMIN_PASS="Driver-P@ss1"
 say() { printf '\n== %s\n' "$*"; }
 die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
+# `local-down` ends in `rm -rf "$RUN_DIR"`, and RUN_DIR is caller-supplied, so
+# `NEPHOS_DRIVER_DIR=$HOME driver.sh local-down` would have deleted a home
+# directory. Two independent guards: reject paths that are obviously not scratch
+# space, and only recurse into a directory this driver created.
+MARKER=".nephos-driver"
+
+reject_unsafe_run_dir() {
+  case "$RUN_DIR" in
+    ''|/|//) die "NEPHOS_DRIVER_DIR must be a scratch directory, got '${RUN_DIR}'" ;;
+    */) die "NEPHOS_DRIVER_DIR must not have a trailing slash, got '${RUN_DIR}'" ;;
+    *) [ "$RUN_DIR" = "$HOME" ] &&
+         die "NEPHOS_DRIVER_DIR must not be \$HOME, got '${RUN_DIR}'" ;;
+  esac
+  # Relative paths resolve against whatever the caller's cwd happens to be, which
+  # is not something a teardown should recurse into.
+  case "$RUN_DIR" in
+    /*) : ;;
+    *) die "NEPHOS_DRIVER_DIR must be an absolute path, got '${RUN_DIR}'" ;;
+  esac
+}
+
+# Called by every path that creates RUN_DIR, so teardown can tell a directory the
+# driver owns from one the caller merely pointed at.
+claim_run_dir() {
+  reject_unsafe_run_dir
+  mkdir -p "$RUN_DIR" || die "could not create ${RUN_DIR}"
+  : >"${RUN_DIR}/${MARKER}" || die "could not claim ${RUN_DIR}"
+}
+
 # ---------------------------------------------------------------- local catalog
 # A self-contained fixture so `local-up` works with no registry access. The real
 # registries are git clones from git.fcrozetta.app that the API syncs at startup;
 # see the CATALOG_ROOTS gotcha in SKILL.md for why we replace rather than add.
 write_catalog() {
+  claim_run_dir
   mkdir -p "${CATALOG}/services/demodb"
   cat >"${CATALOG}/services/demodb/service.yaml" <<'YAML'
 apiVersion: nephos.pro/v1alpha1
@@ -94,7 +124,8 @@ cmd_local_up() {
   uv sync --quiet || die "uv sync"
 
   cmd_local_down >/dev/null 2>&1
-  mkdir -p "${RUN_DIR}/state"
+  claim_run_dir
+  mkdir -p "${RUN_DIR}/state" || die "could not create ${RUN_DIR}/state"
   write_catalog
 
   # NEPHOS_API_INTERNAL_DOMAIN has no baked default; init fails fast without it.
@@ -116,10 +147,13 @@ cmd_local_up() {
   echo $! >"$PIDFILE"
 
   for _ in $(seq 1 60); do
-    curl -fsS -o /dev/null --max-time 2 "${BASE}/healthz" 2>/dev/null && {
-      printf 'healthz: %s\n' "$(curl -fsS "${BASE}/healthz")"
+    # One request, captured. Probing and then re-fetching for the message meant a
+    # failed second call still printed an empty body and returned 0, so `local-up`
+    # reported a healthy server it had never actually read.
+    if body="$(curl -fsS --max-time 2 "${BASE}/healthz" 2>/dev/null)"; then
+      printf 'healthz: %s\n' "$body"
       return 0
-    }
+    fi
     sleep 1
   done
   tail -30 "${RUN_DIR}/serve.log"
@@ -127,11 +161,19 @@ cmd_local_up() {
 }
 
 cmd_local_down() {
+  reject_unsafe_run_dir
   for f in "$PFFILE" "$PIDFILE"; do
     [ -f "$f" ] && { kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; }
   done
   pkill -f "nephos-api serve --host 127.0.0.1 --port ${PORT}" 2>/dev/null
-  rm -rf "$RUN_DIR"
+  # Absent marker means this driver never created the directory. Stopping the
+  # processes is still correct; deleting someone else's tree is not.
+  if [ -e "${RUN_DIR}/${MARKER}" ]; then
+    rm -rf "$RUN_DIR"
+  elif [ -d "$RUN_DIR" ]; then
+    printf 'kept %s: no %s marker, so this driver did not create it\n' \
+      "$RUN_DIR" "$MARKER"
+  fi
   echo "stopped"
 }
 
@@ -324,7 +366,7 @@ cmd_cluster_deploy() {
   printf '%s\n' "$rollout_log" | tail -1
 
   say "port-forward ${BASE}"
-  mkdir -p "$RUN_DIR"
+  claim_run_dir
   [ -f "$PFFILE" ] && { kill "$(cat "$PFFILE")" 2>/dev/null; rm -f "$PFFILE"; }
   kubectl -n nephos-system port-forward svc/nephos-api "${PORT}:8099" \
     >"${RUN_DIR}/pf.log" 2>&1 &
@@ -357,8 +399,15 @@ for s in rows:
 
   say "generated ingress"
   # NAMESPACE NAME CLASS HOSTS ADDRESS PORTS AGE
-  kubectl get ingress -A --no-headers 2>/dev/null |
-    awk '{printf "  %-14s %-22s %s\n", $1, $2, $4}' || echo "  (none)"
+  # Captured, not piped: awk succeeds on empty input, so piping straight into it
+  # discarded kubectl's exit status. An API error rendered as "(none)" — identical
+  # to "the portal Ingress was never created" — and the run still printed PASS.
+  ingresses="$(kubectl get ingress -A --no-headers)" || die "list ingresses"
+  if [ -z "$ingresses" ]; then
+    echo "  (none)"
+  else
+    printf '%s\n' "$ingresses" | awk '{printf "  %-14s %-22s %s\n", $1, $2, $4}'
+  fi
   say "PASS"
 }
 
