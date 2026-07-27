@@ -297,3 +297,30 @@ def test_token_is_not_stored_in_plaintext(tmp_path: Path) -> None:
 
     assert stored
     assert all(row[0] != token for row in stored)
+
+
+def test_reveal_prefers_an_explicit_override_on_a_generated_option(
+    tmp_path: Path,
+) -> None:
+    """The deployer gives an explicit value precedence, so reveal must too.
+
+    Reading the synthesized coordinate unconditionally returned 409 when it was
+    never created, or a stale generated password the workload is not using.
+    """
+    reader = FakeSecretReader(
+        {"secrets://svc/postgres/admin-password/value": "stale-generated"}
+    )
+    client, token = _client(
+        tmp_path,
+        reader=reader,
+        config={"root-password": "typed-pw", "admin-password": "operator-chose-this"},
+    )
+
+    response = _reveal(client, "admin-password", token)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "value": "operator-chose-this",
+        "source": "desired-state",
+    }
+    assert reader.resolved == []

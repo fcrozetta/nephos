@@ -464,3 +464,23 @@ def test_catalog_rejects_a_password_option_that_is_not_treated_as_secret(
 
     with pytest.raises(CatalogValidationError, match="is not treated as a secret"):
         CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_username_option_that_names_a_secret(tmp_path: Path) -> None:
+    """The username is returned in clear text on an unauthenticated endpoint.
+
+    Pointing usernameOption at a sensitive option would publish that secret to any
+    caller, bypassing both redaction and the bearer-gated reveal.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: root-password\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="names a secret"):
+        CatalogLoader((root,)).get_service("arcadedb")

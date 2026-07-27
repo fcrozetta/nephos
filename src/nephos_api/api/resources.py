@@ -203,7 +203,13 @@ def reveal_service_config_secret(
         )
 
     reader = request.app.state.secret_reader_factory(request.app.state.settings)
-    if spec.generate is not None:
+    value = manifest_config_values(row, manifest).get(option)
+    # Desired state first, even for a generated option. An operator may supply an
+    # explicit value or reference for an option that also declares `generate`, and
+    # the deployer gives that precedence, so reading the synthesized coordinate
+    # unconditionally would 409 when it was never created or hand back a stale
+    # generated password the workload is not using.
+    if spec.generate is not None and (value is None or value == ""):
         # Mirrors the coordinate ProviderRuntimeDeployer synthesizes for a
         # generated option. Keep the two in step: a divergence reads as a missing
         # secret rather than an error.
@@ -214,7 +220,6 @@ def reveal_service_config_secret(
             reference=reference,
         )
 
-    value = manifest_config_values(row, manifest).get(option)
     if value is None or value == "":
         raise NephosError(
             status_code=409,

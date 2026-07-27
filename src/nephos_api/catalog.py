@@ -725,6 +725,18 @@ def _validate_service_credentials(*, path: Path, manifest: ServiceManifest) -> N
             f"{credentials.passwordOption!r} is not treated as a secret; name it "
             "so it reads as one (password, secret, token, key, credential)"
         )
+    # The mirror image, and the more dangerous direction: the username is resolved
+    # into the Service payload in clear text, and `GET /services` is
+    # unauthenticated. Pointing usernameOption at a sensitive option would publish
+    # that secret to any caller, bypassing both redaction and the reveal gate.
+    if credentials.usernameOption is not None and is_sensitive_config_name(
+        credentials.usernameOption
+    ):
+        raise CatalogValidationError(
+            f"invalid Service manifest {path}: credentials usernameOption "
+            f"{credentials.usernameOption!r} names a secret; the username is "
+            "returned in clear text and must not be one"
+        )
 
 
 def _validate_service_portals(*, path: Path, manifest: ServiceManifest) -> None:
