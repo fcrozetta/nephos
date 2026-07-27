@@ -260,12 +260,8 @@ class _LazyRuntimeAdapter:
         self,
         *,
         service_slug: str,
-        portals: list[dict[str, object]],
     ) -> object:
-        return self._get().delete_service_portals(
-            service_slug=service_slug,
-            portals=portals,
-        )
+        return self._get().delete_service_portals(service_slug=service_slug)
 
     def _get(self) -> RuntimeAdapter:
         if self._runtime is None:

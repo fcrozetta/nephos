@@ -1,3 +1,5 @@
+import inspect
+
 from fastapi.testclient import TestClient
 
 from nephos_api.config import ManagedCatalogRegistry, Settings
@@ -209,21 +211,42 @@ def _protocol_methods(protocol: type) -> set[str]:
     }
 
 
-def test_lazy_runtime_adapter_forwards_every_runtime_protocol_method() -> None:
-    """The lazy adapter must cover the whole RuntimeAdapter surface.
+def _signature_mismatches(protocol: type, adapter: type) -> list[str]:
+    """Protocol methods whose adapter signature does not match, with detail.
+
+    Presence alone is not enough. Checking only callability let
+    `delete_service_portals` drop its `portals` argument in the runtime while the
+    adapter kept requiring it, and every test injects a fake runtime rather than
+    the adapter, so nothing caught it until a live destroy failed with
+    "missing 1 required keyword-only argument: 'portals'".
+    """
+    mismatches = []
+    for name in sorted(_protocol_methods(protocol)):
+        target = getattr(adapter, name, None)
+        if not callable(target):
+            mismatches.append(f"{name}: missing from adapter")
+            continue
+        want = inspect.signature(getattr(protocol, name))
+        got = inspect.signature(target)
+        # Return annotations legitimately differ: the adapter forwards results it
+        # does not need to describe, and declares `-> object`.
+        want_params = list(want.parameters.values())
+        got_params = list(got.parameters.values())
+        if want_params != got_params:
+            mismatches.append(f"{name}: protocol{want} adapter{got}")
+    return mismatches
+
+
+def test_lazy_runtime_adapter_matches_every_runtime_protocol_signature() -> None:
+    """The lazy adapter must cover the whole RuntimeAdapter surface, by signature.
 
     It forwards call-by-call rather than delegating via __getattr__, so a method
     added to the Protocol is silently missing here until a reconcile hits it at
     runtime -- which is how `ensure_service_portals` reached a live cluster as
-    "'_LazyRuntimeAdapter' object has no attribute ensure_service_portals".
+    "'_LazyRuntimeAdapter' object has no attribute ensure_service_portals". The
+    same forwarding makes every argument list a second place to drift.
     """
-    missing = sorted(
-        name
-        for name in _protocol_methods(RuntimeAdapter)
-        if not callable(getattr(_LazyRuntimeAdapter, name, None))
-    )
-
-    assert missing == []
+    assert _signature_mismatches(RuntimeAdapter, _LazyRuntimeAdapter) == []
 
 
 def test_lazy_runtime_deployer_forwards_every_deployer_protocol_method() -> None:
