@@ -175,6 +175,19 @@ class SafetyBlockedRuntime(FakeRuntime):
         raise KubernetesRuntimeSafetyError(f"refusing unsafe namespace {slug}")
 
 
+class PortalBlockedRuntime(FakeRuntime):
+    # Stands in for a transient Ingress-list failure, which the runtime reports as
+    # a safety error rather than converging on an unknown live set.
+    def ensure_service_portals(
+        self,
+        *,
+        service_slug: str,
+        portals: list[dict[str, object]],
+        domains: list[dict[str, object]],
+    ) -> None:
+        raise KubernetesRuntimeSafetyError("could not list ingresses")
+
+
 class FakeProvisioner:
     def __init__(self, values: dict[str, str] | None) -> None:
         self.values = values
@@ -1213,10 +1226,63 @@ def test_stopped_service_reconcile_keeps_portal_ingress_and_workloads_stopped(
     assert Reconciler(repo, runtime=runtime, deployer=deployer).run_once() == 1
 
     assert deployer.deployed == []
+    # Exactly one: the stopped-service path used to reconcile portals itself and
+    # then again in the stop delegate it hands off to. Asserting only [0] let the
+    # duplicate through, and the second call could fail after the first succeeded.
+    assert len(runtime.service_portals) == 1
     assert runtime.service_portals[0]["service_slug"] == "arcadedb"
     assert runtime.service_portals[0]["domains"][0]["domain"] == "nephos.lcl"
     assert runtime.scaled_workloads == [("service_instance", "arcadedb", 0)]
     _assert_runtime_stopped_status(repo, request.id, service.id)
+
+
+def test_stop_scales_workloads_even_when_portal_reconcile_fails(
+    tmp_path: Path,
+) -> None:
+    # Portal reconciliation is fail-closed and has no retry path, so running it
+    # before scaling left the request terminally blocked with pods still serving
+    # while desired state and the console both said "stopped". Scaling is the thing
+    # the operator asked for, so it has to survive a portal failure.
+    catalog_root = tmp_path / "catalog"
+    manifest_path = write_service_with_portal(catalog_root)
+    repo = _repo(tmp_path)
+    runtime = PortalBlockedRuntime()
+    deployer = FakeDeployer()
+    with repo.transaction() as tx:
+        tx.create_platform_domain(
+            name="local",
+            domain="nephos.lcl",
+            is_default=True,
+            allows_service_portals=True,
+        )
+        service = tx.create_service_instance(
+            slug="arcadedb",
+            catalog_name="arcadedb",
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest="sha256:arcadedb",
+            lifecycle="stopped",
+        )
+        tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service.id,
+            target_generation=service.generation,
+            action="stop",
+            target_snapshot={"slug": service.slug},
+        )
+
+    assert Reconciler(repo, runtime=runtime, deployer=deployer).run_once() == 1
+
+    # Blocked and visible, which is the accepted fail-closed tradeoff -- but the
+    # workload is genuinely at zero, so the reported state is true.
+    assert runtime.scaled_workloads == [("service_instance", "arcadedb", 0)]
+    with sqlite3.connect(repo.db_path) as connection:
+        state, error = connection.execute(
+            "SELECT state, error FROM reconciliation_requests WHERE target_id = ?",
+            (service.id,),
+        ).fetchone()
+    assert state == "blocked"
+    assert error == "could not list ingresses"
 
 
 def test_service_remove_uninstalls_runtime_without_deleting_desired_state(

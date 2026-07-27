@@ -241,8 +241,10 @@ class Reconciler:
         # Mirrors the stopped-App path: keep portal Ingress across stop/start so
         # route intent is not lost (ADR 20260517). Workloads scale to zero, so the
         # portal stops serving and status reports the Service as stopped.
-        assert self._runtime is not None
-        self._reconcile_service_portals(_target_slug(request))
+        #
+        # The portal reconcile lives in the delegate, not here: doing it in both
+        # places ran it twice for a lifecycle `reconcile` of an already-stopped
+        # Service, and the second run could fail after the first had succeeded.
         return self._reconcile_namespace_stop_request(
             _request_with_action(request, "stop")
         )
@@ -411,13 +413,18 @@ class Reconciler:
             return False
 
         slug = _target_slug(request)
+        # Scale first. Stopping the workload is what the operator asked for, and a
+        # portal reconcile that raises is fail-closed with no retry path, so doing
+        # it first left the request terminally blocked with pods still running --
+        # reporting `stopped` while serving traffic. Scaled-to-zero workloads mean
+        # the portal stops serving regardless of what its Ingress still says.
+        self._runtime.scale_workloads(_resource_type(target_type), slug, 0)
         # Stop keeps route intent (ADR 20260517), but the desired set still has to
         # be applied: a manifest revision that removed a portal before the operator
         # stopped the Service would otherwise leave the Ingress serving until some
         # later reconcile happened to run.
         if target_type == "service_instance":
             self._reconcile_service_portals(slug)
-        self._runtime.scale_workloads(_resource_type(target_type), slug, 0)
         message = "Runtime workloads are scaled to zero."
         with self._repository.transaction() as tx:
             tx.update_reconciliation_request_state(
