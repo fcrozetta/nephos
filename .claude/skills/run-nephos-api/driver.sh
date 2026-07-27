@@ -293,8 +293,10 @@ cmd_cluster_deploy() {
   cd "$UNIT" || die "cannot cd $UNIT"
   k3d cluster list 2>/dev/null | grep -q '^nephos' || die "no k3d cluster named nephos"
   # A stopped cluster shows 0/1 servers; start beats recreate.
-  k3d cluster list nephos | awk 'NR==2{print $2}' | grep -q '^0/' &&
-    { say "starting stopped cluster"; k3d cluster start nephos; }
+  if k3d cluster list nephos | awk 'NR==2{print $2}' | grep -q '^0/'; then
+    say "starting stopped cluster"
+    k3d cluster start nephos || die "k3d cluster start"
+  fi
 
   say "build ${IMAGE}"
   docker build -q -t "$IMAGE" . >/dev/null || die "docker build"
@@ -303,8 +305,9 @@ cmd_cluster_deploy() {
   # unguarded failure here is the worst kind: an older cached image under the same
   # tag keeps the old deployment healthy, the final health check passes, and
   # cluster-deploy exits 0 having deployed nothing new.
-  k3d image import "$IMAGE" -c nephos 2>&1 | tail -1
-  [ "${PIPESTATUS[0]}" -eq 0 ] || die "k3d image import"
+  local import_log
+  import_log=$(k3d image import "$IMAGE" -c nephos 2>&1) || die "k3d image import"
+  printf '%s\n' "$import_log" | tail -1
 
   say "point the Deployment at it"
   kubectl -n nephos-system set image deploy/nephos-api \
@@ -315,8 +318,10 @@ cmd_cluster_deploy() {
     {"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"},
     {"op":"replace","path":"/spec/template/spec/initContainers/0/imagePullPolicy","value":"IfNotPresent"}]' >/dev/null || die "kubectl patch imagePullPolicy"
   kubectl -n nephos-system rollout restart deploy/nephos-api >/dev/null || die "rollout restart"
-  kubectl -n nephos-system rollout status deploy/nephos-api --timeout=300s | tail -1
-  [ "${PIPESTATUS[0]}" -eq 0 ] || die "rollout did not complete"
+  local rollout_log
+  rollout_log=$(kubectl -n nephos-system rollout status deploy/nephos-api \
+    --timeout=300s 2>&1) || die "rollout did not complete"
+  printf '%s\n' "$rollout_log" | tail -1
 
   say "port-forward ${BASE}"
   mkdir -p "$RUN_DIR"
@@ -324,9 +329,14 @@ cmd_cluster_deploy() {
   kubectl -n nephos-system port-forward svc/nephos-api "${PORT}:8099" \
     >"${RUN_DIR}/pf.log" 2>&1 &
   echo $! >"$PFFILE"
+  # One request, not two. Probing and then re-fetching for the message let a
+  # port-forward that died in between report success anyway.
+  local health
   for _ in $(seq 1 40); do
-    curl -fsS -o /dev/null --max-time 2 "${BASE}/healthz" 2>/dev/null && {
-      printf 'healthz: %s\n' "$(curl -fsS "${BASE}/healthz")"; return 0; }
+    if health=$(curl -fsS --max-time 2 "${BASE}/healthz" 2>/dev/null); then
+      printf 'healthz: %s\n' "$health"
+      return 0
+    fi
     sleep 1
   done
   die "in-cluster API not reachable"
