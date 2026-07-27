@@ -745,14 +745,25 @@ def _validate_service_credentials(*, path: Path, manifest: ServiceManifest) -> N
     # Nephos can publish, so reject it at authoring time.
     if credentials.usernameOption is not None:
         for option in manifest.spec.config.options:
-            if option.name == credentials.usernameOption and is_secret_reference(
-                option.default
-            ):
+            if option.name != credentials.usernameOption:
+                continue
+            if is_secret_reference(option.default):
                 raise CatalogValidationError(
                     f"invalid Service manifest {path}: credentials usernameOption "
                     f"{credentials.usernameOption!r} defaults to a secret "
                     "reference; the username is published in clear text and must "
                     "be a literal"
+                )
+            # An optional option with no default means install can omit it, and the
+            # Service then advertises a login whose username is null -- a panel that
+            # names a password and no account. Declaring credentials is a promise
+            # that the identity resolves, so the option has to be able to keep it.
+            if not option.required and option.default in (None, ""):
+                raise CatalogValidationError(
+                    f"invalid Service manifest {path}: credentials usernameOption "
+                    f"{credentials.usernameOption!r} is optional with no default, "
+                    "so the advertised login would have no username; mark it "
+                    "required or give it a default"
                 )
 
 

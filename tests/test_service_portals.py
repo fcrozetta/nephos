@@ -516,3 +516,33 @@ def test_catalog_rejects_a_username_option_defaulting_to_a_secret_reference(
 
     with pytest.raises(CatalogValidationError, match="defaults to a secret reference"):
         CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_an_optional_username_option_with_no_default(
+    tmp_path: Path,
+) -> None:
+    """Declaring credentials promises the identity resolves.
+
+    An optional option with no default lets install omit it, and the Service then
+    advertises a login whose username is null: a panel naming a password and no
+    account, which is the defect credentials existed to fix.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "      required: true\n"
+            "    - name: admin-username\n"
+            "      type: string"
+        ),
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="optional with no default"):
+        CatalogLoader((root,)).get_service("arcadedb")
