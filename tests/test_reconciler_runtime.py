@@ -110,15 +110,8 @@ class FakeRuntime:
             {"service_slug": service_slug, "portals": portals, "domains": domains}
         )
 
-    def delete_service_portals(
-        self,
-        *,
-        service_slug: str,
-        portals: list[dict[str, object]],
-    ) -> None:
-        self.deleted_service_portals.append(
-            {"service_slug": service_slug, "portals": portals}
-        )
+    def delete_service_portals(self, *, service_slug: str) -> None:
+        self.deleted_service_portals.append({"service_slug": service_slug})
 
 
 class FailingRuntime:
@@ -746,18 +739,9 @@ def test_service_destroy_deletes_portal_ingress(tmp_path: Path) -> None:
 
     assert Reconciler(repo, runtime=runtime, deployer=FakeDeployer()).run_once() == 1
 
-    assert runtime.deleted_service_portals == [
-        {
-            "service_slug": "arcadedb",
-            "portals": [
-                {
-                    "name": "studio",
-                    "displayName": "ArcadeDB Studio",
-                    "target": {"port": "http"},
-                }
-            ],
-        }
-    ]
+    # No manifest passed: teardown enumerates what the runtime owns, so a portal
+    # already removed from the registry is still cleaned up.
+    assert runtime.deleted_service_portals == [{"service_slug": "arcadedb"}]
 
 
 def test_platform_domain_reconcile_enqueues_portal_service_reconciles(

@@ -61,12 +61,7 @@ class RuntimeAdapter(Protocol):
         domains: list[dict[str, object]],
     ) -> None: ...
 
-    def delete_service_portals(
-        self,
-        *,
-        service_slug: str,
-        portals: list[dict[str, object]],
-    ) -> None: ...
+    def delete_service_portals(self, *, service_slug: str) -> None: ...
 
     def ensure_app_ingresses(
         self,
@@ -691,11 +686,11 @@ class Reconciler:
         )
 
     def _delete_service_portals(self, slug: str) -> None:
+        # Unconditional, and takes no manifest: the runtime enumerates what it
+        # owns. Gating on the current declarations left an orphan behind whenever
+        # a registry revision had already removed the portal.
         assert self._runtime is not None
-        portals = self._service_portals(slug)
-        if not portals:
-            return
-        self._runtime.delete_service_portals(service_slug=slug, portals=portals)
+        self._runtime.delete_service_portals(service_slug=slug)
 
     def _platform_domains_for_ingress(self) -> list[dict[str, object]]:
         return [
