@@ -112,6 +112,13 @@ Secret values must be redacted in API responses, CLI output, status output, logs
 
 Do not expose secret values unless a future explicit reveal command is designed and accepted.
 
+That precondition is now satisfied. ADR 20260726 (authenticated secret reveal)
+designs the explicit reveal path and was accepted on 2026-07-27, so a single
+bearer-token-gated endpoint may return one named value on request. This decision
+is not amended or superseded: default redaction still holds everywhere else, and
+the reveal is the escape hatch this clause anticipated rather than an exception
+to it.
+
 ## Nephos Responsibilities
 
 Nephos owns the policy of:

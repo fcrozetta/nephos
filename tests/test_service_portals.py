@@ -318,3 +318,357 @@ spec:
 
     with pytest.raises(CatalogValidationError, match="only valid for Service"):
         CatalogLoader((root,)).get_app("paperless")
+
+
+def _write_service_with_credentials(
+    root: Path,
+    *,
+    credentials_yaml: str,
+    options_yaml: str = (
+        "    - name: root-password\n"
+        "      type: string\n"
+        "      required: true\n"
+        "    - name: admin-username\n"
+        "      type: string\n"
+        "      default: root@example.test"
+    ),
+    # Credential options must reach the workload, so the default fixture maps both.
+    # A manifest that names a credential option and never maps it advertises a
+    # login the running Service was never configured with.
+    mappings_yaml: str = (
+        "      mappings:\n"
+        "        - from: { kind: config, name: root-password }\n"
+        "          to: { helmValue: rootPassword }\n"
+        "        - from: { kind: config, name: admin-username }\n"
+        "          to: { helmValue: adminUsername }"
+    ),
+) -> Path:
+    path = root / "services" / "arcadedb" / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: arcadedb
+spec:
+  provides:
+    - capability: sql
+      protocol: arcadedb
+      as: sql
+  config:
+    options:
+{options_yaml}
+{credentials_yaml}
+  provisioning:
+    mode: app-scoped-resource
+  operations: []
+  runtime:
+    type: provider
+    provider:
+      name: arcadedb
+    values:
+{mappings_yaml}
+""".strip()
+    )
+    return path
+
+
+def test_catalog_exposes_a_literal_credential_username(tmp_path: Path) -> None:
+    # The postgres/arcadedb case: the runtime fixes the account name, so it is a
+    # literal rather than something the operator picks.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n"
+            "    username: root\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    entry = CatalogLoader((root,)).get_service("arcadedb")
+
+    assert entry["credentials"] == {
+        "username": "root",
+        "usernameOption": None,
+        "passwordOption": "root-password",
+    }
+
+
+def test_catalog_exposes_a_config_backed_credential_username(tmp_path: Path) -> None:
+    # The Zitadel case: the operator chooses the admin identity at install.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    entry = CatalogLoader((root,)).get_service("arcadedb")
+
+    assert entry["credentials"]["usernameOption"] == "admin-username"
+    assert entry["credentials"]["username"] is None
+
+
+def test_catalog_rejects_credentials_with_both_username_forms(tmp_path: Path) -> None:
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n    username: root\n"
+            "    usernameOption: admin-username\n    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="exactly one of"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_credentials_with_neither_username_form(tmp_path: Path) -> None:
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml="  credentials:\n    passwordOption: root-password",
+    )
+
+    with pytest.raises(CatalogValidationError, match="exactly one of"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_credentials_referencing_an_undeclared_option(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n    username: root\n    passwordOption: nope-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="not a declared config option"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_password_option_that_is_not_treated_as_secret(
+    tmp_path: Path,
+) -> None:
+    # Otherwise the manifest would name a credential the API prints in clear text
+    # and the reveal endpoint refuses to serve.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: login-phrase\n"
+            "      type: string\n"
+            "      required: true"
+        ),
+        credentials_yaml=(
+            "  credentials:\n    username: root\n    passwordOption: login-phrase"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="is not treated as a secret"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_username_option_that_names_a_secret(tmp_path: Path) -> None:
+    """The username is returned in clear text on an unauthenticated endpoint.
+
+    Pointing usernameOption at a sensitive option would publish that secret to any
+    caller, bypassing both redaction and the bearer-gated reveal.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: root-password\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="names a secret"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_username_option_defaulting_to_a_secret_reference(
+    tmp_path: Path,
+) -> None:
+    """A referenced username resolves for the workload but not for the payload.
+
+    The deployer resolves `op://`/`bao://`/`secrets://` before configuring the
+    workload, so publishing the raw reference would hand the operator a username
+    the Service is not using and leak a provider coordinate on an unauthenticated
+    response. A username that has to live in a vault is not one Nephos can show.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "      required: true\n"
+            "    - name: admin-username\n"
+            "      type: string\n"
+            "      default: op://vault/arcadedb/username"
+        ),
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="defaults to a secret reference"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_an_optional_username_option_with_no_default(
+    tmp_path: Path,
+) -> None:
+    """Declaring credentials promises the identity resolves.
+
+    An optional option with no default lets install omit it, and the Service then
+    advertises a login whose username is null: a panel naming a password and no
+    account, which is the defect credentials existed to fix.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "      required: true\n"
+            "    - name: admin-username\n"
+            "      type: string"
+        ),
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="optional with no default"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_fixed_username_that_is_a_secret_reference(
+    tmp_path: Path,
+) -> None:
+    """The shorter path to the same defect as a referenced usernameOption.
+
+    A fixed `username: op://vault/item/user` is resolved by the runtime but not by
+    the Service payload, so unauthenticated `GET /services` would publish the
+    provider coordinate as the account name.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n"
+            "    username: op://vault/arcadedb/user\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="is a secret reference"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_an_empty_fixed_credential_username(tmp_path: Path) -> None:
+    # `username: ""` passes the exactly-one check because it is not None, then
+    # publishes an empty account name: a login nobody can use.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            '  credentials:\n    username: ""\n    passwordOption: root-password'
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="must not be empty"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_generated_credential_username(tmp_path: Path) -> None:
+    """`required: true` is not enough when the value is generated.
+
+    A generated option is absent from desired state by design, since the value lives
+    in the secrets provider, and the credentials payload reads desired state. So the
+    username would publish as null however required the option is.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "      required: true\n"
+            "    - name: admin-username\n"
+            "      type: string\n"
+            "      required: true\n"
+            "      generate:\n"
+            "        kind: password\n"
+            "        length: 12"
+        ),
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="declares generate"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_password_option_that_cannot_produce_a_value(
+    tmp_path: Path,
+) -> None:
+    # Optional, no default, no generate policy: install can omit it and reveal then
+    # returns config_option_unset, so the advertised login has no password.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "    - name: admin-username\n"
+            "      type: string\n"
+            "      default: root@example.test"
+        ),
+        credentials_yaml=(
+            "  credentials:\n    username: root\n    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="no default and no"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_credential_options_missing_a_runtime_mapping(
+    tmp_path: Path,
+) -> None:
+    """Config only reaches the workload through runtime mappings.
+
+    Without one, Nephos advertises a credential the running Service was never
+    configured with, which is worse than advertising nothing: the operator holds a
+    username and password that simply do not work.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n    username: root\n    passwordOption: root-password"
+        ),
+        mappings_yaml="      mappings: []",
+    )
+
+    with pytest.raises(CatalogValidationError, match="not mapped into the runtime"):
+        CatalogLoader((root,)).get_service("arcadedb")

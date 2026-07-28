@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from nephos_api.api.auth import require_admin_token
 from nephos_api.api.snapshots import compact_status_snapshot, status_snapshot
 from nephos_api.catalog import (
     AppManifest,
@@ -18,6 +19,7 @@ from nephos_api.catalog import (
     CatalogValidationError,
     ServiceManifest,
     entry_provides,
+    is_sensitive_config_name,
 )
 from nephos_api.domain import InvalidMachineIdentifierError, validate_machine_identifier
 from nephos_api.errors import NephosError
@@ -31,6 +33,13 @@ from nephos_api.routing import (
     portal_eligible_domains,
     service_portal_host_prefixes,
     service_portal_url,
+)
+from nephos_api.runtime_errors import RuntimeBlockedError
+from nephos_api.secret_refs import (
+    SECRET_REFERENCE_SCHEMES,
+    SECRETS_SCHEME,
+    RuntimeSecretResolver,
+    is_secret_reference,
 )
 
 router = APIRouter(tags=["resources"])
@@ -155,6 +164,101 @@ def install_service(payload: InstallRequest, request: Request) -> dict[str, Any]
         "resource": _service_snapshot(request, row),
         "reconciliation": {"id": reconciliation.id, "state": reconciliation.state},
     }
+
+
+@router.post("/services/{service_instance}/config/{option}/actions/reveal")
+def reveal_service_config_secret(
+    service_instance: str,
+    option: str,
+    request: Request,
+    subject: str = Depends(require_admin_token),
+) -> dict[str, Any]:
+    """Return one Service config secret in clear text (ADR 20260726).
+
+    Bearer-gated, unlike the rest of the API, because the value is a credential.
+
+    A generated option has no stored value at all -- `config_json` is `{}` -- so it
+    is resolved from the secrets provider using the same coordinate the deployer
+    synthesizes. That is the case this endpoint exists for: a credential Nephos
+    minted on the operator's behalf and never showed them.
+    """
+    del subject  # authorization only; audit trail is deliberately deferred
+    row = _repo(request).get_service_row(service_instance)
+    if row is None:
+        raise _not_found("service_instance_not_found", "Service instance not found.")
+    manifest = _load_service_manifest(Path(str(row["catalog_source_path"])))
+    spec = next(
+        (item for item in manifest.spec.config.options if item.name == option),
+        None,
+    )
+    if spec is None:
+        raise _not_found(
+            "config_option_not_found",
+            "Service config option not found.",
+        )
+    if not _is_sensitive_config_key(spec.name):
+        raise NephosError(
+            status_code=400,
+            code="config_option_not_sensitive",
+            message="Config option is not a secret; read it from the config payload.",
+            details={"option": option},
+        )
+
+    reader = request.app.state.secret_reader_factory(request.app.state.settings)
+    value = manifest_config_values(row, manifest).get(option)
+    # Desired state first, even for a generated option. An operator may supply an
+    # explicit value or reference for an option that also declares `generate`, and
+    # the deployer gives that precedence, so reading the synthesized coordinate
+    # unconditionally would 409 when it was never created or hand back a stale
+    # generated password the workload is not using.
+    if spec.generate is not None and (value is None or value == ""):
+        # Mirrors the coordinate ProviderRuntimeDeployer synthesizes for a
+        # generated option. Keep the two in step: a divergence reads as a missing
+        # secret rather than an error.
+        reference = f"{SECRETS_SCHEME}svc/{row['slug']}/{spec.name}/value"
+        return _revealed(
+            _resolve_secret(reader, reference),
+            source="secrets-provider",
+            reference=reference,
+        )
+
+    if value is None or value == "":
+        raise NephosError(
+            status_code=409,
+            code="config_option_unset",
+            message="Config option has no value in desired state.",
+            details={"option": option},
+        )
+    text = str(value)
+    if text.startswith(SECRET_REFERENCE_SCHEMES):
+        return _revealed(
+            _resolve_secret(reader, text),
+            source="secrets-provider",
+            reference=text,
+        )
+    return _revealed(text, source="desired-state", reference=None)
+
+
+def _revealed(value: str, *, source: str, reference: str | None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"value": value, "source": source}
+    if reference is not None:
+        payload["reference"] = reference
+    return payload
+
+
+def _resolve_secret(reader: RuntimeSecretResolver, reference: str) -> str:
+    try:
+        return reader.resolve(reference)
+    except RuntimeBlockedError as exc:
+        # Distinguish "no provider wired" from "provider has no such value": the
+        # first is a deployment problem, the second means nothing was ever stored.
+        status = 503 if exc.reason == "secret_ref_provider_unavailable" else 409
+        raise NephosError(
+            status_code=status,
+            code=exc.reason,
+            message=str(exc),
+            details={"reference": reference},
+        ) from exc
 
 
 @router.post("/services/{service_instance}/actions/{action}", status_code=202)
@@ -921,6 +1025,10 @@ def _service_snapshot(request: Request, row: dict[str, object]) -> dict[str, Any
             service_instance_id=str(row["id"]),
             portals=catalog_entry["portals"],
         ),
+        "credentials": _credentials_snapshot(
+            catalog_entry["credentials"],
+            config=manifest_config_values(row, manifest),
+        ),
         "dependents": [
             {
                 "appInstance": dependent["app_instance_slug"],
@@ -1253,6 +1361,38 @@ def _reject_hostname_collision(
                 )
 
 
+def _credentials_snapshot(
+    declared: dict[str, Any] | None,
+    *,
+    config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The Service's admin login identity, with the username resolved.
+
+    The username is returned in clear text on purpose: it is an account name, not
+    a secret, and withholding it was the whole defect -- an operator could reveal a
+    password without being told which account it opened. The password itself stays
+    out of this payload and behind the reveal endpoint.
+    """
+    if declared is None:
+        return None
+    username = declared["username"]
+    if username is None:
+        resolved = config.get(str(declared["usernameOption"]))
+        username = None if resolved is None else str(resolved)
+    # Applies to both spellings. Catalog validation rejects a referenced literal and
+    # a referenced option default, but an install override can still supply one, so
+    # the check sits after resolution rather than inside the option branch.
+    # Publishing it would be wrong twice: the operator gets a username the workload
+    # is not using, and an unauthenticated response leaks a provider coordinate.
+    # Omitting is better than lying.
+    if is_secret_reference(username):
+        username = None
+    return {
+        "username": username,
+        "passwordOption": declared["passwordOption"],
+    }
+
+
 def _portal_snapshots(
     request: Request,
     *,
@@ -1527,9 +1667,6 @@ def _redacted_config(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _is_sensitive_config_key(key: str) -> bool:
-    lowered = key.lower()
-    return any(
-        marker in lowered
-        for marker in ("password", "secret", "token", "key", "credential")
-    )
+# Single-sourced in catalog.py so redaction, the reveal gate, and manifest
+# validation of credentials.passwordOption cannot disagree.
+_is_sensitive_config_key = is_sensitive_config_name

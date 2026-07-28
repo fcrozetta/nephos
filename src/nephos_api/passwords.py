@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from base64 import b64decode, b64encode
-from secrets import token_bytes
+from secrets import token_bytes, token_urlsafe
 
 _SCHEME = "scrypt"
 _N = 2**14
@@ -24,6 +24,9 @@ _MAXMEM = 128 * _N * _R * _P * 2
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
+
+# 256 bits of entropy, urlsafe so it survives an Authorization header untouched.
+_TOKEN_BYTES = 32
 
 
 class InvalidPasswordError(ValueError):
@@ -72,6 +75,26 @@ def verify_password(password: str, encoded: str) -> bool:
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(derived, expected)
+
+
+def generate_auth_token() -> str:
+    """A bearer token for the reveal endpoint (ADR 20260726)."""
+    return token_urlsafe(_TOKEN_BYTES)
+
+
+def hash_auth_token(token: str) -> str:
+    """Deterministic hash of a bearer token, for storage and lookup.
+
+    Plain SHA-256 rather than the scrypt used for passwords, and deliberately so:
+    a token carries 256 bits of entropy from a CSPRNG, so there is no dictionary
+    or brute-force surface for a memory-hard KDF to defend against. The salt that
+    makes `hash_password` safe is also what makes it unusable here, since a salted
+    hash cannot be looked up by value.
+
+    Storing only this hash means a read of `admin_tokens` yields nothing usable,
+    which is the same property `admin_accounts` gets from `password_hash`.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _derive(password: str, salt: bytes) -> bytes:

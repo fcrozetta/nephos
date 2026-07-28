@@ -31,6 +31,7 @@ from nephos_api.reconciler_worker import ReconcilerWorker
 from nephos_api.registries import ensure_managed_catalog_registries
 from nephos_api.repository import DesiredStateRepository
 from nephos_api.secret_refs import (
+    SECRETS_SCHEME,
     BaoSecretResolver,
     BaoTokenProvider,
     ChainedBaoTokenProvider,
@@ -45,6 +46,9 @@ from nephos_api.secret_refs import (
 RuntimeFactory = Callable[[Settings], RuntimeAdapter]
 DeployerFactory = Callable[[Settings, DesiredStateRepository], RuntimeDeployer]
 ProvisionerFactory = Callable[[Settings], BindingProvisioner]
+# Resolves a secret reference to its value, or None when no provider is
+# configured for the reference's scheme (ADR 20260726).
+SecretReaderFactory = Callable[[Settings], RuntimeSecretResolver]
 
 
 def create_app(
@@ -55,6 +59,7 @@ def create_app(
     deployer_factory: DeployerFactory | None = None,
     provisioner: BindingProvisioner | None = None,
     provisioner_factory: ProvisionerFactory | None = None,
+    secret_reader_factory: SecretReaderFactory | None = None,
     reconciler_interval_seconds: float = 1.0,
     ensure_registries: bool = True,
 ) -> FastAPI:
@@ -77,6 +82,11 @@ def create_app(
     app.state.provisioner_enabled = (
         provisioner is not None or provisioner_factory is not None
     )
+    # ADR 20260726: the reveal endpoint reads secrets through the same provider
+    # chain the deployer uses. Built lazily and per call, because it needs a
+    # Kubernetes client for the OpenBao token and the API must still start on a
+    # host with no cluster access.
+    app.state.secret_reader_factory = secret_reader_factory or _default_secret_reader
     app.add_exception_handler(NephosError, nephos_error_response)
     app.include_router(auth_router)
     app.include_router(bindings_router)
@@ -426,6 +436,34 @@ def _bao_token_providers(
     if settings.bao_token:
         token_providers.append(StaticBaoTokenProvider(settings.bao_token))
     return token_providers
+
+
+def _default_secret_reader(settings: Settings) -> RuntimeSecretResolver:
+    """Read-only resolver over every configured secret scheme (ADR 20260726).
+
+    Routes `secrets://` through the materializer's `resolve`, which is
+    `materialize(generate=None)`, so a reveal can never mint a value it failed to
+    find. `op://` and `bao://` stay available for stored references.
+
+    A missing Kubernetes client or unconfigured OpenBao yields a resolver with no
+    scheme registered, which fails closed with `secret_ref_provider_unavailable`
+    rather than crashing at startup on a host with no cluster access.
+    """
+    core_v1_api: object | None = None
+    try:
+        from kubernetes import client
+
+        load_kubernetes_config(settings)
+        core_v1_api = client.CoreV1Api()
+    except Exception:
+        core_v1_api = None
+
+    base = _build_secret_resolver(settings, core_v1_api=core_v1_api)
+    resolvers = dict(base.resolvers)
+    materializer = _build_secrets_materializer(settings, core_v1_api=core_v1_api)
+    if materializer is not None:
+        resolvers[SECRETS_SCHEME] = materializer
+    return SchemeRoutingSecretResolver(resolvers)
 
 
 def _build_secret_resolver(
