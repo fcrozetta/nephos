@@ -308,6 +308,11 @@ class ServiceCredentials(BaseModel):
             raise ValueError(
                 "credentials require exactly one of 'username' or 'usernameOption'"
             )
+        # `username: ""` satisfies the exactly-one check because it is not None,
+        # and then publishes an empty account name. A login nobody can use is the
+        # defect credentials exists to prevent, so it is rejected at the source.
+        if self.username is not None and not self.username.strip():
+            raise ValueError("credentials 'username' must not be empty")
         return self
 
 
@@ -753,28 +758,80 @@ def _validate_service_credentials(*, path: Path, manifest: ServiceManifest) -> N
     # a username the Service is not using, plus a provider coordinate on an
     # unauthenticated response. A username that has to live in a vault is not one
     # Nephos can publish, so reject it at authoring time.
-    if credentials.usernameOption is not None:
-        for option in manifest.spec.config.options:
-            if option.name != credentials.usernameOption:
-                continue
-            if is_secret_reference(option.default):
-                raise CatalogValidationError(
-                    f"invalid Service manifest {path}: credentials usernameOption "
-                    f"{credentials.usernameOption!r} defaults to a secret "
-                    "reference; the username is published in clear text and must "
-                    "be a literal"
-                )
-            # An optional option with no default means install can omit it, and the
-            # Service then advertises a login whose username is null -- a panel that
-            # names a password and no account. Declaring credentials is a promise
-            # that the identity resolves, so the option has to be able to keep it.
-            if not option.required and option.default in (None, ""):
-                raise CatalogValidationError(
-                    f"invalid Service manifest {path}: credentials usernameOption "
-                    f"{credentials.usernameOption!r} is optional with no default, "
-                    "so the advertised login would have no username; mark it "
-                    "required or give it a default"
-                )
+    options_by_name = {option.name: option for option in manifest.spec.config.options}
+    username_option = (
+        options_by_name[credentials.usernameOption]
+        if credentials.usernameOption is not None
+        else None
+    )
+    if username_option is not None:
+        if is_secret_reference(username_option.default):
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: credentials usernameOption "
+                f"{credentials.usernameOption!r} defaults to a secret "
+                "reference; the username is published in clear text and must "
+                "be a literal"
+            )
+        # An optional option with no default means install can omit it, and the
+        # Service then advertises a login whose username is null -- a panel that
+        # names a password and no account. Declaring credentials is a promise
+        # that the identity resolves, so the option has to be able to keep it.
+        if not username_option.required and username_option.default in (None, ""):
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: credentials usernameOption "
+                f"{credentials.usernameOption!r} is optional with no default, "
+                "so the advertised login would have no username; mark it "
+                "required or give it a default"
+            )
+        # `required: true` is not sufficient when the value is generated. A
+        # generated option is absent from desired state by design -- the value
+        # lives in the secrets provider -- and the credentials payload reads
+        # desired state, so the username would publish as null however required
+        # the option is. A username is an account name, not a secret to mint.
+        if username_option.generate is not None:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: credentials usernameOption "
+                f"{credentials.usernameOption!r} declares generate; a generated "
+                "value never lands in desired state, so the published username "
+                "would be null. Use a literal username or a defaulted option"
+            )
+
+    # The password has the opposite shape: it may be generated, because reveal
+    # resolves it from the provider. What it may not be is unreachable -- an
+    # optional option with no default and no generation policy leaves reveal
+    # returning `config_option_unset`, so the advertised login cannot be used.
+    password_option = options_by_name[credentials.passwordOption]
+    if (
+        not password_option.required
+        and password_option.generate is None
+        and password_option.default in (None, "")
+    ):
+        raise CatalogValidationError(
+            f"invalid Service manifest {path}: credentials passwordOption "
+            f"{credentials.passwordOption!r} is optional with no default and no "
+            "generate policy, so the advertised login would have no password; "
+            "mark it required, give it a default, or generate it"
+        )
+
+    # Both fields name config options, and config only reaches the workload through
+    # runtime mappings. Without one, Nephos advertises a credential the running
+    # Service was never configured with, which is worse than advertising nothing:
+    # the operator has a username and password that simply do not work.
+    mapped_config_names = {
+        mapping.from_.name
+        for mapping in manifest.spec.runtime.values.mappings
+        if mapping.from_.kind == "config"
+    }
+    for label, name in (
+        ("credentials usernameOption", credentials.usernameOption),
+        ("credentials passwordOption", credentials.passwordOption),
+    ):
+        if name is not None and name not in mapped_config_names:
+            raise CatalogValidationError(
+                f"invalid Service manifest {path}: {label} {name!r} is not mapped "
+                "into the runtime, so the Service never receives it; add a "
+                "spec.runtime.values.mappings entry with kind: config"
+            )
 
 
 def _validate_service_portals(*, path: Path, manifest: ServiceManifest) -> None:

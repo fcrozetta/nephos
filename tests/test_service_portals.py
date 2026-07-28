@@ -332,6 +332,16 @@ def _write_service_with_credentials(
         "      type: string\n"
         "      default: root@example.test"
     ),
+    # Credential options must reach the workload, so the default fixture maps both.
+    # A manifest that names a credential option and never maps it advertises a
+    # login the running Service was never configured with.
+    mappings_yaml: str = (
+        "      mappings:\n"
+        "        - from: { kind: config, name: root-password }\n"
+        "          to: { helmValue: rootPassword }\n"
+        "        - from: { kind: config, name: admin-username }\n"
+        "          to: { helmValue: adminUsername }"
+    ),
 ) -> Path:
     path = root / "services" / "arcadedb" / "service.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -358,7 +368,7 @@ spec:
     provider:
       name: arcadedb
     values:
-      mappings: []
+{mappings_yaml}
 """.strip()
     )
     return path
@@ -568,4 +578,97 @@ def test_catalog_rejects_a_fixed_username_that_is_a_secret_reference(
     )
 
     with pytest.raises(CatalogValidationError, match="is a secret reference"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_an_empty_fixed_credential_username(tmp_path: Path) -> None:
+    # `username: ""` passes the exactly-one check because it is not None, then
+    # publishes an empty account name: a login nobody can use.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            '  credentials:\n    username: ""\n    passwordOption: root-password'
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="must not be empty"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_generated_credential_username(tmp_path: Path) -> None:
+    """`required: true` is not enough when the value is generated.
+
+    A generated option is absent from desired state by design, since the value lives
+    in the secrets provider, and the credentials payload reads desired state. So the
+    username would publish as null however required the option is.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "      required: true\n"
+            "    - name: admin-username\n"
+            "      type: string\n"
+            "      required: true\n"
+            "      generate:\n"
+            "        kind: password\n"
+            "        length: 12"
+        ),
+        credentials_yaml=(
+            "  credentials:\n"
+            "    usernameOption: admin-username\n"
+            "    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="declares generate"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_a_password_option_that_cannot_produce_a_value(
+    tmp_path: Path,
+) -> None:
+    # Optional, no default, no generate policy: install can omit it and reveal then
+    # returns config_option_unset, so the advertised login has no password.
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        options_yaml=(
+            "    - name: root-password\n"
+            "      type: string\n"
+            "    - name: admin-username\n"
+            "      type: string\n"
+            "      default: root@example.test"
+        ),
+        credentials_yaml=(
+            "  credentials:\n    username: root\n    passwordOption: root-password"
+        ),
+    )
+
+    with pytest.raises(CatalogValidationError, match="no default and no"):
+        CatalogLoader((root,)).get_service("arcadedb")
+
+
+def test_catalog_rejects_credential_options_missing_a_runtime_mapping(
+    tmp_path: Path,
+) -> None:
+    """Config only reaches the workload through runtime mappings.
+
+    Without one, Nephos advertises a credential the running Service was never
+    configured with, which is worse than advertising nothing: the operator holds a
+    username and password that simply do not work.
+    """
+    root = tmp_path / "default"
+    _write_service_with_credentials(
+        root,
+        credentials_yaml=(
+            "  credentials:\n    username: root\n    passwordOption: root-password"
+        ),
+        mappings_yaml="      mappings: []",
+    )
+
+    with pytest.raises(CatalogValidationError, match="not mapped into the runtime"):
         CatalogLoader((root,)).get_service("arcadedb")
