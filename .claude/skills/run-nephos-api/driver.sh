@@ -46,12 +46,35 @@ die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 # current, `cluster-deploy` would `set image` and `rollout restart` a *different*
 # cluster's nephos-api to a tag that exists only in k3d. ADR 20260715 pins LCL to
 # k3d-nephos and `hostctl.py` already passes --context for exactly this reason.
-KCTX="${NEPHOS_DRIVER_CONTEXT:-k3d-nephos}"
+#
+# The cluster is the parameter, not the context. Letting NEPHOS_DRIVER_CONTEXT name
+# any context reintroduced the same cross-cluster mutation from the other side:
+# `k3d image import` stays pinned to the k3d cluster while set-image, patch,
+# restart, exec, and ingress went wherever that context pointed. k3d names its
+# context after the cluster, so deriving one from the other keeps them in step.
+CLUSTER="${NEPHOS_DRIVER_CLUSTER:-nephos}"
+KCTX="k3d-${CLUSTER}"
 kc() { kubectl --context "$KCTX" "$@"; }
 
 require_context() {
+  k3d cluster list "$CLUSTER" >/dev/null 2>&1 ||
+    die "k3d cluster '${CLUSTER}' does not exist; create it or set NEPHOS_DRIVER_CLUSTER"
   kubectl config get-contexts -o name 2>/dev/null | grep -qx "$KCTX" ||
-    die "kube context '${KCTX}' not found; create the k3d cluster or set NEPHOS_DRIVER_CONTEXT"
+    die "kube context '${KCTX}' not found; run 'k3d kubeconfig merge ${CLUSTER} -d'"
+  # Existence is not identity. A context named k3d-<cluster> can be edited to point
+  # anywhere, and the name is the only thing checked above. k3d publishes the API
+  # server on a host port, so a genuine k3d context has a loopback server URL; a
+  # context aimed at a remote cluster fails here, which is exactly the case worth
+  # stopping, because it is the one that would mutate something that is not ours.
+  local server
+  server="$(kubectl config view \
+    -o "jsonpath={.clusters[?(@.name=='${KCTX}')].cluster.server}" 2>/dev/null)"
+  [ -n "$server" ] ||
+    die "context '${KCTX}' has no server URL; run 'k3d kubeconfig merge ${CLUSTER} -d'"
+  case "$server" in
+    https://0.0.0.0:*|https://127.0.0.1:*|https://localhost:*|https://host.docker.internal:*) : ;;
+    *) die "context '${KCTX}' points at ${server}, which is not a local k3d cluster; refusing to mutate it" ;;
+  esac
 }
 
 # `local-down` ends in `rm -rf "$RUN_DIR"`, and RUN_DIR is caller-supplied, so
@@ -221,7 +244,6 @@ cmd_local_down() {
     for f in "$PFFILE" "$PIDFILE"; do
       [ -f "$f" ] && { kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; }
     done
-    pkill -f "nephos-api serve --host 127.0.0.1 --port ${PORT}" 2>/dev/null
     rm -rf "$RUN_DIR"
     echo "stopped"
     return 0
@@ -231,9 +253,12 @@ cmd_local_down() {
       "$RUN_DIR" "$MARKER"
     return 0
   fi
-  # Nothing of ours on disk. Still reap a server matching our exact serve command
-  # line, which is the one thing we can attribute without the directory.
-  pkill -f "nephos-api serve --host 127.0.0.1 --port ${PORT}" 2>/dev/null
+  # No blind pkill. A recorded PID in a driver-owned directory is the only thing
+  # this can attribute to itself; matching on the serve command line also matches a
+  # server someone started by hand, pointed at their own database, and `local-up`
+  # calls this first -- so merely starting the driver killed their work before the
+  # occupied-port check could refuse. Leaving it running is correct: that check
+  # then reports the port is taken.
   echo "stopped"
 }
 
@@ -444,8 +469,13 @@ cmd_cluster_deploy() {
   if curl -fsS -o /dev/null --max-time 2 "${BASE}/healthz" 2>/dev/null; then
     die "something is already serving ${BASE}; free port ${PORT} before cluster-deploy"
   fi
-  kc -n nephos-system port-forward svc/nephos-api "${PORT}:8099" \
-    >"${RUN_DIR}/pf.log" 2>&1 &
+  # `kubectl` directly, not the `kc` helper: `kc` is a shell function, so
+  # backgrounding it forks a wrapper subshell and `$!` records *that* PID. The
+  # liveness check below would then watch the wrapper, and killing it on a rerun or
+  # on local-down orphaned the real port-forward, leaving ${PORT} held by a process
+  # no pid file pointed at.
+  kubectl --context "$KCTX" -n nephos-system port-forward svc/nephos-api \
+    "${PORT}:8099" >"${RUN_DIR}/pf.log" 2>&1 &
   local pf_pid=$!
   echo "$pf_pid" >"$PFFILE"
   # One request, not two. Probing and then re-fetching for the message let a
