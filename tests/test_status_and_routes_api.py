@@ -13,6 +13,7 @@ from nephos_api.db import migrate_database
 from nephos_api.main import create_app
 from nephos_api.reconciler import Reconciler
 from nephos_api.repository import DesiredStateRepository
+from nephos_api.routing import PORTAL_RECONCILE_ACTION
 
 
 def _client_and_repo(tmp_path: Path) -> tuple[TestClient, DesiredStateRepository]:
@@ -464,3 +465,74 @@ def test_install_keeps_a_host_claim_when_the_catalog_entry_is_gone(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "hostname_conflict"
+
+
+def test_service_portal_reports_a_failed_routing_pass(tmp_path: Path) -> None:
+    """A revoked portal whose teardown failed must not read as cleanly unpublished.
+
+    Routing-only reconciliation writes no status snapshot, by design, so its failure
+    used to live only on a request no endpoint exposed. Meanwhile `published` is
+    derived from domain eligibility, which is desired state. An operator could
+    therefore be told the UI was off the network while its Ingress was still
+    serving, which is a false negative on the one control that takes a portal down.
+    """
+    client, repo = _portal_client_and_repo(tmp_path)
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.lcl", "default": True},
+        ).status_code
+        == 202
+    )
+    service_id = str(repo.get_service_row("arcadedb")["id"])
+    with repo.transaction() as tx:
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service_id,
+            target_generation=1,
+            action=PORTAL_RECONCILE_ACTION,
+            target_snapshot={"slug": "arcadedb"},
+        )
+        tx.update_reconciliation_request_state(
+            request_id=request.id,
+            state="blocked",
+            error="could not list ingresses",
+        )
+
+    portal = client.get("/services/arcadedb").json()["portals"][0]
+
+    assert portal["unpublishedReason"] == "portal_routing_failed"
+    assert portal["status"]["level"] == "blocked"
+    assert portal["status"]["reason"] == "portal_routing_failed"
+    assert portal["status"]["message"] == "could not list ingresses"
+
+
+def test_service_portal_routing_success_does_not_mask_workload_status(
+    tmp_path: Path,
+) -> None:
+    # The failure surface must not swallow the normal case: a succeeded routing pass
+    # leaves the workload's own status showing through.
+    client, repo = _portal_client_and_repo(tmp_path)
+    assert (
+        client.post(
+            "/platform/config/domains",
+            json={"name": "local", "domain": "nephos.lcl", "default": True},
+        ).status_code
+        == 202
+    )
+    service_id = str(repo.get_service_row("arcadedb")["id"])
+    with repo.transaction() as tx:
+        request = tx.create_reconciliation_request(
+            target_type="service_instance",
+            target_id=service_id,
+            target_generation=1,
+            action=PORTAL_RECONCILE_ACTION,
+            target_snapshot={"slug": "arcadedb"},
+        )
+        tx.update_reconciliation_request_state(request_id=request.id, state="succeeded")
+
+    portal = client.get("/services/arcadedb").json()["portals"][0]
+
+    assert portal["unpublishedReason"] == "no_portal_eligible_domain"
+    status = portal["status"]
+    assert status is None or status["reason"] != "portal_routing_failed"
