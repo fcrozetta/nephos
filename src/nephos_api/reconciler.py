@@ -11,7 +11,10 @@ from nephos_api.catalog import AppManifest, ServiceManifest
 from nephos_api.kubernetes_runtime import ResourceType
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
-from nephos_api.repository import DesiredStateRepository
+from nephos_api.repository import (
+    RECONCILE_RETRY_ATTEMPT_CAP,
+    DesiredStateRepository,
+)
 from nephos_api.routing import (
     PORTAL_RECONCILE_ACTION,
     ServicePortalIdentity,
@@ -1173,11 +1176,19 @@ class Reconciler:
         reason: str,
         message: str,
     ) -> None:
+        # Retry position rides in the evidence entry, not in the message. It is
+        # the difference between "still converging" and "given up" -- without it
+        # the status reads identically in both cases, and an operator who fixed
+        # the real cause and waited would wait forever. Structured rather than
+        # concatenated so a reader can branch on it and message assertions stay
+        # about the message.
+        attempt = _next_attempt(request)
         with self._repository.transaction() as tx:
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),
                 state="blocked",
                 error=message,
+                increment_attempts=True,
             )
             tx.upsert_status_snapshot(
                 resource_type=str(request["target_type"]),
@@ -1193,6 +1204,11 @@ class Reconciler:
                         "subject": str(request["id"]),
                         "reason": reason,
                         "message": message,
+                        "attempt": attempt,
+                        "retryCap": RECONCILE_RETRY_ATTEMPT_CAP,
+                        "retriesRemaining": max(
+                            0, RECONCILE_RETRY_ATTEMPT_CAP - attempt
+                        ),
                     }
                 ],
                 observed_generation=int(request["target_generation"]),
@@ -1380,6 +1396,10 @@ def _stored_config(row: dict[str, object]) -> dict[str, object]:
     if not isinstance(config, dict):
         return {}
     return dict(config)
+
+
+def _next_attempt(request: dict[str, object]) -> int:
+    return int(request.get("attempts") or 0) + 1
 
 
 def _binding_output_values(row: dict[str, object]) -> dict[str, str] | None:

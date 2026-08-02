@@ -256,3 +256,28 @@ printing the list.
 replacement must contain the original text. `s.replace(old, old + new)`, never
 `s.replace(old, new)`. And assert the post-condition — here,
 `"0004_add_admin_tokens" in s` — not just the pre-condition.
+
+---
+
+## 10. Flaw 4 recurred: a commit landed on top of two lint errors
+
+**What happened:** the Task 7 commit ran `ruff check` (which reported `I001`
+and `E501`), then `ruff format --check`, then `git add -A && git commit` — as
+separate statements on separate lines. Nothing chained them, so the commit
+proceeded on a red lint. Fixed and amended, but the commit existed for a
+minute in a state the plan says is impossible.
+
+**Why the earlier fix did not hold:** flaw 4 was recorded as "do not pipe a
+command whose exit code is the gate." The rule was too narrow. This time
+nothing was piped — the statements simply were not chained at all. The
+underlying mistake is the same and the recorded rule did not cover it.
+
+**Rule, restated to cover both:** a gate is only a gate if the failing command
+can stop what follows. In practice: `set -o pipefail` once, then chain
+everything from the first check to `git commit` with `&&`. Never put a check
+and a commit in the same block as separate statements.
+
+**Meta-observation worth keeping:** this is the first flaw in this log to
+recur, and it recurred because the rule was written against the *instance*
+(piping) rather than the *cause* (an ungated gate). When writing a rule, state
+what must be true, not what must be avoided.

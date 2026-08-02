@@ -505,3 +505,35 @@ forced:
 - Related to [Alpha Backbone Catalog and Service Providers](./20260622-alpha-backbone-catalog-and-service-providers.md)
   — the Zitadel and ArcadeDB Service entries this changes.
 - Depends on issue #61 (route scheme derivation).
+
+## Addendum 2026-08-01: the provisioning path was left behind
+
+This ADR moved a Service's external identity to `spec.portals`, and the deploy
+path followed: `providers/deployer._portal_mapping_value` derives the host from
+the portal and feeds it to the provider. `core-registry` dropped the
+`external-host`, `external-port`, and `external-secure` config options
+accordingly.
+
+The **binding-provisioning** path was not migrated. `provisioners/zitadel` kept
+reading `external-host` from Service config, so once the option was gone every
+OIDC binding blocked with `binding_provisioner_unavailable`. Nothing caught it:
+no test covered a Service whose manifest had moved on, and the deploy path —
+which had migrated — kept working. It surfaced only when a third-party App was
+built against the platform and could not install.
+
+Closed by deriving the same identity for provisioning.
+`routing.service_portal_identity` returns the Service's **first** portal host
+with the platform route port and scheme; `BindingProvisioningContext` carries it
+as `service_portal`; the Zitadel provisioner reads it in preference to config.
+The config fallback remains for a non-core Service that still declares those
+options, and blocking now names both sources.
+
+Deriving it in `routing` rather than beside the provisioner is deliberate: that
+module already owns portal host derivation, and its opening comment explains why
+one definition is what keeps the Ingress, the reported URL, and the runtime
+mapping byte-identical. The provisioning identity is now the fourth reader of
+that single derivation.
+
+The lesson worth keeping: when a value moves from one source to another, its
+consumers are not always in the same subsystem as its producer. Grep for the old
+key across every layer, not just the one being edited.

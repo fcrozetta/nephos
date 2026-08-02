@@ -160,3 +160,33 @@ This deliberately trades throughput for clarity because Nephos is single-user/lo
 - exact retry count and backoff behavior
 - whether automatic retry lands in API 0.0.1 or immediately after
 - exact status evidence `data` payloads for reconciliation evidence
+
+## Addendum 2026-08-01: capped retry is implemented
+
+This ADR stated that simple capped retry was the intended model and allowed it
+to be deferred from API 0.0.1. It was deferred and then forgotten, which made
+`blocked` terminal in practice: `claim_next_reconciliation_request` selected only
+`pending`, so a request that blocked once was never re-run.
+
+Observed on a live install holding a stale status for over twenty minutes while
+the underlying cause had already been fixed. Nothing picked the fix up, and
+re-issuing the lifecycle action was the only way to queue another attempt —
+which nothing in the API response or the resource status suggests.
+
+Now implemented: `reconciliation_requests.attempts` (migration 0005); a claim
+that also selects blocked requests under the cap whose `updated_at` is older
+than the retry interval; and `ORDER BY (state <> 'pending'), created_at` so
+pending work sorts ahead of every retry-eligible blocked row and a permanently
+blocked request cannot starve the single serialized worker.
+
+Fixed interval of 60 seconds, capped at 3 attempts. Exponential backoff was
+considered and rejected: with one serialized worker on a local-first install
+there is no contention for backoff to relieve, and the cap already bounds a
+permanently blocked request to roughly three minutes.
+
+Retry position is reported in the blocked status snapshot's evidence entry as
+`attempt`, `retryCap`, and `retriesRemaining`, so an exhausted request is
+distinguishable from one still converging. It is structured rather than appended
+to the message: concatenating it would have coupled five existing message
+assertions to the retry policy, and a reader that wants to branch on "will this
+retry?" should not have to parse prose.
