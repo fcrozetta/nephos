@@ -123,9 +123,10 @@ def test_portal_host_prefixes_mirror_app_route_prefixes() -> None:
 
 def test_portal_scheme_does_not_guess_from_domain_suffix() -> None:
     # ADR 20260517 is HTTP-only for Nephos-generated ingress. `nephos.lcl` is
-    # neither .local nor .localhost, which is exactly the input that makes
-    # zitadel._route_scheme return https (issue #61); the portal path must not
-    # inherit that inference because it feeds externalSecure.
+    # neither .local nor .localhost, which was exactly the input that made
+    # zitadel infer https (issue #61). That inference is gone and both paths now
+    # read this constant, but the assertion stays: it is what would catch a
+    # reintroduction.
     assert PLATFORM_ROUTE_SCHEME == "http"
     assert service_portal_url(
         service_slug="zitadel",

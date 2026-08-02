@@ -16,6 +16,7 @@ from nephos_api.providers.pulumi import (
     _ensure_pulumi_local_backend_passphrase,
 )
 from nephos_api.provisioners.base import BindingProvisioningContext
+from nephos_api.routing import PLATFORM_ROUTE_SCHEME
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -553,16 +554,42 @@ def _assert_service_namespace_owned(
 
 
 def _provisioning_domain(context: BindingProvisioningContext) -> str:
-    return str(_config_value(context, "external-host", "externalHost"))
+    """The host Zitadel is reachable at, for provisioning (ADR 20260726).
+
+    Portal-derived first. A Service's external identity is its portal host, and
+    the deploy path already feeds Zitadel that same value as `externalHost`.
+    Reading it from Service config was left behind when portals landed: once
+    core-registry dropped the option, every OIDC binding blocked here.
+
+    The config fallback stays for a non-core Service that still declares
+    `external-host`.
+    """
+    if context.service_portal is not None:
+        return context.service_portal.host
+    config = context.service_config or {}
+    if "external-host" in config or "externalHost" in config:
+        return str(_config_value(context, "external-host", "externalHost"))
+    raise RuntimeBlockedError(
+        reason="binding_provisioner_unavailable",
+        message=(
+            "Zitadel has no provisioning host: the Service publishes no portal "
+            "on a portal-eligible domain, and its config carries no "
+            "external-host."
+        ),
+    )
 
 
 def _provisioning_port(context: BindingProvisioningContext) -> int:
+    if context.service_portal is not None:
+        return context.service_portal.port
     return int(
         str(_config_value(context, "external-port", "externalPort", default=443))
     )
 
 
 def _provisioning_secure(context: BindingProvisioningContext) -> bool:
+    if context.service_portal is not None:
+        return context.service_portal.secure
     return _bool_config_value(
         context,
         "external-secure",
@@ -830,7 +857,10 @@ def _route_base_urls(context: BindingProvisioningContext) -> tuple[str, ...]:
     )
     if default_domain is None:
         return ()
-    scheme = _route_scheme(default_domain)
+    # ADR 20260517: Nephos-generated URLs are http. Guessing a scheme from the
+    # domain suffix (issue #61) produced https redirect URIs on `.lcl`, which is
+    # the domain `nephos setup lcl` creates and serves over http.
+    scheme = PLATFORM_ROUTE_SCHEME
     urls = []
     for index, route in enumerate(context.app_routes):
         host_prefix = (
@@ -838,12 +868,6 @@ def _route_base_urls(context: BindingProvisioningContext) -> tuple[str, ...]:
         )
         urls.append(f"{scheme}://{host_prefix}.{default_domain}")
     return tuple(urls)
-
-
-def _route_scheme(default_domain: str) -> str:
-    if default_domain.endswith((".localhost", ".local")):
-        return "http"
-    return "https"
 
 
 def _stack_name(prefix: str, context: BindingProvisioningContext) -> str:

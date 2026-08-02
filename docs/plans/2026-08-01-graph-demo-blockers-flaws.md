@@ -149,3 +149,62 @@ change, and mixing it in costs the reviewer far more than it saves.
 
 **Verified clean under the real gate:** `src/nephos_api/routing.py`,
 `tests/test_routing.py`.
+
+**Confirmed at Task 2:** the only change ruff wanted in `reconciler.py` was at
+line 1337, in a function this branch never touches. Formatting it would have
+buried a three-line behavioural change. The rule held.
+
+---
+
+## 6. "Update the existing https test" understated what was there
+
+**Plan said (Task 4, step 6):** "An existing test asserting an https redirect
+URI is now wrong and should be updated to http — that is the fix, not a
+regression."
+
+**Actually true:** the test was
+`test_pulumi_zitadel_client_uses_https_redirects_for_nonlocal_domains`. Its
+*name* asserted the old behaviour as intended design, so silently flipping its
+body would have left a test whose name contradicted what it checked — and would
+have looked, to a reviewer, like the https behaviour was deliberate and I
+overrode it.
+
+**What the check needed to be:** does Nephos ever actually serve https?
+`grep -n "tls\|V1IngressTLS" src/nephos_api/kubernetes_runtime.py` returns
+nothing — `ensure_app_ingresses` configures no TLS at all. The https redirect
+URI was never backed by anything the platform does. That is the justification,
+and it was not in the plan.
+
+**Rule:** when a plan says "update the existing test", it must also say what
+evidence justifies the flip. A test encodes someone's intent; overriding it
+needs a reason stronger than "my new test disagrees". Check the name and the
+git history, not just the assertion.
+
+**Also renamed** to `..._uses_the_platform_route_scheme_for_redirects`, so the
+name states the property that now holds.
+
+---
+
+## 7. Plan quoted a source comment from memory, not from the file
+
+**Plan said (Task 4, step 5):** replace the warning block at `routing.py:18-23`,
+and gave the replacement text.
+
+**Actually true:** the plan's rendition of the *existing* comment did not match
+the file. The scripted edit asserted on the exact stale text and stopped rather
+than silently doing nothing.
+
+**Also missed entirely:** a second stale reference at
+`tests/test_service_portals.py:127`, which the plan never mentioned. A plain
+`grep -rn "_route_scheme" src/ tests/` at plan-writing time would have found
+both. The plan grepped only `src/`.
+
+**Rule:** never transcribe existing file content into a plan from memory — read
+it, or describe the edit by anchor rather than quoting. And when a plan proposes
+deleting a symbol, grep for it across `src/` *and* `tests/` *and* `docs/`;
+comments referencing a deleted function rot silently because nothing compiles
+them.
+
+**Why it did not cost anything:** the edit script used
+`assert stale in s` before writing. An unasserted `str.replace` would have
+no-op'd and left the stale comment in place, claiming success.

@@ -16,12 +16,13 @@ from typing import Protocol
 # "Nephos-generated URLs use `http://`". This is the single conforming
 # implementation.
 #
-# ! Do not reintroduce scheme guessing here. `zitadel._route_scheme` still infers
-# ! https from any suffix that is not `.local`/`.localhost` (so `nephos.lcl`
-# ! yields https), which contradicts the ADR above; issue #61 tracks replacing it
-# ! on the App redirect-URI path. A portal feeds `externalSecure`, where a wrong
-# ! guess breaks OIDC issuer validation rather than merely mislabeling a status
-# ! URL, so the portal path must never depend on that inference.
+# ! Do not reintroduce scheme guessing anywhere. `zitadel` used to infer https
+# ! from any suffix that was not `.local`/`.localhost`, so `nephos.lcl` -- the
+# ! domain `nephos setup lcl` creates and serves over http -- yielded https
+# ! redirect URIs for a route that has no TLS behind it at all
+# ! (`ensure_app_ingresses` configures none). Issue #61, closed 2026-08-01: the
+# ! App redirect-URI path and the Service provisioning identity both read the
+# ! constants below, so one host can no longer be described two ways.
 PLATFORM_ROUTE_SCHEME = "http"
 PLATFORM_ROUTE_PORT = 80
 PLATFORM_ROUTE_SECURE = False
