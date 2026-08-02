@@ -546,7 +546,11 @@ def _build_provisioning_engines(
     Single source of the engine set so the app->service binding provisioner and
     the service->service dependency provisioner cannot drift apart.
     """
+    from nephos_api.provisioners.arcadedb_client import (
+        KubernetesArcadeDBProvisioningClient,
+    )
     from nephos_api.provisioning import (
+        ArcadeDBAppScopedProvisioner,
         KubernetesPulumiZitadelProvisioningClient,
         KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
@@ -566,6 +570,12 @@ def _build_provisioning_engines(
     return {
         "sql": PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
         "oidc": ZitadelAppScopedProvisioner(client=zitadel_client),
+        # ADR 20260630 fixes the output contract; the client speaks ArcadeDB's
+        # HTTP admin API. Optional protocols (gremlin, mongo) stay disabled --
+        # the Service exposes those ports only when explicitly enabled.
+        "opencypher": ArcadeDBAppScopedProvisioner(
+            client=KubernetesArcadeDBProvisioningClient(core_v1_api=core_v1_api),
+        ),
     }
 
 
