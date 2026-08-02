@@ -29,9 +29,23 @@ class _FakeSecrets:
         self.deleted.append(name)
 
 
+class _Meta:
+    def __init__(self, labels):
+        self.labels = labels
+
+
 class _Stored:
-    def __init__(self, password):
+    def __init__(self, password, labels=None):
         self.data = {"password": base64.b64encode(password.encode()).decode()}
+        self.metadata = _Meta(
+            labels
+            if labels is not None
+            else {
+                "app.kubernetes.io/managed-by": "nephos",
+                "nephos.pro/app-instance": "graph-demo",
+                "nephos.pro/binding-alias": "graph",
+            }
+        )
 
 
 def _ctx(protocol="bolt"):
@@ -173,3 +187,42 @@ def test_teardown_tolerates_an_already_absent_user():
         )
 
     _client(handler, _FakeSecrets()).delete_database_user(_ctx())
+
+
+def test_a_secret_owned_by_another_binding_is_refused():
+    # `_identifier` can collide across Apps: "acme" + "graph-primary" and
+    # "acme-graph" + "primary" both render "acme_graph_primary". The Secret
+    # lives in the shared Service namespace, so without an ownership check the
+    # colliding App would read back another App's password and be handed admin
+    # on its database.
+    foreign = _Stored(
+        "someone-elses-pw",
+        labels={
+            "app.kubernetes.io/managed-by": "nephos",
+            "nephos.pro/app-instance": "other-app",
+            "nephos.pro/binding-alias": "graph",
+        },
+    )
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _client(_ok, _FakeSecrets(existing=foreign)).ensure_database_user(_ctx())
+
+    assert "another" in str(excinfo.value)
+
+
+def test_a_rejection_does_not_echo_the_command_payload():
+    # The message is persisted verbatim into the status snapshot the API
+    # serves, and the create-user command carries the plaintext password.
+    def handler(request):
+        return httpx.Response(
+            400,
+            json={
+                "error": "Cannot execute command",
+                "detail": 'near: create user {"password":"leaked-secret"}',
+            },
+        )
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _client(handler, _FakeSecrets()).ensure_database_user(_ctx())
+
+    assert "leaked-secret" not in str(excinfo.value)

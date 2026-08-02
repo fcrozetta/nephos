@@ -178,9 +178,16 @@ class KubernetesArcadeDBProvisioningClient:
             detail = response.text
         if tolerate and tolerate in detail:
             return
+        # The verb only, never the payload, and never the server's echo of it.
+        # This message is persisted verbatim into the status snapshot, which the
+        # API serves; binding-output redaction covers the success path's values
+        # dict and nothing here. ArcadeDB quotes the offending command back in
+        # `detail` for parse errors, and the create-user command carries the
+        # plaintext password.
+        verb = command.split("{")[0].strip()
         raise RuntimeBlockedError(
             reason="binding_provisioner_unavailable",
-            message=f"ArcadeDB rejected {command.split('{')[0].strip()!r}: {detail}",
+            message=f"ArcadeDB rejected {verb!r} (see the ArcadeDB server log)",
         )
 
     def _secret_name(self, identifier: str) -> str:
@@ -200,6 +207,14 @@ class KubernetesArcadeDBProvisioningClient:
         except Exception:
             existing = None
         if existing is not None:
+            # Ownership guard, mirroring postgres._assert_owned_credential_secret.
+            # The Secret lives in the *Service* namespace, shared by every App
+            # bound to it, and `_identifier` can collide across Apps: `acme` +
+            # `graph-primary` and `acme-graph` + `primary` both render
+            # `acme_graph_primary`. Without this check a colliding App would read
+            # back another App's live password and be handed admin on its
+            # database. Refuse rather than reuse.
+            _assert_owned(existing, context=context, name=name)
             return base64.b64decode(existing.data["password"]).decode()
 
         password = self._password_factory()
@@ -209,7 +224,7 @@ class KubernetesArcadeDBProvisioningClient:
                 metadata=client.V1ObjectMeta(
                     name=name,
                     namespace=namespace,
-                    labels={"app.kubernetes.io/managed-by": "nephos"},
+                    labels=_ownership_labels(context),
                 ),
                 string_data={"username": identifier, "password": password},
             ),
@@ -240,3 +255,25 @@ def _root_password(context: BindingProvisioningContext) -> str:
         reason="binding_provisioner_unavailable",
         message="ArcadeDB Service config is missing required value root-password.",
     )
+
+
+def _ownership_labels(context: BindingProvisioningContext) -> dict[str, str]:
+    return {
+        "app.kubernetes.io/managed-by": "nephos",
+        "nephos.pro/app-instance": context.app_slug,
+        "nephos.pro/binding-alias": context.alias,
+    }
+
+
+def _assert_owned(secret, *, context: BindingProvisioningContext, name: str) -> None:
+    """Refuse a credential Secret that belongs to a different binding."""
+    labels = (getattr(secret, "metadata", None) and secret.metadata.labels) or {}
+    expected = _ownership_labels(context)
+    if any(labels.get(key) != value for key, value in expected.items()):
+        raise RuntimeBlockedError(
+            reason="binding_provisioner_unavailable",
+            message=(
+                f"Refusing to reuse Secret {name}: it belongs to another "
+                "binding. Two Apps have collided on a generated identifier."
+            ),
+        )
