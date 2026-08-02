@@ -448,3 +448,75 @@ and the only way to know is to relax it and watch.
 **Second rule:** two fixes in a row that move the error without resolving it is
 a signal you are working on a symptom. Stop and ask what has to be true for the
 call to succeed at all, rather than adjusting how it is dialled.
+
+---
+
+## Retrospective: 20 rules, 3 repeats
+
+Written at Fer's request, reviewing whether the log did its job. It did not,
+and the way it failed is more useful than any single entry.
+
+### What actually recurred
+
+| Mistake | First logged | Recurred as |
+|---|---|---|
+| A gate that cannot stop what follows | #4 | #10 — a commit landed on two lint errors |
+| `str.replace(old, new, 1)` on non-unique text | #9 — deleted a migration entry | Unlogged — the h2c assertion landed on the **postgres** test instead of the zitadel one, because both files contain that exact line |
+| Ignoring a hazard I had personally documented | graph-demo report | #13 — restarted with a dirty registry clone and took the control plane down |
+
+The second one is the sharpest: I wrote the rule *"the replacement must contain
+the original text… assert the post-condition"* at #9, and then made the same
+class of mistake four commits later in a different shape. I also failed to log
+it as a recurrence at the time.
+
+### Why the rules did not hold
+
+Every rule that failed was phrased as a **prohibition against the instance**
+rather than a **mechanism**:
+
+- "never pipe a command whose exit code is the gate" — so I stopped piping, and
+  instead wrote the check and the commit as separate unchained statements. Same
+  outcome, different spelling, rule silent.
+- "the replacement must contain the original text" — so I did that, on text
+  that appeared twice, and hit the wrong occurrence.
+- "clean the registry clone before restarting" — prose sitting next to a step,
+  which is not a safeguard, it is a hope.
+
+A rule you have to *remember at the right moment* is the same category of thing
+as the bug it describes. The ones that worked were the ones with teeth: #5's
+"format-check only touched files" held because I made it a concrete command,
+and #7's damage was zero because the edit script carried `assert stale in s`.
+
+### The three mechanisms that replace them
+
+**1. One command from first check to commit.** Never separate statements.
+
+```bash
+set -o pipefail
+uv run ruff check . && uv run pytest -q > /dev/null && git add -A && git commit -m "..."
+```
+
+If it is not one `&&` chain, it is not a gate.
+
+**2. Assert the match count before substituting, never after.**
+
+```python
+assert s.count(old) == 1, f"{s.count(old)} matches -- anchor to a scope first"
+```
+
+When the count is not 1, slice to the enclosing function or class first and
+substitute inside that slice. This is what would have caught both #9 and the
+unlogged repeat.
+
+**3. Re-read live state at the moment you depend on it.** Never carry a reading
+forward across turns, and never accept a record of a past action
+(`last-applied-configuration`, a report, an earlier transcript line) as current
+state. #11 deployed a released image for exactly this reason.
+
+### The one that is not a mechanism
+
+#15 — fixing a symptom twice before finding the cause — has no mechanical guard.
+The only signal is *two fixes in a row that move the error without resolving
+it*. When that happens, stop adjusting and ask what has to be true for the
+operation to succeed at all. Both transport "fixes" were wrong; h2c was the
+answer, and it was one layer below where I was looking.
