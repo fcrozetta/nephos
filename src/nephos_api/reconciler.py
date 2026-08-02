@@ -840,27 +840,33 @@ class Reconciler:
             return
         for binding in self._repository.list_bindings_for_app(app_instance_id):
             app_slug = str(binding["app_instance_slug"])
-            deprovision(
-                BindingProvisioningContext(
-                    binding_id=str(binding["id"]),
-                    app_slug=app_slug,
-                    service_slug=str(binding["service_instance_slug"]),
-                    alias=str(binding["alias"]),
-                    capability=str(binding["capability"]),
-                    protocol=_optional_str(binding["protocol"]),
-                    service_config=self._service_config(
-                        str(binding["service_instance_slug"])
-                    ),
-                    app_routes=tuple(self._app_routes(app_slug)),
-                    platform_domains=tuple(self._platform_domains_for_ingress()),
-                    provisioning_engine=self._service_provisioning_engine(
-                        str(binding["service_instance_slug"])
-                    ),
-                    service_portal=self._service_portal_identity(
-                        str(binding["service_instance_slug"])
-                    ),
+            # Same reasoning as _cleanup_service_dependent_bindings below: if
+            # provider cleanup cannot run, App-side teardown must still proceed.
+            # Unguarded, an App whose provisioner raises is undeletable, and
+            # `force: true` does not help -- it gates only the Service
+            # dependents check, not this path.
+            with suppress(Exception):
+                deprovision(
+                    BindingProvisioningContext(
+                        binding_id=str(binding["id"]),
+                        app_slug=app_slug,
+                        service_slug=str(binding["service_instance_slug"]),
+                        alias=str(binding["alias"]),
+                        capability=str(binding["capability"]),
+                        protocol=_optional_str(binding["protocol"]),
+                        service_config=self._service_config(
+                            str(binding["service_instance_slug"])
+                        ),
+                        app_routes=tuple(self._app_routes(app_slug)),
+                        platform_domains=tuple(self._platform_domains_for_ingress()),
+                        provisioning_engine=self._service_provisioning_engine(
+                            str(binding["service_instance_slug"])
+                        ),
+                        service_portal=self._service_portal_identity(
+                            str(binding["service_instance_slug"])
+                        ),
+                    )
                 )
-            )
 
     def _cleanup_service_dependent_bindings(
         self,

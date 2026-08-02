@@ -139,3 +139,20 @@ def test_routing_preserves_the_service_portal_identity():
     EngineRoutingBindingProvisioner({"oidc": engine}).provision_binding(context)
 
     assert engine.provisioned[0].service_portal == identity
+
+
+def test_deprovision_is_a_noop_when_the_engine_is_unregistered():
+    # Teardown must not strand a consumer. There is nothing to tear down
+    # through an engine that does not exist, and refusing to proceed made an
+    # App whose binding named an unregistered engine undeletable.
+    EngineRoutingBindingProvisioner({}).deprovision_binding(_ctx(engine="opencypher"))
+
+
+def test_deprovision_is_a_noop_when_no_engine_is_declared():
+    EngineRoutingBindingProvisioner({"sql": _Recorder()}).deprovision_binding(_ctx())
+
+
+def test_provision_still_blocks_on_an_unregistered_engine():
+    # Only teardown is best-effort. Provisioning must still fail loudly.
+    with pytest.raises(RuntimeBlockedError):
+        EngineRoutingBindingProvisioner({}).provision_binding(_ctx(engine="nope"))
