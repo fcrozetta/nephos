@@ -410,3 +410,41 @@ Two suffix heuristics, same missing suffix, found one after the other.
 next. Budget for it, and do not let a run that ends "still broken" be read as
 "the fix did not work" — check *which* error you are looking at. Here the error
 changed three times, and each change was progress.
+
+---
+
+## 15. I fixed a symptom twice before finding the cause
+
+**What happened:** the OIDC binding failed with a gRPC 404 through the portal
+host. I concluded the transport heuristic was wrong (it does have the same
+`.lcl` blind spot as #61), changed `auto` to port-forward for portal hosts, then
+changed the client to dial the forward's own host. Both shipped and both were
+wrong.
+
+**Why they were wrong:** Zitadel validates the request origin against its
+`ExternalDomain` and rejects a loopback origin outright —
+`unable to set instance using origin http://127.0.0.1:53435 (ExternalDomain is
+auth.nephos.lcl): Instance not found`. Port-forwarding can only work when the
+external domain *also* resolves to the forward, which is exactly why the
+original heuristic was restricted to `localhost`/`.localhost`. That restriction
+was a correctness precondition wearing the costume of a suffix guess, and I read
+the costume.
+
+Worse: the second change would have broken the `.localhost` path that did work.
+
+**The actual cause:** Zitadel serves gRPC and HTTP on one port over h2c, and
+Traefik speaks HTTP/1.1 to a backend by default. Nothing told it otherwise, so
+gRPC through any Nephos-generated Ingress 404s. One annotation on the Service
+fixes it, and then the original transport default is correct after all.
+
+**Both changes reverted.** Live testing is what exposed it; the unit suite was
+green for both wrong versions.
+
+**Rule:** when a mechanism has a narrow-looking guard, find out *why* the guard
+is narrow before widening it. A precondition and a bad heuristic look identical
+from the outside — the difference is whether something breaks when you relax it,
+and the only way to know is to relax it and watch.
+
+**Second rule:** two fixes in a row that move the error without resolving it is
+a signal you are working on a symptom. Stop and ask what has to be true for the
+call to succeed at all, rather than adjusting how it is dialled.
