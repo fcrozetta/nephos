@@ -109,3 +109,43 @@ or rewriting a test that was fine, or adding a redundant one.
 
 **Rule:** a mutation must change behaviour. Before trusting a MISS, confirm the
 mutated source actually differs semantically, not just textually.
+
+---
+
+## 4. The plan's green-before-commit gate does not gate
+
+**Plan said:** every task ends with
+`uv run ruff check . && uv run ruff format --check . && ...` before `git commit`.
+
+**Actually true:** as run, the format check was piped to `tail -2`, so the shell
+saw `tail`'s exit status, not ruff's. `ruff format --check` reported seven files
+it would reformat and the `&&` chain continued straight into the commit. The
+gate was decorative.
+
+**Caught by:** reading the output rather than the exit code — the "Would
+reformat" line was visible even though nothing stopped.
+
+**Rule:** never pipe a command whose exit code is the gate. Either run it bare,
+or `set -o pipefail` first. A `&&` chain containing a pipe only gates on the
+last element of that pipe.
+
+---
+
+## 5. Pre-existing format drift sets a trap for the files this plan edits
+
+**Found:** seven files fail `ruff format --check` on `main`, before any change
+here — including `reconciler.py`, which Tasks 2, 6, and 8 all modify. The drift
+is pre-existing (verified by checking `main`'s copy of one of them), most likely
+a ruff version difference.
+
+**The trap:** running `ruff format` on `reconciler.py` after editing it would
+reformat the entire file, burying a three-line behavioural change in hundreds of
+unrelated diff lines and making the change unreviewable.
+
+**Rule for the rest of this plan:** lint (`ruff check`) across the repo, but
+format-check only the files this branch actually touches. Do not reformat
+pre-existing drift as a side effect of editing a file — that is a separate
+change, and mixing it in costs the reviewer far more than it saves.
+
+**Verified clean under the real gate:** `src/nephos_api/routing.py`,
+`tests/test_routing.py`.

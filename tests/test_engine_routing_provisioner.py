@@ -5,6 +5,7 @@ from nephos_api.provisioners import (
     BindingProvisioningContext,
     EngineRoutingBindingProvisioner,
 )
+from nephos_api.routing import ServicePortalIdentity
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -119,3 +120,22 @@ def test_provisioning_manifest_accepts_optional_engine():
     p = Provisioning.model_validate({"mode": "app-scoped-resource", "engine": "sql"})
     assert p.engine == "sql"
     assert Provisioning.model_validate({"mode": "none"}).engine is None
+
+
+def test_routing_preserves_the_service_portal_identity():
+    identity = ServicePortalIdentity(host="auth.nephos.lcl", port=80, secure=False)
+    engine = _Recorder({"uri": "x"})
+    context = BindingProvisioningContext(
+        binding_id="b1",
+        app_slug="app",
+        service_slug="auth",
+        alias="auth",
+        capability="oidc",
+        protocol="oidc",
+        provisioning_engine="oidc",
+        service_portal=identity,
+    )
+
+    EngineRoutingBindingProvisioner({"oidc": engine}).provision_binding(context)
+
+    assert engine.provisioned[0].service_portal == identity

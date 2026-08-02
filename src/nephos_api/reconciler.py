@@ -12,7 +12,12 @@ from nephos_api.kubernetes_runtime import ResourceType
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
-from nephos_api.routing import PORTAL_RECONCILE_ACTION, portal_eligible_domains
+from nephos_api.routing import (
+    PORTAL_RECONCILE_ACTION,
+    ServicePortalIdentity,
+    portal_eligible_domains,
+    service_portal_identity,
+)
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -621,6 +626,30 @@ class Reconciler:
         )
         return manifest_config_values(row, manifest)
 
+    def _service_portal_identity(self, slug: str) -> ServicePortalIdentity | None:
+        """The Service's portal-derived external identity, or None.
+
+        ADR 20260726 moved a Service's external address to `spec.portals` and
+        migrated the deploy path. Provisioning kept reading it from Service
+        config, which core-registry had already dropped, so every OIDC binding
+        blocked. This is the provisioning path's equivalent derivation.
+        """
+        row = self._repository.get_service_row(slug)
+        if row is None:
+            return None
+        source_path = Path(str(row["catalog_source_path"]))
+        if not source_path.exists():
+            return None
+        manifest = ServiceManifest.model_validate(
+            yaml.safe_load(source_path.read_text())
+        )
+        portals = manifest.spec.portals
+        return service_portal_identity(
+            service_slug=slug,
+            first_portal_name=portals[0].name if portals else None,
+            domains=self._repository.list_platform_domains(),
+        )
+
     def _service_provisioning_engine(self, slug: str) -> str | None:
         """The service's registry-declared provisioning engine (ADR 20260718).
 
@@ -827,6 +856,9 @@ class Reconciler:
                     provisioning_engine=self._service_provisioning_engine(
                         str(binding["service_instance_slug"])
                     ),
+                    service_portal=self._service_portal_identity(
+                        str(binding["service_instance_slug"])
+                    ),
                 )
             )
 
@@ -857,6 +889,9 @@ class Reconciler:
                 app_routes=tuple(self._app_routes(app_slug)),
                 platform_domains=tuple(self._platform_domains_for_ingress()),
                 provisioning_engine=self._service_provisioning_engine(
+                    str(binding["service_instance_slug"])
+                ),
+                service_portal=self._service_portal_identity(
                     str(binding["service_instance_slug"])
                 ),
             )
@@ -998,6 +1033,9 @@ class Reconciler:
                     ),
                     platform_domains=tuple(self._platform_domains_for_ingress()),
                     provisioning_engine=self._service_provisioning_engine(
+                        str(binding["service_instance_slug"])
+                    ),
+                    service_portal=self._service_portal_identity(
                         str(binding["service_instance_slug"])
                     ),
                 )
