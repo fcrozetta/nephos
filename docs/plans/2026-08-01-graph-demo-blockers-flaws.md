@@ -281,3 +281,102 @@ and a commit in the same block as separate statements.
 recur, and it recurred because the rule was written against the *instance*
 (piping) rather than the *cause* (an ungated gate). When writing a rule, state
 what must be true, not what must be avoided.
+
+---
+
+## 11. The deploy step deployed someone else's image
+
+**Plan said (Task 9, step 1):** `docker build -t nephos-api:dev .`, then
+`k3d image import`, then `rollout restart` — as though the cluster ran the
+local dev tag.
+
+**Actually true:** the deployment runs
+`ghcr.io/fcrozetta/nephos-api:0.3.0` at revision 7. The build and import
+succeeded and were simply irrelevant; the rollout restarted a released image.
+The failure was silent — `rollout status` reported success, `/healthz` returned
+200, and only checking for the `attempts` column showed the new code was not
+running.
+
+**Where the wrong belief came from:** hours earlier I read the deployment's
+`kubectl.kubernetes.io/last-applied-configuration` annotation, which said
+`"image":"nephos-api:dev"`. That annotation records the last `kubectl apply`,
+not the live spec. Something changed the image afterwards and the annotation
+kept its old value. I carried that stale reading forward as fact.
+
+**Rule:** `last-applied-configuration` is history, not state. Read live fields
+(`-o jsonpath='{.spec.template.spec.containers[*].image}'`) and read them at
+the moment you depend on them. More generally: a deploy step must *verify the
+new code is running*, not infer it from a successful rollout. `rollout status`
+proves pods started, not that they contain your build.
+
+**Rule for the plan:** any "build, import, restart" sequence needs a fourth
+step that observes something only the new build can produce. Here that is the
+`attempts` column; the plan happened to include an equivalent check further
+down, which is the only reason this was caught before the install run.
+
+---
+
+## 12. A dependency bump had already broken OIDC provisioning, independently
+
+**Found during validation, not planned for:** with the portal fix in place, the
+`auth` binding stopped complaining about `external-host` and started actually
+running Pulumi — which then failed with
+`ModuleNotFoundError: No module named 'pkg_resources'`.
+
+**Cause:** `b3837c5 chore(deps): bump setuptools from 80.10.2 to 83.0.0 (#84)`.
+setuptools 81 removed `pkg_resources`, and `pulumiverse-zitadel` 0.2.0 imports
+it at module load. nephos never imports setuptools or `pkg_resources` itself —
+the dependency existed *only* to supply `pkg_resources` to that provider, and
+nothing recorded that, so a routine bump sailed past the version that removed
+the thing it was there for.
+
+**Why no test caught it:** the provider is imported inside the Pulumi program
+(`zitadel._oidc_pulumi_program`), which unit tests never execute. The suite was
+green across the bump and has been green ever since.
+
+**Fixed** by pinning `setuptools>=80.10.2,<81` with a seven-line comment naming
+the consumer, the failure mode, and the condition for lifting the pin. The
+comment is the actual fix; the version range is just its consequence.
+
+**Rule:** a dependency that exists only to satisfy another package's import is
+invisible to whoever bumps it. Say so at the pin. If a pin has no comment
+explaining why it exists, treat that as a defect in its own right.
+
+**Also worth noting:** this was the *second* independent cause of the same
+user-visible symptom. Fixing the first one is what made the second one
+reachable. A validation run that stops at "still broken" would have concluded
+the portal fix did not work.
+
+---
+
+## 13. I walked into the exact hazard I had documented
+
+**What happened:** restarting `nephos-api` after `kubectl cp`-ing the demo
+catalog entry into the pod's registry clone crashlooped the init container —
+`managed catalog registry core-registry has local changes; refusing to refresh`.
+The deployment uses `strategy: Recreate`, so the old pod was already gone: the
+control plane was **down**, not degraded.
+
+**Why it is embarrassing:** this hazard is written up in the graph-demo
+authoring report as a named finding, and again in this plan's own Task 9 step 2
+as a "cleanup obligation". I wrote both, then did the restart before the
+cleanup.
+
+**Recovered by** scaling to zero, mounting the `nephos-state` PVC in a
+throwaway pod, running `git checkout -- . && git clean -fd` there, and scaling
+back. Roughly four minutes of downtime on a local cluster.
+
+**Rule:** an obligation written as prose next to a step is not a safeguard. If
+a sequence has a cleanup that must happen before some *later, unrelated* action,
+either do the cleanup immediately after the action that creates the mess, or
+make the later action verify the precondition first. Here: check
+`git status --porcelain` in the pod *as the first line of* any restart, not as
+a note further down the plan.
+
+**Platform observation this earns:** a registry sync failure taking down the
+whole control plane is harsh. The sync guards against refreshing a dirty
+checkout, which is right, but the consequence — API will not boot — is
+disproportionate to the cause, and there is no way to clean the checkout
+without a PVC-mounting pod because the only container that could is the one
+crashlooping. Degrading to "serve the catalog as-is and report the sync failure"
+would be kinder. Not fixed here; out of scope.
