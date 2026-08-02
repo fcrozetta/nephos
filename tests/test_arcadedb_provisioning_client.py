@@ -3,6 +3,7 @@ import json
 
 import httpx
 import pytest
+from kubernetes.client.rest import ApiException
 
 from nephos_api.provisioners.arcadedb_client import (
     KubernetesArcadeDBProvisioningClient,
@@ -19,7 +20,7 @@ class _FakeSecrets:
 
     def read_namespaced_secret(self, name, namespace):
         if self.existing is None:
-            raise RuntimeError("not found")
+            raise ApiException(status=404, reason="Not Found")
         return self.existing
 
     def create_namespaced_secret(self, *, namespace, body):

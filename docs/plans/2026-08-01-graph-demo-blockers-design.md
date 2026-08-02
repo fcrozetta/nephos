@@ -14,6 +14,20 @@ The findings are written up in full in that project's
 `docs/nephos-app-authoring-report.md`, with every citation independently
 fact-checked against this repository. This document is the fix.
 
+> **Scope changed 2026-08-01 (later the same day).** Fer asked for the
+> ArcadeDB half to work, so the `opencypher` engine *was* built and is in
+> this branch (`provisioners/arcadedb_client.py`, registered in
+> `main._build_provisioning_engines`). Recorded here because the text below
+> says the opposite and AGENTS.md requires the record to change with the
+> code.
+
+> **Also dropped 2026-08-01:** the capped retry for blocked reconciliation
+> requests. Review found it contradicts ADR 20260518 ("Blocked requests
+> require desired-state changes, user input, or explicit manual
+> reconciliation"), made every historical blocked row retry-eligible at
+> once on upgrade, and did not honour its own cap. It also fixed nothing:
+> destroy completing first time was the teardown guards, not the retry.
+
 Scope decided 2026-08-01: **the five defects only.** Building an `opencypher`
 provisioning engine — which is what would make the demo's graph half actually
 work — is a feature, not a fix, and is out of scope here. Its output contract

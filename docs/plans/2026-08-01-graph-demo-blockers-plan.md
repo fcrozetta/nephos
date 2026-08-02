@@ -15,6 +15,20 @@
 - `uv run pytest` and `uv run ruff check . && uv run ruff format --check .` must be green before every commit. The suite is large; run it once per task before committing, not after every edit.
 - Repo test style: plain `test_<behaviour>` names, module-level `_helper()` factories, direct asserts, no docstrings on tests. Match the file you are editing.
 - Ruff: `line-length = 88`, `select = ["E", "F", "I", "UP", "B", "SIM"]`, `target-version = "py312"`.
+> **Scope changed 2026-08-01 (later the same day).** Fer asked for the
+> ArcadeDB half to work, so the `opencypher` engine *was* built and is in
+> this branch (`provisioners/arcadedb_client.py`, registered in
+> `main._build_provisioning_engines`). Recorded here because the text below
+> says the opposite and AGENTS.md requires the record to change with the
+> code.
+
+> **Also dropped 2026-08-01:** the capped retry for blocked reconciliation
+> requests. Review found it contradicts ADR 20260518 ("Blocked requests
+> require desired-state changes, user input, or explicit manual
+> reconciliation"), made every historical blocked row retry-eligible at
+> once on upgrade, and did not honour its own cap. It also fixed nothing:
+> destroy completing first time was the teardown guards, not the retry.
+
 - **Out of scope: building an `opencypher` provisioning engine.** The `graph` binding is expected to keep blocking with `provisioning_engine_unknown` after every task here. That is correct, not a regression.
 - Do not modify `~/projects/core-registry` or `~/projects/nephos-graph-demo`.
 

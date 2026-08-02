@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -141,19 +141,3 @@ def _apply_migration(
 
 def utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def utc_now_minus(seconds: int) -> str:
-    """`utc_now()` shifted back, in the identical format.
-
-    Retry cutoffs are computed here rather than as a SQL datetime expression so
-    the timestamp format has exactly one definition. The format is
-    lexicographically ordered, so a string comparison in SQL is a time
-    comparison.
-    """
-    return (
-        (datetime.now(UTC) - timedelta(seconds=seconds))
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )

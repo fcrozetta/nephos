@@ -8,10 +8,7 @@ from nephos_api.db import migrate_database
 from nephos_api.kubernetes_runtime import KubernetesRuntimeSafetyError
 from nephos_api.provisioning import BindingProvisioningContext
 from nephos_api.reconciler import PORTAL_RECONCILE_ACTION, Reconciler
-from nephos_api.repository import (
-    RECONCILE_RETRY_ATTEMPT_CAP,
-    DesiredStateRepository,
-)
+from nephos_api.repository import DesiredStateRepository
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -3070,56 +3067,3 @@ def test_app_destroy_completes_when_the_binding_provisioner_raises(
 
     assert repo.get_app_row("graph-demo") is None
 
-
-def test_blocked_status_evidence_reports_retry_position(tmp_path: Path) -> None:
-    # An exhausted request and one still converging read identically without
-    # this. Structured rather than appended to the message, so a reader can
-    # branch on it.
-    repo = _repo(tmp_path)
-    runtime = FakeRuntime()
-    with repo.transaction() as tx:
-        service = tx.create_service_instance(
-            slug="auth",
-            catalog_name="zitadel",
-            catalog_source_id="default",
-            catalog_source_path="catalog/services/zitadel/service.yaml",
-            manifest_digest="sha256:zitadel",
-        )
-        app = tx.create_app_instance(
-            slug="graph-demo",
-            catalog_name="graph-demo",
-            catalog_source_id="default",
-            catalog_source_path=str(_write_routeless_app(tmp_path)),
-            manifest_digest="sha256:graph-demo",
-        )
-        binding = tx.create_binding(
-            app_instance_id=app.id,
-            service_instance_id=service.id,
-            alias="auth",
-            capability="oidc",
-        )
-        tx.create_reconciliation_request(
-            target_type="binding",
-            target_id=binding.id,
-            target_generation=1,
-            action="reconcile",
-            target_snapshot={"slug": "graph-demo"},
-        )
-
-    assert Reconciler(repo, runtime=runtime).run_once() == 1
-
-    with sqlite3.connect(repo.db_path) as connection:
-        connection.row_factory = sqlite3.Row
-        row = connection.execute(
-            """
-            SELECT evidence_json
-            FROM status_snapshots
-            WHERE resource_type = ? AND resource_id = ?
-            """,
-            ("binding", binding.id),
-        ).fetchone()
-
-    evidence = json.loads(row["evidence_json"])[0]
-    assert evidence["attempt"] == 1
-    assert evidence["retryCap"] == RECONCILE_RETRY_ATTEMPT_CAP
-    assert evidence["retriesRemaining"] == RECONCILE_RETRY_ATTEMPT_CAP - 1

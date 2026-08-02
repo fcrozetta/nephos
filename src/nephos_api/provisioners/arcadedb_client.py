@@ -29,6 +29,7 @@ import secrets
 from dataclasses import dataclass
 
 import httpx
+from kubernetes.client.rest import ApiException
 
 from nephos_api.kubernetes_runtime import namespace_name
 from nephos_api.provisioners.base import BindingProvisioningContext
@@ -204,7 +205,20 @@ class KubernetesArcadeDBProvisioningClient:
         name = self._secret_name(identifier)
         try:
             existing = self._core_v1_api.read_namespaced_secret(name, namespace)
-        except Exception:
+        except ApiException as exc:
+            # Only "absent" means mint a new one. A transient API error read as
+            # absence would mint a second password, then 409 on create -- an
+            # exception RuntimeBlockedError does not wrap, so the request lands
+            # in `failed`, which nothing retries. A blip would wedge the binding
+            # permanently.
+            if exc.status != 404:
+                raise RuntimeBlockedError(
+                    reason="binding_provisioner_unavailable",
+                    message=(
+                        f"Could not read credential Secret {name}: "
+                        f"HTTP {exc.status}"
+                    ),
+                ) from exc
             existing = None
         if existing is not None:
             # Ownership guard, mirroring postgres._assert_owned_credential_secret.
