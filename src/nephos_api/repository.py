@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
-from nephos_api.db import connect_database, utc_now
+from nephos_api.db import connect_database, utc_now, utc_now_minus
 from nephos_api.domain import (
     AdminAccount,
     AppInstance,
@@ -22,6 +22,13 @@ from nephos_api.domain import (
     validate_machine_identifier,
 )
 from nephos_api.passwords import generate_auth_token, hash_auth_token
+
+# ADR 20260518: "Simple capped retry is the intended model." A fixed interval
+# rather than exponential backoff -- one serialized worker on a local-first
+# install has no contention for backoff to relieve, and the cap already bounds a
+# permanently blocked request to about three minutes.
+RECONCILE_RETRY_ATTEMPT_CAP = 3
+RECONCILE_RETRY_INTERVAL_SECONDS = 60
 
 
 class DesiredStateRepository:
@@ -299,9 +306,21 @@ class DesiredStateRepository:
                 SELECT *
                 FROM reconciliation_requests
                 WHERE state = 'pending'
-                ORDER BY created_at
+                   OR (
+                        state = 'blocked'
+                        AND attempts < ?
+                        AND updated_at <= ?
+                   )
+                -- Pending sorts ahead of every retry-eligible blocked row, so a
+                -- permanently blocked request cannot starve new work while it
+                -- burns its attempts.
+                ORDER BY (state <> 'pending'), created_at
                 LIMIT 1
-                """
+                """,
+                (
+                    RECONCILE_RETRY_ATTEMPT_CAP,
+                    utc_now_minus(RECONCILE_RETRY_INTERVAL_SECONDS),
+                ),
             ).fetchone()
             if row is None:
                 connection.rollback()
@@ -998,14 +1017,20 @@ class StateTransaction:
         request_id: str,
         state: str,
         error: str | None = None,
+        increment_attempts: bool = False,
     ) -> None:
         now = utc_now()
+        # A blocked request burns an attempt; every other transition leaves
+        # the count alone, so a request that succeeds after a retry does not
+        # carry its history into a later block.
+        bump = ",\n                attempts = attempts + 1"
+        attempts_clause = bump if increment_attempts else ""
         self._connection.execute(
-            """
+            f"""
             UPDATE reconciliation_requests
             SET state = ?,
                 error = ?,
-                updated_at = ?
+                updated_at = ?{attempts_clause}
             WHERE id = ?
             """,
             (state, error, now, request_id),

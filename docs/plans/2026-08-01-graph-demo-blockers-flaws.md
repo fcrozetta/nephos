@@ -208,3 +208,51 @@ them.
 **Why it did not cost anything:** the edit script used
 `assert stale in s` before writing. An unasserted `str.replace` would have
 no-op'd and left the stale comment in place, claiming success.
+
+---
+
+## 8. Adding a migration has a blast radius the plan never mentioned
+
+**Plan said (Task 7, step 1):** create
+`0005_add_reconciliation_attempts.sql`. Nothing else.
+
+**Actually true:** seven tests across two files hardcode the full migration
+list and all seven failed —
+`tests/test_db_migrations.py` (three lists: filenames, applied versions,
+idempotency) and `tests/test_cli.py` (`_MIGRATION_ROWS`, consumed by four
+tests). The suite went from green to `7 failed, 569 passed` on a one-line SQL
+file.
+
+**Caught by:** running the full suite. A task-scoped run of only
+`tests/test_reconciliation_retry.py` was green and would have hidden every one
+of them.
+
+**Rule:** before adding a migration, `grep -rn "<previous migration name>"
+tests/` and list the hits in the plan. More generally, when adding an item to
+any enumerated set the codebase asserts on — migrations, registered engines,
+expected catalog entries, provider names — the plan must name the assertions
+that enumerate it. These fail loudly, so they cost time rather than
+correctness, but a plan that omits them is not a plan someone can follow.
+
+**Related:** `scripts/validate_catalog.py` in core-registry has exactly this
+shape (`EXPECTED_APPS`, `EXPECTED_SERVICES`), and the graph-demo plan *did*
+remember it there. The same author forgot it here.
+
+---
+
+## 9. A careless substitution silently deleted a list entry
+
+**What happened:** patching `_MIGRATION_ROWS` in `tests/test_cli.py`, the
+replacement swapped `("0004_add_admin_tokens",)` **for**
+`("0005_add_reconciliation_attempts",)` rather than appending after it. The
+list lost `0004`, and four tests kept failing — with the same names as before
+the edit, which read as "the fix did not work" rather than "the fix broke
+something else".
+
+**Caught by:** the failure count going from 7 to 4 instead of to 0, then
+printing the list.
+
+**Rule:** when appending to a literal list by string substitution, the
+replacement must contain the original text. `s.replace(old, old + new)`, never
+`s.replace(old, new)`. And assert the post-condition — here,
+`"0004_add_admin_tokens" in s` — not just the pre-condition.

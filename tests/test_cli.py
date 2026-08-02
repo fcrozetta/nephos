@@ -16,6 +16,7 @@ _MIGRATION_ROWS = [
     ("0002_add_admin_accounts",),
     ("0003_add_platform_domain_service_portals",),
     ("0004_add_admin_tokens",),
+    ("0005_add_reconciliation_attempts",),
 ]
 
 
