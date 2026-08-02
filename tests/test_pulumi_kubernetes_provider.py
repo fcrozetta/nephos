@@ -453,7 +453,13 @@ def test_zitadel_service_forwards_values_to_runtime_resources() -> None:
     }
     assert [item["name"] for item in containers] == ["zitadel", "bootstrap-reader"]
     assert bootstrap_pvc["spec"]["resources"]["requests"]["storage"] == "64Mi"
-    assert service["metadata"]["annotations"] == {"pulumi.com/skipAwait": "true"}
+    # h2c is load-bearing, not cosmetic: Zitadel serves gRPC and HTTP on one
+    # port, and without it Traefik speaks HTTP/1.1 to the backend and every
+    # OIDC binding fails at "failed to create project" with a 404.
+    assert service["metadata"]["annotations"] == {
+        "pulumi.com/skipAwait": "true",
+        "traefik.ingress.kubernetes.io/service.serversscheme": "h2c",
+    }
     assert service["spec"]["ports"] == [
         {"name": "http", "port": 8080, "targetPort": "http"}
     ]

@@ -656,7 +656,18 @@ def _zitadel_service(
             "name": name,
             "namespace": spec.namespace,
             "labels": labels,
-            "annotations": {"pulumi.com/skipAwait": "true"},
+            "annotations": {
+                "pulumi.com/skipAwait": "true",
+                # Zitadel serves its gRPC management API and its HTTP UI on the
+                # same port using h2c. Traefik talks HTTP/1.1 to a backend by
+                # default, so gRPC through the portal Ingress came back as a 404
+                # with a JSON body -- which is what blocked every OIDC binding
+                # once provisioning started using the portal host.
+                #
+                # Set on the Service, not the Ingress: Traefik reads the backend
+                # scheme from the Service it routes to.
+                "traefik.ingress.kubernetes.io/service.serversscheme": "h2c",
+            },
         },
         spec={
             "ports": [{"name": "http", "port": 8080, "targetPort": "http"}],
