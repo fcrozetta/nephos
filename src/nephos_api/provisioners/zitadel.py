@@ -620,6 +620,18 @@ def _should_use_internal_forward(context: BindingProvisioningContext) -> bool:
                 "issuer-endpoint, or port-forward."
             ),
         )
+    # A portal-derived host is served by Nephos-managed ingress, which ADR
+    # 20260517 fixes at HTTP-only. The Zitadel provider speaks gRPC, which does
+    # not survive that path -- it comes back as a 404 with an HTML/JSON body --
+    # so `auto` reaches the Service directly instead.
+    #
+    # The previous rule keyed off `localhost`/loopback/`.localhost`, so `.lcl`
+    # (the domain `nephos setup lcl` creates) fell through to the broken route.
+    # That is the same suffix-guessing failure as issue #61, in a second place;
+    # deriving from *where the host came from* rather than what it is spelled
+    # like is what stops a third.
+    if context.service_portal is not None:
+        return True
     return domain in {"localhost", "127.0.0.1", "::1"} or domain.endswith(".localhost")
 
 
