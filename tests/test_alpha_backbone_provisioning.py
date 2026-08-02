@@ -462,7 +462,11 @@ def test_kubernetes_zitadel_client_uses_internal_forward_for_localhost_host(
         "kubeconfig": None,
         "kube_context": "docker-desktop",
     }
-    assert runner.oidc_specs[0].domain == "zitadel-smoke.nephos.localhost"
+    # The provider dials the forward itself. Pointing it at the external
+    # domain only ever worked because `.localhost` resolves to loopback;
+    # any other domain resolves to the ingress, where the ephemeral
+    # forward port serves nothing.
+    assert runner.oidc_specs[0].domain == "127.0.0.1"
     assert runner.oidc_specs[0].port == 23456
     assert runner.oidc_specs[0].insecure is True
 

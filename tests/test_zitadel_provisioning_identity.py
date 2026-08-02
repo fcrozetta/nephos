@@ -112,3 +112,17 @@ def test_explicit_transport_still_overrides_the_portal_default():
     )
 
     assert _should_use_internal_forward(forced) is False
+
+
+def test_port_forward_endpoint_dials_its_own_host_not_the_external_domain():
+    # A forwarded endpoint listens on loopback at an ephemeral port. The
+    # external domain resolves to the ingress, where that port serves nothing,
+    # so preferring the domain made the provider dial into a black hole.
+    from nephos_api.provisioners.zitadel import _ForwardEndpoint
+
+    endpoint = _ForwardEndpoint(
+        host="127.0.0.1", port=53419, domain="auth.nephos.lcl"
+    )
+
+    assert endpoint.host == "127.0.0.1"
+    assert endpoint.domain == "auth.nephos.lcl"

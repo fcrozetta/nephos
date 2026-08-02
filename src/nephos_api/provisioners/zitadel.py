@@ -159,7 +159,12 @@ class KubernetesPulumiZitadelProvisioningClient:
                 work_dir=self._config.work_dir,
                 state_dir=self._config.state_dir,
                 issuer_url=_issuer_url(context),
-                domain=endpoint.domain or endpoint.host,
+                # Dial where the endpoint actually listens. For a
+                # port-forward that is 127.0.0.1 on an ephemeral port; the
+                # external domain is not reachable there, and preferring it sent
+                # the provider at Traefik on a port nothing serves. The static
+                # transport sets host == domain, so this is a no-op there.
+                domain=endpoint.host,
                 port=endpoint.port,
                 insecure=endpoint.insecure,
                 jwt_profile_json=_bootstrap_machine_key_json(
