@@ -70,3 +70,42 @@ the type is in the wrong place.
 
 **Resolution:** plan overrides the spec here; noted in the plan's file table.
 The spec text is now stale on this point.
+
+---
+
+## 2. Task 1 executed out of order (implementation before test)
+
+**Plan said:** Step 1 write the failing test, Step 2 run it and watch it fail,
+Step 3 implement.
+
+**Actually did:** implemented `routing.py` first, then wrote the tests, then ran
+them once. They passed on the first run, which proves nothing — a test that has
+never been seen to fail is not known to be connected to the code.
+
+**Caught by:** noticing the green run came without a preceding red one.
+
+**Recovered by:** mutation instead of rewind — broke the implementation three
+ways and confirmed a test caught each. Equivalent evidence, and cheaper than
+reverting.
+
+**Rule:** if the red step gets skipped, the debt is real and must be paid before
+committing. Mutation testing settles it; asserting "the tests look right" does
+not.
+
+---
+
+## 3. A no-op mutation reported as a missed test
+
+**What happened:** one of the three mutations above appended `# noqa` to a
+guard rather than removing it. Behaviour was unchanged, the suite stayed green,
+and the check printed `MISSED` — reading as though
+`test_identity_is_none_when_no_domain_allows_portals` was not load-bearing.
+
+**Actually true:** that test does cover the path. Deleting the guard raises
+`AttributeError` on `domain.domain` and the test fails.
+
+**Why it matters:** a false MISS invites exactly the wrong response — weakening
+or rewriting a test that was fine, or adding a redundant one.
+
+**Rule:** a mutation must change behaviour. Before trusting a MISS, confirm the
+mutated source actually differs semantically, not just textually.
