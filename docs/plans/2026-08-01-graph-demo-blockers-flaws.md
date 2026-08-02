@@ -380,3 +380,33 @@ disproportionate to the cause, and there is no way to clean the checkout
 without a PVC-mounting pod because the only container that could is the one
 crashlooping. Degrading to "serve the catalog as-is and report the sync failure"
 would be kinder. Not fixed here; out of scope.
+
+---
+
+## 14. Validation found a third blocker the plan could not have known about
+
+**Not a plan flaw so much as a plan limit.** With the portal fix and the
+setuptools pin both in place, OIDC provisioning gets all the way to creating a
+Zitadel Project and then fails:
+
+```
+failed to create project: rpc error: code = Unimplemented
+  desc = unexpected HTTP status code received from server: 404 (Not Found);
+  transport: received unexpected content-type "application/json"
+```
+
+The installed `auth` Service runs `provisioning-transport: issuer-endpoint`,
+which points the Pulumi provider at `auth.nephos.lcl:80` — the portal host, now
+correctly derived. gRPC to that endpoint returns an HTTP error page rather than
+gRPC.
+
+Worth noting for whoever picks this up: `_should_use_internal_forward`'s `auto`
+mode has the same blind spot as issue #61 — it port-forwards only for
+`localhost`, `127.0.0.1`, `::1`, or a `.localhost` suffix, so `.lcl` (the domain
+`nephos setup lcl` creates) falls through to `issuer-endpoint` and hits this.
+Two suffix heuristics, same missing suffix, found one after the other.
+
+**Rule:** a validation plan should expect that fixing one blocker exposes the
+next. Budget for it, and do not let a run that ends "still broken" be read as
+"the fix did not work" — check *which* error you are looking at. Here the error
+changed three times, and each change was progress.
