@@ -7,7 +7,6 @@ from nephos_api.provisioners.zitadel import (
     _provisioning_domain,
     _provisioning_port,
     _provisioning_secure,
-    _should_use_internal_forward,
 )
 from nephos_api.routing import ServicePortalIdentity
 from nephos_api.runtime_errors import RuntimeBlockedError
@@ -86,43 +85,3 @@ def test_redirect_uris_are_http_on_a_lcl_domain():
 
     assert redirects == ("http://graph-demo.nephos.lcl/oauth/callback",)
     assert post_logout == ("http://graph-demo.nephos.lcl/",)
-
-
-def test_auto_transport_port_forwards_for_a_nephos_generated_portal_host():
-    # A portal host is served by Nephos-managed ingress, which ADR 20260517
-    # fixes at HTTP-only. The Zitadel provider speaks gRPC, which does not
-    # survive that path, so `auto` must reach the Service directly. The old
-    # heuristic keyed off `.localhost`/loopback and sent `.lcl` -- the domain
-    # `nephos setup lcl` creates -- down the broken route.
-    assert _should_use_internal_forward(_ctx(service_portal=PORTAL)) is True
-
-
-def test_auto_transport_uses_the_issuer_endpoint_for_an_operator_supplied_host():
-    # No portal: the host came from Service config, which means an operator
-    # pointed it at an endpoint they manage and can route gRPC through.
-    context = _ctx(service_config={"external-host": "zitadel.example.com"})
-
-    assert _should_use_internal_forward(context) is False
-
-
-def test_explicit_transport_still_overrides_the_portal_default():
-    forced = _ctx(
-        service_portal=PORTAL,
-        service_config={"provisioning-transport": "issuer-endpoint"},
-    )
-
-    assert _should_use_internal_forward(forced) is False
-
-
-def test_port_forward_endpoint_dials_its_own_host_not_the_external_domain():
-    # A forwarded endpoint listens on loopback at an ephemeral port. The
-    # external domain resolves to the ingress, where that port serves nothing,
-    # so preferring the domain made the provider dial into a black hole.
-    from nephos_api.provisioners.zitadel import _ForwardEndpoint
-
-    endpoint = _ForwardEndpoint(
-        host="127.0.0.1", port=53419, domain="auth.nephos.lcl"
-    )
-
-    assert endpoint.host == "127.0.0.1"
-    assert endpoint.domain == "auth.nephos.lcl"

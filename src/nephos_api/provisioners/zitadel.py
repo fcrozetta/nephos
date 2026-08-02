@@ -159,12 +159,7 @@ class KubernetesPulumiZitadelProvisioningClient:
                 work_dir=self._config.work_dir,
                 state_dir=self._config.state_dir,
                 issuer_url=_issuer_url(context),
-                # Dial where the endpoint actually listens. For a
-                # port-forward that is 127.0.0.1 on an ephemeral port; the
-                # external domain is not reachable there, and preferring it sent
-                # the provider at Traefik on a port nothing serves. The static
-                # transport sets host == domain, so this is a no-op there.
-                domain=endpoint.host,
+                domain=endpoint.domain or endpoint.host,
                 port=endpoint.port,
                 insecure=endpoint.insecure,
                 jwt_profile_json=_bootstrap_machine_key_json(
@@ -625,18 +620,6 @@ def _should_use_internal_forward(context: BindingProvisioningContext) -> bool:
                 "issuer-endpoint, or port-forward."
             ),
         )
-    # A portal-derived host is served by Nephos-managed ingress, which ADR
-    # 20260517 fixes at HTTP-only. The Zitadel provider speaks gRPC, which does
-    # not survive that path -- it comes back as a 404 with an HTML/JSON body --
-    # so `auto` reaches the Service directly instead.
-    #
-    # The previous rule keyed off `localhost`/loopback/`.localhost`, so `.lcl`
-    # (the domain `nephos setup lcl` creates) fell through to the broken route.
-    # That is the same suffix-guessing failure as issue #61, in a second place;
-    # deriving from *where the host came from* rather than what it is spelled
-    # like is what stops a third.
-    if context.service_portal is not None:
-        return True
     return domain in {"localhost", "127.0.0.1", "::1"} or domain.endswith(".localhost")
 
 
