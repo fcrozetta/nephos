@@ -9,18 +9,20 @@ identity). Keeping the derivation here is what makes those three the same string
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 # ADR 20260517: "Phase 1 Nephos-managed ingress is HTTP-only" and
 # "Nephos-generated URLs use `http://`". This is the single conforming
 # implementation.
 #
-# ! Do not reintroduce scheme guessing here. `zitadel._route_scheme` still infers
-# ! https from any suffix that is not `.local`/`.localhost` (so `nephos.lcl`
-# ! yields https), which contradicts the ADR above; issue #61 tracks replacing it
-# ! on the App redirect-URI path. A portal feeds `externalSecure`, where a wrong
-# ! guess breaks OIDC issuer validation rather than merely mislabeling a status
-# ! URL, so the portal path must never depend on that inference.
+# ! Do not reintroduce scheme guessing anywhere. `zitadel` used to infer https
+# ! from any suffix that was not `.local`/`.localhost`, so `nephos.lcl` -- the
+# ! domain `nephos setup lcl` creates and serves over http -- yielded https
+# ! redirect URIs for a route that has no TLS behind it at all
+# ! (`ensure_app_ingresses` configures none). Issue #61, closed 2026-08-01: the
+# ! App redirect-URI path and the Service provisioning identity both read the
+# ! constants below, so one host can no longer be described two ways.
 PLATFORM_ROUTE_SCHEME = "http"
 PLATFORM_ROUTE_PORT = 80
 PLATFORM_ROUTE_SECURE = False
@@ -127,6 +129,55 @@ def service_portal_host_prefixes(
         )
         for index, portal in enumerate(portals)
     }
+
+
+@dataclass(frozen=True)
+class ServicePortalIdentity:
+    """A Service's canonical external address, derived from its first portal.
+
+    The identity a provisioner needs when it configures a Service to know its
+    own address — Zitadel's OIDC issuer is exactly this. The deploy path already
+    feeds the same value through a `kind: portal` runtime mapping; this is the
+    provisioning path's equivalent, derived here so the two cannot disagree.
+    """
+
+    host: str
+    port: int
+    secure: bool
+
+
+def service_portal_identity(
+    *,
+    service_slug: str,
+    first_portal_name: str | None,
+    domains: Sequence[RootDomain],
+) -> ServicePortalIdentity | None:
+    """The Service's external identity, or None when it has no published one.
+
+    The **first** portal, matching `service_portal_host_prefix`: the first
+    portal takes the bare `<service-slug>.<domain>` host, which is what makes
+    installing Zitadel under the slug `auth` produce the issuer `auth.<domain>`.
+    A later portal is prefixed and is therefore never the Service's identity.
+
+    None is a legitimate answer, not an error: a Service may declare no portal
+    at all, and a fresh install has no portal-eligible domain until an operator
+    opts one in. The caller decides what to do about it.
+    """
+    if first_portal_name is None:
+        return None
+    domain = portal_canonical_domain(domains)
+    if domain is None:
+        return None
+    return ServicePortalIdentity(
+        host=service_portal_host(
+            service_slug=service_slug,
+            portal_name=first_portal_name,
+            domain=domain.domain,
+            is_first_portal=True,
+        ),
+        port=PLATFORM_ROUTE_PORT,
+        secure=PLATFORM_ROUTE_SECURE,
+    )
 
 
 def portal_eligible_domains(

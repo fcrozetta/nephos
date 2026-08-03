@@ -241,7 +241,7 @@ def test_pulumi_zitadel_client_derives_oidc_outputs_from_app_route(
     assert spec.post_logout_redirect_uris == ("http://paperless.nephos.local/",)
 
 
-def test_pulumi_zitadel_client_uses_https_redirects_for_nonlocal_domains(
+def test_pulumi_zitadel_client_uses_the_platform_route_scheme_for_redirects(
     tmp_path,
 ) -> None:
     runner = FakePulumiZitadelRunner()
@@ -273,11 +273,17 @@ def test_pulumi_zitadel_client_uses_https_redirects_for_nonlocal_domains(
         )
     )
 
+    # Issue #61: redirect URIs used to be https for any suffix that was not
+    # `.local`/`.localhost`, which was a guess rather than an observation —
+    # `ensure_app_ingresses` configures no TLS at all, so Nephos never served
+    # the https URL it was registering. The scheme now comes from
+    # `routing.PLATFORM_ROUTE_SCHEME`, the same constant the portal path uses,
+    # so the two cannot disagree about the same host.
     assert runner.oidc_specs[0].redirect_uris == (
-        "https://paperless.apps.example.test/oauth/callback",
+        "http://paperless.apps.example.test/oauth/callback",
     )
     assert runner.oidc_specs[0].post_logout_redirect_uris == (
-        "https://paperless.apps.example.test/",
+        "http://paperless.apps.example.test/",
     )
 
 

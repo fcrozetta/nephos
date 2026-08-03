@@ -2,6 +2,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from nephos_api.routing import ServicePortalIdentity
+
 
 @dataclass(frozen=True)
 class BindingProvisioningContext:
@@ -19,6 +21,12 @@ class BindingProvisioningContext:
     # Elevated grants this binding is entitled to (ADR 20260721), from the
     # consumer's capability requirement. Engine-interpreted; empty = default-deny.
     entitlements: frozenset[str] = frozenset()
+    # The provider Service's own external identity, derived from its first
+    # portal (ADR 20260726). A provisioner that configures a Service to know its
+    # own address reads this rather than Service config: the config options it
+    # replaces were removed when portals landed, and continuing to read them
+    # left every OIDC binding blocked. None when the Service publishes no portal.
+    service_portal: ServicePortalIdentity | None = None
 
     def __post_init__(self) -> None:
         if self.service_config is None:

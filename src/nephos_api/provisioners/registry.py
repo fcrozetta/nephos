@@ -52,8 +52,18 @@ class EngineRoutingBindingProvisioner:
         return engine.provision_binding(context)
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
-        # Teardown stays best-effort; do not block deprovision on entitlements.
-        self._resolve_engine(context).deprovision_binding(context)
+        # Teardown stays best-effort in both directions: entitlements are not
+        # checked, and an engine that cannot be resolved is skipped rather than
+        # raised on. There is nothing to tear down through an engine that does
+        # not exist, so refusing only strands the consumer -- an App whose
+        # binding named an unregistered engine was undeletable, and the sole
+        # clean exit was pointing its Service at a *wrong* engine that would
+        # ignore the binding.
+        try:
+            engine = self._resolve_engine(context)
+        except RuntimeBlockedError:
+            return
+        engine.deprovision_binding(context)
 
     @staticmethod
     def _assert_entitlements_recognized(

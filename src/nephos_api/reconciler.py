@@ -12,7 +12,12 @@ from nephos_api.kubernetes_runtime import ResourceType
 from nephos_api.manifest_config import manifest_config_values
 from nephos_api.provisioning import BindingProvisioner, BindingProvisioningContext
 from nephos_api.repository import DesiredStateRepository
-from nephos_api.routing import PORTAL_RECONCILE_ACTION, portal_eligible_domains
+from nephos_api.routing import (
+    PORTAL_RECONCILE_ACTION,
+    ServicePortalIdentity,
+    portal_eligible_domains,
+    service_portal_identity,
+)
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -621,6 +626,30 @@ class Reconciler:
         )
         return manifest_config_values(row, manifest)
 
+    def _service_portal_identity(self, slug: str) -> ServicePortalIdentity | None:
+        """The Service's portal-derived external identity, or None.
+
+        ADR 20260726 moved a Service's external address to `spec.portals` and
+        migrated the deploy path. Provisioning kept reading it from Service
+        config, which core-registry had already dropped, so every OIDC binding
+        blocked. This is the provisioning path's equivalent derivation.
+        """
+        row = self._repository.get_service_row(slug)
+        if row is None:
+            return None
+        source_path = Path(str(row["catalog_source_path"]))
+        if not source_path.exists():
+            return None
+        manifest = ServiceManifest.model_validate(
+            yaml.safe_load(source_path.read_text())
+        )
+        portals = manifest.spec.portals
+        return service_portal_identity(
+            service_slug=slug,
+            first_portal_name=portals[0].name if portals else None,
+            domains=self._repository.list_platform_domains(),
+        )
+
     def _service_provisioning_engine(self, slug: str) -> str | None:
         """The service's registry-declared provisioning engine (ADR 20260718).
 
@@ -811,24 +840,33 @@ class Reconciler:
             return
         for binding in self._repository.list_bindings_for_app(app_instance_id):
             app_slug = str(binding["app_instance_slug"])
-            deprovision(
-                BindingProvisioningContext(
-                    binding_id=str(binding["id"]),
-                    app_slug=app_slug,
-                    service_slug=str(binding["service_instance_slug"]),
-                    alias=str(binding["alias"]),
-                    capability=str(binding["capability"]),
-                    protocol=_optional_str(binding["protocol"]),
-                    service_config=self._service_config(
-                        str(binding["service_instance_slug"])
-                    ),
-                    app_routes=tuple(self._app_routes(app_slug)),
-                    platform_domains=tuple(self._platform_domains_for_ingress()),
-                    provisioning_engine=self._service_provisioning_engine(
-                        str(binding["service_instance_slug"])
-                    ),
+            # Same reasoning as _cleanup_service_dependent_bindings below: if
+            # provider cleanup cannot run, App-side teardown must still proceed.
+            # Unguarded, an App whose provisioner raises is undeletable, and
+            # `force: true` does not help -- it gates only the Service
+            # dependents check, not this path.
+            with suppress(Exception):
+                deprovision(
+                    BindingProvisioningContext(
+                        binding_id=str(binding["id"]),
+                        app_slug=app_slug,
+                        service_slug=str(binding["service_instance_slug"]),
+                        alias=str(binding["alias"]),
+                        capability=str(binding["capability"]),
+                        protocol=_optional_str(binding["protocol"]),
+                        service_config=self._service_config(
+                            str(binding["service_instance_slug"])
+                        ),
+                        app_routes=tuple(self._app_routes(app_slug)),
+                        platform_domains=tuple(self._platform_domains_for_ingress()),
+                        provisioning_engine=self._service_provisioning_engine(
+                            str(binding["service_instance_slug"])
+                        ),
+                        service_portal=self._service_portal_identity(
+                            str(binding["service_instance_slug"])
+                        ),
+                    )
                 )
-            )
 
     def _cleanup_service_dependent_bindings(
         self,
@@ -857,6 +895,9 @@ class Reconciler:
                 app_routes=tuple(self._app_routes(app_slug)),
                 platform_domains=tuple(self._platform_domains_for_ingress()),
                 provisioning_engine=self._service_provisioning_engine(
+                    str(binding["service_instance_slug"])
+                ),
+                service_portal=self._service_portal_identity(
                     str(binding["service_instance_slug"])
                 ),
             )
@@ -1000,6 +1041,9 @@ class Reconciler:
                     provisioning_engine=self._service_provisioning_engine(
                         str(binding["service_instance_slug"])
                     ),
+                    service_portal=self._service_portal_identity(
+                        str(binding["service_instance_slug"])
+                    ),
                 )
             )
         if values is None:
@@ -1129,6 +1173,12 @@ class Reconciler:
         reason: str,
         message: str,
     ) -> None:
+        # Retry position rides in the evidence entry, not in the message. It is
+        # the difference between "still converging" and "given up" -- without it
+        # the status reads identically in both cases, and an operator who fixed
+        # the real cause and waited would wait forever. Structured rather than
+        # concatenated so a reader can branch on it and message assertions stay
+        # about the message.
         with self._repository.transaction() as tx:
             tx.update_reconciliation_request_state(
                 request_id=str(request["id"]),

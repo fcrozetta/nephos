@@ -20,8 +20,10 @@ from nephos_api.routing import (
     PLATFORM_ROUTE_PORT,
     PLATFORM_ROUTE_SCHEME,
     PLATFORM_ROUTE_SECURE,
+    ServicePortalIdentity,
     portal_canonical_domain,
     service_portal_host,
+    service_portal_identity,
 )
 from nephos_api.runtime_errors import RuntimeBlockedError
 from nephos_api.secret_refs import (
@@ -357,9 +359,30 @@ class ProviderRuntimeDeployer:
                     # ADR 20260721: elevated grants the consumer declared on this
                     # requirement (e.g. admin-credentials). Default-deny.
                     entitlements=frozenset(requirement.entitlements),
+                    # ADR 20260726: the provider's external identity comes from
+                    # its portal, not from Service config.
+                    service_portal=self._provider_portal_identity(provider_row),
                 )
             )
         return contexts
+
+    def _provider_portal_identity(
+        self,
+        provider_row: dict[str, object],
+    ) -> ServicePortalIdentity | None:
+        """The provider Service's portal-derived external identity, or None."""
+        manifest = _manifest_from_path(
+            target_type="service_instance",
+            path=Path(str(provider_row["catalog_source_path"])),
+        )
+        if not isinstance(manifest, ServiceManifest):
+            return None
+        portals = manifest.spec.portals
+        return service_portal_identity(
+            service_slug=str(provider_row["slug"]),
+            first_portal_name=portals[0].name if portals else None,
+            domains=self._repository.list_platform_domains(),
+        )
 
     def _provider_provisioning_engine(
         self,

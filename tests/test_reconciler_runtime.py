@@ -3007,3 +3007,63 @@ def test_portal_reconcile_skips_a_service_pending_destroy(tmp_path: Path) -> Non
             (request.id,),
         ).fetchone()[0]
     assert state == "succeeded"
+
+
+class RaisingDeprovisionProvisioner:
+    def provision_binding(self, context):
+        return {"uri": "postgres://example"}
+
+    def deprovision_binding(self, context):
+        raise RuntimeError("zitadel unreachable")
+
+
+def test_app_destroy_completes_when_the_binding_provisioner_raises(
+    tmp_path: Path,
+) -> None:
+    # An App whose provisioner fails on teardown must still be removable.
+    # Unguarded, the destroy reconcile threw and the App was stranded with
+    # deleteRequestedAt set, with nothing retrying it.
+    repo = _repo(tmp_path)
+    runtime = FakeRuntime()
+    with repo.transaction() as tx:
+        service = tx.create_service_instance(
+            slug="auth",
+            catalog_name="zitadel",
+            catalog_source_id="default",
+            catalog_source_path="catalog/services/zitadel/service.yaml",
+            manifest_digest="sha256:zitadel",
+        )
+        app = tx.create_app_instance(
+            slug="graph-demo",
+            catalog_name="graph-demo",
+            catalog_source_id="default",
+            catalog_source_path=str(_write_routeless_app(tmp_path)),
+            manifest_digest="sha256:graph-demo",
+        )
+        tx.create_binding(
+            app_instance_id=app.id,
+            service_instance_id=service.id,
+            alias="auth",
+            capability="oidc",
+            output_summary={"target": "app-secret", "redacted": True},
+        )
+        tx.create_reconciliation_request(
+            target_type="app_instance",
+            target_id=app.id,
+            target_generation=app.generation,
+            action="destroy",
+            target_snapshot={"slug": app.slug},
+        )
+
+    assert (
+        Reconciler(
+            repo,
+            runtime=runtime,
+            provisioner=RaisingDeprovisionProvisioner(),
+            deployer=FakeDeployer(),
+        ).run_once()
+        == 1
+    )
+
+    assert repo.get_app_row("graph-demo") is None
+

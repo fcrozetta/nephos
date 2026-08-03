@@ -5,6 +5,7 @@ from nephos_api.provisioners import (
     BindingProvisioningContext,
     EngineRoutingBindingProvisioner,
 )
+from nephos_api.routing import ServicePortalIdentity
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 
@@ -119,3 +120,39 @@ def test_provisioning_manifest_accepts_optional_engine():
     p = Provisioning.model_validate({"mode": "app-scoped-resource", "engine": "sql"})
     assert p.engine == "sql"
     assert Provisioning.model_validate({"mode": "none"}).engine is None
+
+
+def test_routing_preserves_the_service_portal_identity():
+    identity = ServicePortalIdentity(host="auth.nephos.lcl", port=80, secure=False)
+    engine = _Recorder({"uri": "x"})
+    context = BindingProvisioningContext(
+        binding_id="b1",
+        app_slug="app",
+        service_slug="auth",
+        alias="auth",
+        capability="oidc",
+        protocol="oidc",
+        provisioning_engine="oidc",
+        service_portal=identity,
+    )
+
+    EngineRoutingBindingProvisioner({"oidc": engine}).provision_binding(context)
+
+    assert engine.provisioned[0].service_portal == identity
+
+
+def test_deprovision_is_a_noop_when_the_engine_is_unregistered():
+    # Teardown must not strand a consumer. There is nothing to tear down
+    # through an engine that does not exist, and refusing to proceed made an
+    # App whose binding named an unregistered engine undeletable.
+    EngineRoutingBindingProvisioner({}).deprovision_binding(_ctx(engine="opencypher"))
+
+
+def test_deprovision_is_a_noop_when_no_engine_is_declared():
+    EngineRoutingBindingProvisioner({"sql": _Recorder()}).deprovision_binding(_ctx())
+
+
+def test_provision_still_blocks_on_an_unregistered_engine():
+    # Only teardown is best-effort. Provisioning must still fail loudly.
+    with pytest.raises(RuntimeBlockedError):
+        EngineRoutingBindingProvisioner({}).provision_binding(_ctx(engine="nope"))
