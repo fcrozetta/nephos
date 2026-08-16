@@ -42,6 +42,15 @@ Resolved for this phase:
 
 - SeaweedFS S3 app binding output fields are `endpointUrl`, `bucket`,
   `accessKeyId`, `secretAccessKey`, and `region`.
+- SeaweedFS S3 identities live in the filer, not in a static `-s3.config` file:
+  the two modes are mutually exclusive, and the static file is what made
+  app-scoped provisioning impossible. Each binding gets its own bucket and an
+  identity scoped to that bucket, applied through `weed shell` inside the
+  Service pod. The admin identity is seeded post-deploy by a service lifecycle
+  provisioner, because an unconfigured SeaweedFS serves S3 anonymously. The
+  provisioning engine name is `object-storage`, following the capability name as
+  `sql` / `oidc` / `opencypher` do. See
+  `docs/adr/20260816-seaweedfs-filer-backed-s3-provisioning.md`.
 - ArcadeDB app binding output fields are `host`, `port`, `database`,
   `username`, `password`, `protocol`, and `uri` for each enabled protocol.
 - ArcadeDB core protocols are `sql/arcadedb`, `opencypher/bolt`, and
