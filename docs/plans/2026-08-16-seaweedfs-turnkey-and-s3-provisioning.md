@@ -1592,11 +1592,39 @@ Binding half (driven through `_build_binding_provisioner`, routed by
   bucket deleted, the other binding entirely unaffected.
 - Destroy -> namespace terminated, Service removed.
 
-Not verified: install through the console UI, and lazy dependency install
-actually offering SeaweedFS (needs an App declaring `object-storage/s3` in a
-registry). Turnkey-ness was verified at the catalog level (`entry_is_turnkey`
-returns `True`; the API reports both keys as `generated`), which is the
-precondition the lazy-install path gates on.
+Not verified in that pass: install through the console UI, and lazy dependency
+install actually offering SeaweedFS.
+
+## Result: one-click loop (2026-08-17)
+
+Closed the gap above by adding an `s3-demo` App to **local-registry** (the
+permanent local lane on `file:///data/registries-src/local-registry.git`), since
+nothing in any registry consumed `object-storage/s3`. `mythos-mail-ingress` does,
+but three of its four requirements have no provider at all
+(`external-routing/cloudflare-email-routing` -- `cloudflare-tunnel` provides
+`external-routing/None`, and matching is exact -- plus `secrets/None` and
+`queue/events`), so it cannot install.
+
+Dependency preflight with no SeaweedFS present:
+
+```json
+{"alias": "blobs", "state": "installable",
+ "candidates": [{"name": "seaweedfs", "source": "core-registry"}],
+ "manualCandidates": []}
+```
+
+`manualCandidates: []` is the turnkey gate -- `dependency_plan.py` lists only
+turnkey providers as candidates, because a lazy install always commits
+`config={}`. Measured on `origin/main` for contrast: `turnkey: False`,
+`engine: None`, which would have made the requirement `unresolvable`.
+
+A single `POST /apps` carrying
+`{"blobs": {"install": {"name": "seaweedfs", "source": "core-registry"}}}`
+installed SeaweedFS, installed the App, and wired the binding. End state:
+binding `healthy` / `binding_secret_ready`, App `healthy` / `runtime_deployed`,
+App-side `nephos-bind-blobs` Secret carrying exactly the five ADR keys, bucket
+`nephos-s3-demo-blobs` created, its identity scoped as
+`Read:nephos-s3-demo-blobs` (never bare `Read`), and anonymous S3 still `403`.
 
 ---
 
@@ -1654,3 +1682,33 @@ not the fix — it is the evidence about how the plan was built.
   not turnkey. That reading came from the stale checkout. On current `main`
   postgres declares `generate` on `admin-password` and is turnkey; the
   non-turnkey core Services are `arcadedb` and `zitadel`.
+
+- **2026-08-17, found by manual testing, after the plan was called done.** The
+  workload defined no `readinessProbe`, so Kubernetes marked the pod Ready the
+  instant the process started, Pulumi's readiness await returned immediately, and
+  binding provisioning fired **21 seconds after container start** -- before the
+  filer's gRPC port was listening. It surfaced as
+  `dial tcp [::1]:18888: connect: connection refused`, which reads like an IPv6
+  defect and is not: `localhost` resolves `::1` first, so Go reports that attempt
+  when nothing is listening, and falls back to `127.0.0.1` once the filer is up.
+  The discriminator was that the identical command succeeded on retry.
+  Because a blocked binding is terminal, one race permanently blocked the binding
+  and, through its runtime mapping, the consuming App. Fixed with a `tcpSocket`
+  probe on the S3 port (`httpGet` would score the post-seeding `403` as failure
+  and flap the pod out of Ready).
+  *Root cause of the planning error:* Task 2 rewrote the workload's container spec
+  and I reproduced the original's shape without asking what the original was
+  missing. `_postgres_service` and `_openbao_persistent_service` both gate on a
+  readiness probe; I had read `_postgres_service` closely enough to copy its
+  `_volume_claim_template` and `_required_string_value` usage, and still did not
+  notice the probe. The plan's Task 7 also verified provisioning only *after* a
+  hand-driven install had been up for minutes, which is precisely the timing that
+  hides a startup race.
+  *Generalisation:* my live verification steps were written as "install, then
+  check" with no attention to *when* each check runs relative to startup. A race
+  is invisible to any verification that waits first. Where a step depends on
+  timing, the plan should say what must be true at the earliest moment the
+  system permits, not the most convenient one.
+  *Adjacent finding, deliberately out of scope:* `_zitadel_service` and
+  `_arcadedb_service` also define no probes and have the same latent race. Fer
+  scoped this PR to seaweedfs (2026-08-17).
