@@ -561,8 +561,10 @@ def _build_provisioning_engines(
     from nephos_api.provisioning import (
         ArcadeDBAppScopedProvisioner,
         KubernetesPulumiZitadelProvisioningClient,
+        KubernetesSeaweedFSProvisioningClient,
         KubernetesZitadelProvisionerConfig,
         PostgresAppScopedProvisioner,
+        SeaweedFSS3Provisioner,
         ZitadelAppScopedProvisioner,
     )
 
@@ -584,6 +586,12 @@ def _build_provisioning_engines(
         # the Service exposes those ports only when explicitly enabled.
         "opencypher": ArcadeDBAppScopedProvisioner(
             client=KubernetesArcadeDBProvisioningClient(core_v1_api=core_v1_api),
+        ),
+        # ADR 20260816: one bucket and one bucket-scoped identity per binding,
+        # applied through `weed shell` inside the Service pod. Engine name
+        # follows the capability name, as sql / oidc / opencypher do.
+        "object-storage": SeaweedFSS3Provisioner(
+            client=KubernetesSeaweedFSProvisioningClient(core_v1_api=core_v1_api),
         ),
     }
 
