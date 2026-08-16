@@ -1046,6 +1046,24 @@ def _seaweedfs_service(
                                 "-dir=/data",
                             ],
                             "ports": [{"name": "s3", "containerPort": 8333}],
+                            # SeaweedFS starts the S3 listener only after it has
+                            # connected to the filer, so accepting TCP on the S3
+                            # port means the filer gRPC port is reachable too.
+                            # Without this the pod is Ready as soon as the process
+                            # starts, Pulumi's await returns immediately, and
+                            # binding provisioning races startup -- which fails as
+                            # a filer dial refusal and, because a blocked binding
+                            # is terminal, permanently blocks the consuming App.
+                            #
+                            # tcpSocket rather than httpGet: once the admin
+                            # identity is seeded, `GET /` answers 403, which
+                            # httpGet scores as failure and would flap the pod out
+                            # of Ready forever after.
+                            "readinessProbe": {
+                                "tcpSocket": {"port": "s3"},
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 2,
+                            },
                             "volumeMounts": [
                                 {"name": "data", "mountPath": "/data"},
                             ],

@@ -654,6 +654,31 @@ def test_seaweedfs_service_stores_admin_credentials_as_plain_secret_keys() -> No
     }
 
 
+def test_seaweedfs_service_gates_readiness_on_the_s3_port() -> None:
+    """Without a readiness probe the pod is Ready the instant the process starts,
+    Pulumi's await returns immediately, and binding provisioning races SeaweedFS
+    startup -- observed live as `dial tcp [::1]:18888: connect: connection
+    refused` 21s after container start. Because a blocked binding is terminal,
+    that one race permanently blocks the App.
+
+    The probe is tcpSocket, not httpGet, on purpose: once the admin identity is
+    seeded, `GET /` answers 403, which httpGet scores as a failure and would flap
+    the pod out of Ready forever after.
+
+    SeaweedFS starts the S3 listener only after it has connected to the filer, so
+    the S3 port accepting TCP is a sound proxy for "filer gRPC is reachable".
+    """
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    probe = container.get("readinessProbe")
+    assert probe is not None, "no readiness probe: provisioning will race startup"
+    assert probe["tcpSocket"] == {"port": "s3"}
+    assert "httpGet" not in probe
+
+
 def test_seaweedfs_service_does_not_pass_static_s3_config() -> None:
     """-s3.config disables the filer /etc/ subscription, which would make every
     runtime-provisioned identity invisible (InvalidAccessKeyId)."""
