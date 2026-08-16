@@ -93,12 +93,26 @@ provisioner reads its admin password out of the Service's runtime Secret, and it
 keeps the admin credential reachable by authenticated reveal (ADR 20260726) and
 Service admin credentials (ADR 20260727).
 
-**Admin identity.** A `ServiceLifecycleProvisioner` seeds the `nephos-admin`
-identity immediately after deploy, the same shape `KubernetesOpenBaoLifecycle`
-already uses for init/unseal. The deployer's lifecycle hook, currently a
-hardcoded `context.provider_name == "openbao"` test, becomes a provider-keyed
-mapping; SeaweedFS is the second consumer of a pattern that was written as if it
-had one.
+**Admin identity, in two layers.** An **init container** seeds `nephos-admin`
+into the filer store on the PVC before the serving container exists, so S3's
+first response is already `403` rather than an open store. It fails closed: it
+reads the identity back and exits non-zero if it is absent, because a seeder that
+exits 0 without seeding leaves the store open while looking fixed.
+
+A `ServiceLifecycleProvisioner` also seeds after deploy, the same shape
+`KubernetesOpenBaoLifecycle` uses for init/unseal. It is no longer what closes
+the window, but it reconciles the identity when the Service Secret changes, which
+the init container only does on pod start. The deployer's lifecycle hook,
+formerly a hardcoded `context.provider_name == "openbao"` test, becomes a
+provider-keyed mapping; SeaweedFS is the second consumer of a pattern written as
+if it had one.
+
+**Unprivileged, bounded.** The pod runs as uid/gid 1000 with `runAsNonRoot` and
+`fsGroup` (verified: master, volume, filer and S3 all start as 1000 with no
+permission errors, so root bought nothing). Resources declare requests on CPU and
+memory and a ceiling on memory only -- a CPU limit throttles the storage path
+under exactly the load that needs it, while unbounded memory takes the node with
+it.
 
 **Engine.** The `seaweedfs` manifest declares `provisioning.engine:
 object-storage`, and the control plane registers an `object-storage` engine
@@ -216,13 +230,18 @@ alpha. A pre-existing install must be destroyed and reinstalled.
   HTTP in-cluster, so credentials and object data still cross the pod network in
   the clear. TLS is not addressed here.
 
-- **A window exists in which SeaweedFS serves anonymous S3**: between the pod
-  becoming ready and the lifecycle provisioner seeding the admin identity. It
-  is narrow, the S3 port is ClusterIP-only, and Nephos reconciles immediately
-  after deploy — but it is real, and it re-opens if the PVC is lost while
-  nephos-api is down. The named hardening path is a seeding sidecar in the
-  StatefulSet, which closes the window to pod-start and self-heals without the
-  control plane. Deferred deliberately, not overlooked.
+- The anonymous-S3 window is **closed** by the init container, which is why the
+  seeding design has two layers rather than one. The residual is narrow: if the
+  init container's own filer fails to start within its timeout it exits non-zero
+  and the pod never serves, which is the correct failure but presents as a pod
+  stuck in `Init`. That is a diagnosable outage rather than a silent exposure,
+  and it is the trade this ADR deliberately takes.
+
+  A first attempt at this used a wrapper script in the serving container and
+  keyed readiness on the shell prompt, which `weed shell` prints even when the
+  command underneath errors. It "succeeded" against a filer that was not up, and
+  S3 came up serving anonymously while appearing fixed. The init container's
+  read-back check exists because of that.
 - Provisioning depends on `weed shell` inside the pod, so the SeaweedFS image
   and its CLI surface become part of the contract. A future image that changes
   `s3.configure` flags breaks provisioning; the runner protocol keeps the blast
