@@ -1021,6 +1021,33 @@ def _seaweedfs_service(
         },
         opts=opts,
     )
+    # `weed server` runs master, volume, filer and S3 in one process and binds
+    # every component to the pod IP, but only S3 authenticates. The filer serves
+    # /etc/iam/identity.json -- every S3 credential, admin included -- and accepts
+    # PUT/GET/DELETE against any bucket, so without this the per-binding S3
+    # scoping is bypassable by anything that can route to the pod.
+    #
+    # This has to live here rather than in the container args: `weed server`
+    # exposes a single global -ip.bind with no per-component override, so the
+    # filer cannot be confined to loopback while S3 stays reachable.
+    #
+    # Ingress-only on purpose. Egress is left alone because the components talk
+    # to each other over loopback inside this pod, and the provisioning path is
+    # the Kubernetes exec API, which no pod-network policy governs.
+    k8s.networking.v1.NetworkPolicy(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "podSelector": {"matchLabels": selector},
+            "policyTypes": ["Ingress"],
+            "ingress": [{"ports": [{"protocol": "TCP", "port": 8333}]}],
+        },
+        opts=opts,
+    )
     k8s.apps.v1.StatefulSet(
         name,
         metadata={

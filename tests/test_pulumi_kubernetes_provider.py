@@ -44,6 +44,7 @@ class RecordingKubernetes:
         self.config_map = RecordingResource()
         self.service = RecordingResource()
         self.ingress = RecordingResource()
+        self.network_policy = RecordingResource()
         self.deployment = RecordingResource()
         self.stateful_set = RecordingResource()
         self.core = type(
@@ -82,7 +83,10 @@ class RecordingKubernetes:
                 "v1": type(
                     "NetworkingV1",
                     (),
-                    {"Ingress": self.ingress},
+                    {
+                        "Ingress": self.ingress,
+                        "NetworkPolicy": self.network_policy,
+                    },
                 )()
             },
         )()
@@ -652,6 +656,43 @@ def test_seaweedfs_service_stores_admin_credentials_as_plain_secret_keys() -> No
         "access-key": "alpha-access",
         "secret-key": "alpha-secret",
     }
+
+
+def test_seaweedfs_service_restricts_ingress_to_the_s3_port() -> None:
+    """`weed server` runs master, volume, filer and S3 in one process and binds
+    every component to the pod IP, but only S3 authenticates. Verified live from
+    an unprivileged pod in another namespace with no credentials: the filer
+    serves /etc/iam/identity.json (every S3 credential, admin included) and
+    accepts PUT/GET/DELETE against any bucket -- so per-binding S3 scoping is an
+    S3-protocol boundary and nothing more.
+
+    There is no in-pod fix: `weed server` exposes a single global -ip.bind with no
+    per-component override, so the filer cannot be confined to loopback while S3
+    stays reachable. A NetworkPolicy is the only place to draw the line.
+    """
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    assert len(k8s.network_policy.calls) == 1
+    policy = k8s.network_policy.calls[0]
+    assert policy["metadata"]["namespace"] == "svc-seaweedfs"
+    spec = policy["spec"]
+    assert spec["podSelector"] == {
+        "matchLabels": {"app.kubernetes.io/name": "svc-seaweedfs-seaweedfs"}
+    }
+    assert spec["policyTypes"] == ["Ingress"]
+    # Exactly one rule, exactly the S3 port. Numeric rather than the named port
+    # because 8333 is what was verified enforced on k3d.
+    assert spec["ingress"] == [{"ports": [{"protocol": "TCP", "port": 8333}]}]
+    # The ports that answer unauthenticated must not be reachable.
+    reachable = {
+        port["port"]
+        for rule in spec["ingress"]
+        for port in rule.get("ports", [])
+    }
+    for unauthenticated in (9333, 8888, 18888, 8080, 18080):
+        assert unauthenticated not in reachable
 
 
 def test_seaweedfs_service_gates_readiness_on_the_s3_port() -> None:
