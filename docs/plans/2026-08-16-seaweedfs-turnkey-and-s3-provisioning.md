@@ -1535,6 +1535,33 @@ git diff --check
 
 ---
 
+## Revision: repository split (Fer, 2026-08-16)
+
+The two manifest edits are a **core-registry** change, not a nephos-api change.
+This plan is therefore executed as two deliverables:
+
+**A. nephos-api** (branch `feat/seaweedfs-s3-provisioning`, this repo)
+Tasks 2, 3, 4, 5, and the `main.py` half of Task 6. All `src/` + `tests/`.
+Fully unit-testable with no registry involvement.
+
+**B. core-registry** (`https://git.fcrozetta.app/nephos/core-registry.git`)
+The manifest half of Task 1 (`generate` on `s3-access-key` / `s3-secret-key`,
+dropping `required`) and of Task 6 (`provisioning.engine: object-storage`), plus
+the README from Task 7. Prepared on a branch **after** the nephos-api work and
+pushed to Forgejo, so the local checkout stays clean and registry sync keeps
+working.
+
+Task 1's `entry_is_turnkey` test is dropped from deliverable A: every catalog
+test in this repo uses synthetic fixtures under `tmp_path`, and adding the first
+test that loads the real bundled registry would couple this suite to an external
+checkout. Turnkey-ness is verified in Task 7 against the live install instead.
+
+**Merge order:** B before A is meaningless (the engine would not exist) and A
+before B is inert (nothing declares the engine). They must land together; the
+nephos-api PR description states the dependency.
+
+---
+
 ## Flaw Log
 
 Append here whenever executing this plan proves part of it wrong. The point is
@@ -1552,3 +1579,25 @@ not the fix — it is the evidence about how the plan was built.
   observation instead of testing the form the plan actually prescribed. The same
   pass also revealed the `_ERROR_MARKERS` list was too broad (`"failed"` matches
   the body of SeaweedFS's own error text). Both fixed before Task 1 began.
+
+- **2026-08-16, found while starting Task 1.** Tasks 1 and 6 instructed editing
+  `.nephos/registries/core-registry/services/seaweedfs/service.yaml` and
+  `git add`-ing it alongside `src/` changes. That is impossible as written.
+  `.nephos/registries/core-registry` is a **separate git repository**
+  (`https://git.fcrozetta.app/nephos/core-registry.git`), and `/.nephos/` is in
+  this repo's `.gitignore`, so the `git add` would have silently staged nothing
+  and the commits would have claimed a manifest change they did not contain.
+  Worse, leaving the checkout dirty makes `ensure_managed_catalog_registries`
+  refuse to sync (`RegistrySyncError: local changes`), so the "fix" of editing in
+  place would have broken registry refresh on the next start.
+  *Root cause of the planning error:* I read the manifests through the working
+  directory and treated path-is-inside-the-tree as belongs-to-this-repo, never
+  running `git check-ignore` or checking for a nested `.git` — the exact check
+  the workspace guidance in CLAUDE.md calls for before touching anything under a
+  project directory. Every catalog test in `tests/` uses synthetic fixtures in
+  `tmp_path`, so nothing in the suite would have caught the mistake either;
+  Task 1's test as written was also the first test in the repo to try loading the
+  real bundled registry.
+  *Consequence for this plan:* the manifest half of Tasks 1 and 6 is a change to
+  the core-registry repository and needs its own PR there. See the revision
+  recorded below the task list.

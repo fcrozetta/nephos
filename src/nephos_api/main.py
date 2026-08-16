@@ -331,6 +331,7 @@ def default_provider_deployer_factory(
     from kubernetes import client
 
     from nephos_api.kubernetes_runtime import KubernetesSecretBindingValueSource
+    from nephos_api.providers.seaweedfs_lifecycle import KubernetesSeaweedFSLifecycle
     from nephos_api.providers.service_lifecycle import (
         KubernetesOpenBaoLifecycle,
         ServiceLifecycleProvisioner,
@@ -379,8 +380,12 @@ def default_provider_deployer_factory(
     # precedence when enabled. Otherwise the insecure dev-mode provider is only
     # registered in LCL with an explicit opt-in. Anywhere else an openbao install
     # blocks as unknown runtime.
-    # Post-deploy bootstrap, keyed by provider name.
-    service_lifecycles: dict[str, ServiceLifecycleProvisioner] = {}
+    # Post-deploy bootstrap, keyed by provider name (ADR 20260816).
+    service_lifecycles: dict[str, ServiceLifecycleProvisioner] = {
+        # SeaweedFS serves S3 anonymously while its identity list is empty, so
+        # seeding the admin identity is what closes the store, not a nicety.
+        "seaweedfs": KubernetesSeaweedFSLifecycle(core_v1_api=core_v1_api),
+    }
     if settings.openbao_persistent:
         service_runtimes["openbao"] = PulumiKubernetesProvider(
             config=kubernetes_config,
