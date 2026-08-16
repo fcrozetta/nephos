@@ -207,6 +207,94 @@ curl -sS -X POST http://127.0.0.1:8000/apps \
 | `NEPHOS_API_RUN_KUBERNETES_TESTS` | Set to `1` only when running opt-in Kubernetes integration tests. |
 | `PULUMI_CONFIG_PASSPHRASE` | Local Pulumi backend passphrase needed by provider-backed runtime smoke flows. |
 
+## Using a local registry
+
+A registry is just a git repository with `apps/<slug>/app.yaml` and
+`services/<slug>/service.yaml` entries. A local one lets you install an App or
+Service on your own cluster without publishing a catalog entry to `core-registry`,
+`mythos-registry`, or `community-registry` first.
+
+Nephos resolves exactly three registry lanes and there is no way to add a fourth, so
+a local registry has to take over one of them. Take the community lane unless you
+have a reason not to: that leaves `core-registry` (postgres, zitadel, openbao,
+traefik) and `mythos-registry` intact.
+
+### 1. Create the repository
+
+```bash
+mkdir -p ~/projects/nephos-local-registry/apps ~/projects/nephos-local-registry/services
+cd ~/projects/nephos-local-registry && git init
+mkdir -p apps/my-app && $EDITOR apps/my-app/app.yaml
+git add -A && git commit -m "feat: my-app catalog entry"
+```
+
+It never needs a remote. An empty registry is also valid, so you can keep one wired
+permanently and add entries as you go.
+
+### 2a. Point Nephos at it (API running on your host)
+
+Set the lane URL and a checkout path Nephos owns, then restart the API:
+
+```bash
+NEPHOS_API_COMMUNITY_REGISTRY_URL=file:///Users/you/projects/nephos-local-registry
+NEPHOS_API_COMMUNITY_REGISTRY_PATH=.nephos/registries/local-registry
+```
+
+Use a `file://` URL rather than a bare path, or `git clone --depth 1` silently
+ignores the depth. Use a **fresh** checkout path: pointing a new URL at an existing
+checkout trips the origin-mismatch guard and refuses to refresh.
+
+### 2b. Point Nephos at it (API running in-cluster)
+
+The cluster cannot read your working tree, so it reads a bare clone on the state
+volume. Set the same two variables on the `nephos-api-env` ConfigMap, with the URL as
+`file:///data/registries-src/local-registry.git`, then deliver and restart:
+
+```bash
+cd ~/projects/nephos-local-registry
+rm -rf /tmp/local-registry.git && git clone --bare . /tmp/local-registry.git
+POD=$(kubectl -n nephos-system get pod -l app.kubernetes.io/name=nephos-api -o name | head -1)
+kubectl -n nephos-system exec "${POD#pod/}" -- rm -rf /data/registries-src/local-registry.git
+kubectl -n nephos-system cp /tmp/local-registry.git "${POD#pod/}:/data/registries-src/local-registry.git"
+kubectl -n nephos-system rollout restart deploy/nephos-api
+```
+
+Repeat that block after every commit. Three details matter:
+
+- **Delete the old bare repo before copying.** `kubectl cp` unpacks a tar over the
+  destination and never deletes, so stale packfiles pile up while `packed-refs` is
+  overwritten in place.
+- **Copy before you restart.** Registry sync runs during startup and is not caught,
+  so pointing the lane at a `file://` source that is not there yet fails the clone
+  and the API will not boot.
+- **Registry sync is startup-only.** A commit changes nothing until nephos-api
+  restarts.
+
+### 3. Install from it
+
+Entries appear in `GET /catalog/apps` with source `community-registry`, and install
+normally. `POST /apps` with `{"catalogRef": {"kind": "App", "name": "my-app"}}`.
+
+### What to watch out for
+
+- **The lane is replaced, not merged.** While your local registry holds the community
+  lane, everything normally published there is invisible to the catalog. Nothing may
+  already be installed from that lane when you swap it: the reconciler re-reads
+  manifests on every pass across all rows, and a missing manifest for an installed
+  resource breaks route reconciliation cluster-wide. Swap the mythos lane instead if
+  that is a problem.
+- **Never `kubectl cp` an entry straight into a live checkout** under
+  `/data/registries/<lane>`. That leaves the checkout dirty, startup sync refuses a
+  dirty or ahead-of-upstream checkout, and the next restart crashes on boot. The
+  documented recovery, `git clean -fd`, deletes other entries in that shared checkout
+  and breaks whatever depends on them. The bare-clone route above exists to give
+  Nephos a checkout it owns and can always fast-forward.
+- **`NEPHOS_API_CATALOG_ROOTS` is a different tool.** It replaces the managed registry
+  set entirely and blanks the source ids, so entries arrive as source `default`
+  instead of a lane name. Fine for a throwaway database, wrong against a real one:
+  installed instances still reference their old source and break with
+  `catalog_source_not_found`.
+
 ## Current limitations
 
 - Nephos 0.0.1 is an API/backend slice, not the final user-facing CLI product.
