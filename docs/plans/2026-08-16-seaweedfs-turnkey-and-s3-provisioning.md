@@ -1562,6 +1562,44 @@ nephos-api PR description states the dependency.
 
 ---
 
+## Result: live verification (2026-08-16, k3d-nephos)
+
+Deliverable A implemented and verified end to end against the live cluster, with
+the core-registry branch checked out in-cluster.
+
+Install half:
+
+- Installed with `config={}` -> `202`, no `service_config_required`. Reached
+  `status.reason: runtime_deployed`, `level: healthy`.
+- Pod args are `["server","-s3","-s3.port=8333","-dir=/data"]` -- no
+  `-s3.config`, and no `/etc/seaweedfs` mount.
+- Service Secret carries `access-key` / `secret-key`.
+- Admin identity `nephos-admin` present in the filer with `Admin,Read,Write,
+  List,Tagging` and a 20/40-char generated credential nobody typed.
+- **Anonymous `GET /` on the S3 port returns `403`.** This is the security floor;
+  before seeding the same request returns `200`.
+
+Binding half (driven through `_build_binding_provisioner`, routed by
+`provisioning_engine: object-storage`, against the live pod):
+
+- Two bindings provisioned, each returning exactly `endpointUrl`, `bucket`,
+  `accessKeyId`, `secretAccessKey`, `region`, with distinct buckets and
+  credentials.
+- Real SigV4 requests with the returned credentials: own-bucket PUT `200`,
+  own-bucket GET `200`, cross-bucket GET `403`, cross-bucket PUT `403`,
+  `ListAllMyBuckets` returned only the caller's own bucket.
+- Deprovision -> `InvalidAccessKeyId` for the revoked identity, its Secret and
+  bucket deleted, the other binding entirely unaffected.
+- Destroy -> namespace terminated, Service removed.
+
+Not verified: install through the console UI, and lazy dependency install
+actually offering SeaweedFS (needs an App declaring `object-storage/s3` in a
+registry). Turnkey-ness was verified at the catalog level (`entry_is_turnkey`
+returns `True`; the API reports both keys as `generated`), which is the
+precondition the lazy-install path gates on.
+
+---
+
 ## Flaw Log
 
 Append here whenever executing this plan proves part of it wrong. The point is
@@ -1601,3 +1639,18 @@ not the fix — it is the evidence about how the plan was built.
   *Consequence for this plan:* the manifest half of Tasks 1 and 6 is a change to
   the core-registry repository and needs its own PR there. See the revision
   recorded below the task list.
+
+- **2026-08-16, found during Task 7.** I branched the core-registry checkout
+  without fetching first, so the branch was cut from a `main` that was 9 commits
+  stale, and I pushed it that way. The in-cluster checkout is what exposed it:
+  it sat at `4c9e34b` while the local one sat at `15192df`. Rebased onto current
+  `origin/main` and force-pushed with a lease pinned to the known remote SHA.
+  *Root cause:* the same assumption as the previous entry, one layer down. A
+  managed checkout is refreshed by the control plane on its own schedule, so its
+  `main` is mutable state that this session did not control, and I treated a
+  clean `git status` as evidence of being current. `git status` reports
+  divergence from the *last fetch*, not from the remote.
+  *Also corrected by this:* an earlier claim in this session that `postgres` was
+  not turnkey. That reading came from the stale checkout. On current `main`
+  postgres declares `generate` on `admin-password` and is turnkey; the
+  non-turnkey core Services are `arcadedb` and `zitadel`.
