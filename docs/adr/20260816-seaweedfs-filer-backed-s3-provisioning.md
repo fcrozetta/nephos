@@ -197,10 +197,24 @@ alpha. A pre-existing install must be destroyed and reinstalled.
   but this ADR is what puts real App data and per-binding credentials behind it,
   which turns a latent shape into a live one.
 
-  The fix is a NetworkPolicy restricting ingress to the S3 port. Verified on
-  k3d (2026-08-17): with it applied, filer/master/volume become unreachable from
-  other pods, while signed S3 access and the exec-based provisioning path keep
-  working. Not yet part of the workload; tracked as follow-up.
+  **Resolved in this ADR's implementation**: the workload now emits a
+  NetworkPolicy restricting ingress to the S3 port, so the boundary is created
+  and destroyed with the Service. Re-verified on k3d (2026-08-17) after a full
+  destroy and one-click reinstall: the same unauthenticated probes that
+  previously returned credentials and `201`/`204` now fail to connect, master
+  and volume are unreachable, S3 still answers `403` unauthenticated, and a
+  signed client using the binding's own credentials still reads and writes its
+  own bucket while being denied another.
+
+  Ingress-only is deliberate. The components reach each other over loopback
+  inside the pod, and provisioning runs through the Kubernetes exec API, which
+  no pod-network policy governs — both were confirmed still working with the
+  policy in place. The readiness probe targets the same S3 port the policy
+  admits, so kubelet probing is unaffected.
+
+  This narrows the exposure to the pod; it does not encrypt it. S3 remains plain
+  HTTP in-cluster, so credentials and object data still cross the pod network in
+  the clear. TLS is not addressed here.
 
 - **A window exists in which SeaweedFS serves anonymous S3**: between the pod
   becoming ready and the lifecycle provisioner seeding the admin identity. It
