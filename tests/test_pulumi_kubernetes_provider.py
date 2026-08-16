@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -601,9 +600,8 @@ def test_zitadel_service_never_creates_its_own_ingress() -> None:
     assert k8s.ingress.calls == []
 
 
-def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
-    k8s = RecordingKubernetes()
-    spec = PulumiKubernetesWorkloadSpec(
+def _seaweedfs_spec() -> PulumiKubernetesWorkloadSpec:
+    return PulumiKubernetesWorkloadSpec(
         project_name="nephos-api",
         stack_name="svc-seaweedfs",
         work_dir=Path("/tmp/workspaces/svc-seaweedfs"),
@@ -621,44 +619,55 @@ def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
         },
     )
 
-    _seaweedfs_service(spec, k8s=k8s, opts=None)
 
-    secret = k8s.secret.calls[0]
+def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
     stateful_set = k8s.stateful_set.calls[0]
     service = k8s.service.calls[0]
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
     env_names = {item["name"] for item in container.get("env", [])}
-    pod_spec = stateful_set["spec"]["template"]["spec"]
-    s3_config = json.loads(secret["string_data"]["s3.json"])
-    assert s3_config == {
-        "identities": [
-            {
-                "name": "nephos-admin",
-                "credentials": [
-                    {"accessKey": "alpha-access", "secretKey": "alpha-secret"}
-                ],
-                "actions": ["Admin", "Read", "List", "Tagging", "Write"],
-            }
-        ]
-    }
     assert container["image"] == "chrislusf/seaweedfs:3.85"
     assert "WEED_S3_ACCESS_KEY" not in env_names
     assert "WEED_S3_SECRET_KEY" not in env_names
-    assert "-s3.config=/etc/seaweedfs/s3.json" in container["args"]
-    assert {
-        "name": "s3-config",
-        "mountPath": "/etc/seaweedfs",
-        "readOnly": True,
-    } in container["volumeMounts"]
-    assert {
-        "name": "s3-config",
-        "secret": {"secretName": "svc-seaweedfs-seaweedfs"},
-    } in pod_spec["volumes"]
     assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
     assert service["spec"]["ports"] == [
         {"name": "s3", "port": 8333, "targetPort": "s3"}
     ]
+
+
+def test_seaweedfs_service_stores_admin_credentials_as_plain_secret_keys() -> None:
+    """ADR 20260816: identities live in the filer, so the Secret carries the
+    admin credential as data the lifecycle seeder reads -- not as an s3.json
+    document mounted into the pod."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    secret = k8s.secret.calls[0]
+    assert secret["string_data"] == {
+        "access-key": "alpha-access",
+        "secret-key": "alpha-secret",
+    }
+
+
+def test_seaweedfs_service_does_not_pass_static_s3_config() -> None:
+    """-s3.config disables the filer /etc/ subscription, which would make every
+    runtime-provisioned identity invisible (InvalidAccessKeyId)."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    stateful_set = k8s.stateful_set.calls[0]
+    pod_spec = stateful_set["spec"]["template"]["spec"]
+    container = pod_spec["containers"][0]
+    assert not any(str(arg).startswith("-s3.config") for arg in container["args"])
+    mount_paths = {mount["mountPath"] for mount in container["volumeMounts"]}
+    assert "/etc/seaweedfs" not in mount_paths
+    assert pod_spec.get("volumes", []) == []
 
 
 def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:

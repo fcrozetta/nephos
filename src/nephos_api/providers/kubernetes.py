@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -994,10 +993,10 @@ def _seaweedfs_service(
     image = _string_value(spec.values, "image", "chrislusf/seaweedfs:3.85")
     access_key = _required_string_value(spec.values, "s3AccessKey")
     secret_key = _required_string_value(spec.values, "s3SecretKey")
-    s3_config_json = _seaweedfs_s3_config_json(
-        access_key=access_key,
-        secret_key=secret_key,
-    )
+    # ADR 20260816: no -s3.config. A static config file makes the S3 API server
+    # skip its filer /etc/ subscription, so every identity written at runtime is
+    # invisible (InvalidAccessKeyId) and app-scoped provisioning is impossible.
+    # The admin credential lives here as plain keys for the lifecycle seeder.
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -1006,7 +1005,7 @@ def _seaweedfs_service(
             "labels": labels,
         },
         type="Opaque",
-        string_data={"s3.json": s3_config_json},
+        string_data={"access-key": access_key, "secret-key": secret_key},
         opts=opts,
     )
     k8s.core.v1.Service(
@@ -1044,41 +1043,19 @@ def _seaweedfs_service(
                                 "server",
                                 "-s3",
                                 "-s3.port=8333",
-                                "-s3.config=/etc/seaweedfs/s3.json",
                                 "-dir=/data",
                             ],
                             "ports": [{"name": "s3", "containerPort": 8333}],
                             "volumeMounts": [
                                 {"name": "data", "mountPath": "/data"},
-                                {
-                                    "name": "s3-config",
-                                    "mountPath": "/etc/seaweedfs",
-                                    "readOnly": True,
-                                },
                             ],
                         }
                     ],
-                    "volumes": [{"name": "s3-config", "secret": {"secretName": name}}],
                 },
             },
             "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
         },
         opts=opts,
-    )
-
-
-def _seaweedfs_s3_config_json(*, access_key: str, secret_key: str) -> str:
-    return json.dumps(
-        {
-            "identities": [
-                {
-                    "name": "nephos-admin",
-                    "credentials": [{"accessKey": access_key, "secretKey": secret_key}],
-                    "actions": ["Admin", "Read", "List", "Tagging", "Write"],
-                }
-            ]
-        },
-        separators=(",", ":"),
     )
 
 
