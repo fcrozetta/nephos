@@ -331,7 +331,10 @@ def default_provider_deployer_factory(
     from kubernetes import client
 
     from nephos_api.kubernetes_runtime import KubernetesSecretBindingValueSource
-    from nephos_api.providers.service_lifecycle import KubernetesOpenBaoLifecycle
+    from nephos_api.providers.service_lifecycle import (
+        KubernetesOpenBaoLifecycle,
+        ServiceLifecycleProvisioner,
+    )
 
     load_kubernetes_config(settings)
     core_v1_api = client.CoreV1Api()
@@ -376,7 +379,8 @@ def default_provider_deployer_factory(
     # precedence when enabled. Otherwise the insecure dev-mode provider is only
     # registered in LCL with an explicit opt-in. Anywhere else an openbao install
     # blocks as unknown runtime.
-    openbao_lifecycle = None
+    # Post-deploy bootstrap, keyed by provider name.
+    service_lifecycles: dict[str, ServiceLifecycleProvisioner] = {}
     if settings.openbao_persistent:
         service_runtimes["openbao"] = PulumiKubernetesProvider(
             config=kubernetes_config,
@@ -384,7 +388,7 @@ def default_provider_deployer_factory(
         )
         # The init Secret name/keys are fixed constants shared by the lifecycle,
         # the unseal sidecar, and the token provider, so they cannot diverge.
-        openbao_lifecycle = KubernetesOpenBaoLifecycle(
+        service_lifecycles["openbao"] = KubernetesOpenBaoLifecycle(
             core_v1_api=core_v1_api,
             kv_mount=settings.bao_kv_mount,
         )
@@ -409,7 +413,7 @@ def default_provider_deployer_factory(
         secrets_materializer=_build_secrets_materializer(
             settings, core_v1_api=core_v1_api
         ),
-        service_lifecycle=openbao_lifecycle,
+        service_lifecycles=service_lifecycles,
     )
 
 

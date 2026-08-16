@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -58,7 +59,7 @@ class ProviderRuntimeDeployer:
         service_dependency_provisioner: BindingProvisioner | None = None,
         secret_resolver: RuntimeSecretResolver | None = None,
         secrets_materializer: SecretsMaterializer | None = None,
-        service_lifecycle: ServiceLifecycleProvisioner | None = None,
+        service_lifecycles: Mapping[str, ServiceLifecycleProvisioner] | None = None,
     ) -> None:
         self._repository = repository
         self._app_provider = app_provider
@@ -67,19 +68,19 @@ class ProviderRuntimeDeployer:
         self._service_dependency_provisioner = service_dependency_provisioner
         self._secret_resolver = secret_resolver
         self._secrets_materializer = secrets_materializer
-        self._service_lifecycle = service_lifecycle
+        self._service_lifecycles = dict(service_lifecycles or {})
 
     def deploy(self, *, target_type: str, slug: str) -> None:
         context = self._context(target_type=target_type, slug=slug)
         self._provider_for(target_type).deploy(context)
-        # After a persistent openbao StatefulSet deploys (and its pod is Ready
-        # while sealed), run its self-lifecycle: init, unseal, ensure KV mount.
-        if (
-            target_type == "service_instance"
-            and self._service_lifecycle is not None
-            and context.provider_name == "openbao"
-        ):
-            self._service_lifecycle.reconcile(context)
+        # A Service that needs post-deploy bootstrap registers a lifecycle under
+        # its provider name: openbao init/unseal/KV-mount, seaweedfs admin S3
+        # identity. Keyed rather than branched so a third consumer needs no edit
+        # here.
+        if target_type == "service_instance":
+            lifecycle = self._service_lifecycles.get(str(context.provider_name))
+            if lifecycle is not None:
+                lifecycle.reconcile(context)
 
     def uninstall(self, *, target_type: str, slug: str) -> None:
         row = self._instance_row(target_type=target_type, slug=slug)
