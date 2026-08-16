@@ -41,6 +41,88 @@ which uv curl python3 docker k3d kubectl
 `cluster-*` additionally needs a k3d cluster named `nephos`. The driver starts it
 if it is stopped but will not create one.
 
+## Bring up a cluster from nothing
+
+The driver does not cover this. Verified 2026-08-15 on a machine with zero k3d
+clusters.
+
+`uv run nephos setup lcl` does the whole thing — cluster, host DNS, image, deploy,
+port-forward, **and the OpenBao + console backbone**. But it shells out to `sudo`
+unconditionally for dnsmasq and `/etc/resolver`, with no skip flag, so it cannot run
+unattended. If the host is already routed from a previous install (check
+`/etc/resolver/nephos.lcl` and `dig +short @127.0.0.1 foo.nephos.lcl`), that sudo
+step is a no-op you still cannot skip.
+
+The sudo-free path, and what each step actually needs:
+
+```bash
+# 1. cluster. Exactly what setup-local-routing.sh runs; the two @loadbalancer
+#    mappings are what make http://<slug>.nephos.lcl portless. k3s' bundled
+#    Traefik is used as-is: no --disable=traefik, no --api-port, no agents.
+k3d cluster create nephos --port "80:80@loadbalancer" --port "443:443@loadbalancer" --wait
+
+# 2. control plane only
+docker build -t nephos-api:dev . && k3d image import nephos-api:dev -c nephos
+uv run nephos up lcl
+
+# 3. in-cluster DNS. `up` and `setup` BOTH skip this; cli.py has no coredns reference
+kubectl --context k3d-nephos apply -f deploy/coredns-split-horizon.yaml
+kubectl --context k3d-nephos -n kube-system rollout restart deploy/coredns
+
+# 4. the backbone `up` did NOT install (see below)
+```
+
+**`nephos up lcl` is not `nephos setup lcl` minus sudo.** `up` renders, applies and
+waits for the control plane and nothing else: **no OpenBao, no console**. Both
+omissions bite:
+
+- **OpenBao must exist before Postgres.** Postgres's `admin-password` is `required`
+  *with* `generate:`, so it is minted through the secrets provider. With no provider
+  the install sits at `secret_ref_provider_unavailable` — `lifecycle: running`, **no
+  pod**, and nothing surfaces it except `status.reason`. Order is
+  **OpenBao → Postgres → Zitadel**. And since a blocked reconciliation is terminal,
+  installing OpenBao afterwards is not enough: re-POST
+  `/services/postgres/actions/reconcile`.
+- **No console means no UI**, so you end up driving the API by hand. See "The API has
+  no Ingress" below before you reach for a port-forward.
+
+**Read the platform domain row's name; do not derive it.** `up` seeds it as
+**`internal`** (domain `nephos.lcl`); the `setup` path seeds `lcl`. Guessing 404s the
+portal opt-in. `GET /platform/config/domains` tells you.
+
+**Opt the domain in to Service portals BEFORE installing Zitadel.** Zitadel has no
+`external-host` option at all — `externalHost`/`externalPort`/`externalSecure` are
+portal-derived, and portals are default-deny per root domain, so without this the
+mapping resolves to nothing and the deploy blocks:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8099/platform/config/domains/internal/actions/set-service-portals \
+  -H 'content-type: application/json' -d '{"allowed": true}'
+```
+
+Zitadel needs exactly three operator-supplied options, in **kebab-case** (the
+camelCase names are the Helm values the mappings produce, never what you send):
+`admin-password`, `master-key` (checked `!= 32`, so exactly 32 chars), and
+`bootstrap-machine-key-expiration` (RFC3339 UTC). `admin-username` *does* have a
+default, but it is the literal `root@zitadel.nephos.local` regardless of your slug —
+set it, then read back what the instance actually got from
+`kubectl -n svc-auth get secret svc-auth-zitadel -o jsonpath='{.data.admin-username}'`.
+
+Install console last; it needs no config (`api-url` defaults to the in-cluster
+Service DNS).
+
+## The API has no Ingress, and the console is the interface
+
+`deploy/nephos-incluster.yaml` contains **no `kind: Ingress`** for `nephos-api`. That
+is deliberate: the console reaches the control plane in-cluster at
+`http://nephos-api.nephos-system.svc.cluster.local:8099`, so nothing needs
+forwarding. Humans drive Nephos at `console.nephos.lcl`.
+
+`kubectl port-forward svc/nephos-api 8099:8099` — which `cluster-deploy` sets up, and
+which every `curl` example here assumes — is a **debugging and scripting channel**,
+not part of a working install. If you find yourself port-forwarding to *operate*
+Nephos rather than to debug it, the console is probably missing. Install it.
+
 ## Run: local (start here)
 
 ```bash
@@ -191,6 +273,12 @@ number reads as a failure. The 3 deselected tests need a live cluster and
   health check would still pass against the old, still-running deployment:
   exit 0 having deployed nothing. Keep the `|| die` and `PIPESTATUS` checks if
   you add steps.
+- **A blocked Service shows `lifecycle: running` with no pod.** Lifecycle is desired
+  state, not health. A Service can sit at `running` forever while `status.reason`
+  says `secret_ref_provider_unavailable` and nothing was ever created. Poll
+  `status.reason` for `runtime_deployed`, and cross-check with `kubectl get pods -n
+  svc-<slug>`; a lifecycle check alone reports success for a Service that does not
+  exist.
 - **A stopped k3d cluster looks like `0/1` servers, not absent.** `k3d cluster
   start nephos` is far cheaper than recreating; the driver checks for this.
 
@@ -204,6 +292,10 @@ number reads as a failure. The 3 deselected tests need a live cluster and
 | Pod `ImagePullBackOff` after `set image` | `imagePullPolicy` still `Always`. Patch both containers to `IfNotPresent`. |
 | Ingress exists, host resolves, but 404 | Backend Service name wrong. It is `<release>-<component>`, not `svc-<slug>`. |
 | `409 destructive_confirmation_required` | Add `{"confirm":"destroy <slug>"}`. |
+| Service stuck `running`, `secret_ref_provider_unavailable`, no pod | No secrets provider. Install OpenBao, then **re-POST** `/services/<slug>/actions/reconcile` — blocked is terminal. |
+| `404` on `/platform/config/domains/<name>/actions/set-service-portals` | Wrong row name. `nephos up` seeds `internal`, `nephos setup` seeds `lcl`. `GET /platform/config/domains` first. |
+| Zitadel deploy blocks with nothing obviously wrong | Service portals not opted in for the root domain. Zitadel's `externalHost` is portal-derived and portals are default-deny. |
+| `console.nephos.lcl` does not exist | `nephos up lcl` installs no console. `POST /apps` with `{"catalogRef":{"kind":"App","name":"console"}}`. |
 | `401 auth_token_required` on reveal | Mint a token; `cluster-mint-token` for in-cluster, `mint-token` for local. |
 | `401 auth_token_invalid` on reveal | Token expired or revoked. Mint a fresh one. |
 | `503 secret_ref_provider_unavailable` | No secrets provider wired. Expected locally; in-cluster means OpenBao is unreachable. |
