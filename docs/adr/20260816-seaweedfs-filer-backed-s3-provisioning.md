@@ -166,7 +166,9 @@ alpha. A pre-existing install must be destroyed and reinstalled.
 
 - `object-storage/s3` becomes a real capability: per-binding bucket, per-binding
   identity, verified 403 on cross-bucket read and write, and
-  `ListAllMyBuckets` filtered to the caller's own bucket.
+  `ListAllMyBuckets` filtered to the caller's own bucket. **This holds at the S3
+  protocol layer only** -- see the network-exposure consequence below, which
+  bounds what that isolation is worth.
 - SeaweedFS becomes installable with zero operator input, which makes it
   eligible for lazy dependency install — installing an App that requires
   `object-storage/s3` can offer to install SeaweedFS.
@@ -176,6 +178,29 @@ alpha. A pre-existing install must be destroyed and reinstalled.
   code.
 
 ### Negative Consequences
+
+- **The per-binding isolation is an S3-protocol boundary, not a network one, and
+  the SeaweedFS deployment shape currently defeats it in-cluster.**
+  `weed server` runs master, volume, filer and S3 in one process and binds every
+  component to the pod IP; only S3 (8333) authenticates. There is no
+  per-component bind flag -- `weed server` exposes a single global `-ip.bind` --
+  so the filer cannot be confined to loopback while S3 stays reachable.
+
+  Verified from an unprivileged pod in another namespace with no credentials
+  (2026-08-17): `GET /etc/iam/identity.json` on the filer returns **every S3
+  credential including `nephos-admin`'s**, and the filer permits `PUT` (201),
+  `GET`, and `DELETE` (204) against any bucket. Master (9333) and volume (8080)
+  answer unauthenticated too.
+
+  So bucket scoping constrains S3 clients and constrains nothing else. This
+  exposure predates this ADR -- the workload always ran `weed server` this way --
+  but this ADR is what puts real App data and per-binding credentials behind it,
+  which turns a latent shape into a live one.
+
+  The fix is a NetworkPolicy restricting ingress to the S3 port. Verified on
+  k3d (2026-08-17): with it applied, filer/master/volume become unreachable from
+  other pods, while signed S3 access and the exec-based provisioning path keep
+  working. Not yet part of the workload; tracked as follow-up.
 
 - **A window exists in which SeaweedFS serves anonymous S3**: between the pod
   becoming ready and the lifecycle provisioner seeding the admin identity. It
