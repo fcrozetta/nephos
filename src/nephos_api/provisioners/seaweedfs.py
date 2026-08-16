@@ -14,6 +14,11 @@ class SeaweedFSProvisioningClient(Protocol):
 
 
 class SeaweedFSS3Provisioner:
+    # ADR 20260721 + ADR 20260816: the object-storage engine grants no elevated
+    # entitlements. There is no cross-bucket admin grant for S3 -- that would
+    # undo the per-binding scoping this engine exists to provide.
+    recognized_entitlements = frozenset()
+
     def __init__(self, client: SeaweedFSProvisioningClient | None = None) -> None:
         self._client = client
 
