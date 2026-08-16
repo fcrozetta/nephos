@@ -981,6 +981,49 @@ def _zitadel_service(
     )
 
 
+# Seeds the S3 admin identity into the filer store on the PVC before the serving
+# container exists, so S3's first response is already 403 rather than an open
+# store. Runs as an init container.
+#
+# Every line here is load-bearing and was established by trial against
+# chrislusf/seaweedfs:3.85:
+#   * `weed server` starts master and volume only -- the filer needs -filer.
+#   * readiness must key on a positive marker. An earlier attempt matched the
+#     shell prompt, which is printed even when the command underneath errors, so
+#     it "succeeded" against a filer that was not up and S3 came up wide open.
+#   * the seed is read back, and a missing identity exits non-zero. A seeder that
+#     exits 0 without seeding is worse than no seeder: it leaves the store open
+#     while looking fixed.
+_SEAWEEDFS_SEED_SCRIPT = """
+set -eu
+weed server -dir=/data -filer >/tmp/seed-server.log 2>&1 &
+server_pid=$!
+attempts=0
+until echo "s3.configure" \
+  | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 2>&1 \
+  | grep -q '"identities"'; do
+  attempts=$((attempts + 1))
+  if [ "$attempts" -gt 120 ]; then
+    echo "seaweedfs seed: filer did not become reachable" >&2
+    exit 1
+  fi
+  sleep 1
+done
+echo "s3.configure -user nephos-admin \
+  -access_key $NEPHOS_S3_ACCESS_KEY -secret_key $NEPHOS_S3_SECRET_KEY \
+  -actions Admin,Read,Write,List,Tagging -apply" \
+  | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 >/dev/null 2>&1
+if ! echo "s3.configure" \
+  | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 2>&1 \
+  | grep -q "nephos-admin"; then
+  echo "seaweedfs seed: admin identity absent after apply" >&2
+  exit 1
+fi
+kill -TERM "$server_pid"
+wait "$server_pid" 2>/dev/null || true
+"""
+
+
 def _seaweedfs_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -1062,10 +1105,59 @@ def _seaweedfs_service(
             "template": {
                 "metadata": {"labels": {**labels, **selector}},
                 "spec": {
+                    # Verified on 3.85: master, volume, filer and S3 all start as
+                    # uid 1000 with no permission errors. fsGroup is what keeps
+                    # the PVC writable once the process is not root.
+                    "securityContext": {
+                        "runAsNonRoot": True,
+                        "runAsUser": 1000,
+                        "runAsGroup": 1000,
+                        "fsGroup": 1000,
+                    },
+                    "initContainers": [
+                        {
+                            "name": "seed-admin-identity",
+                            "image": image,
+                            # The image entrypoint is `weed`, so a script needs
+                            # command, not args.
+                            "command": ["sh", "-c", _SEAWEEDFS_SEED_SCRIPT],
+                            "env": [
+                                {
+                                    "name": "NEPHOS_S3_ACCESS_KEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "access-key",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "NEPHOS_S3_SECRET_KEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "secret-key",
+                                        }
+                                    },
+                                },
+                            ],
+                            "volumeMounts": [
+                                {"name": "data", "mountPath": "/data"},
+                            ],
+                        }
+                    ],
                     "containers": [
                         {
                             "name": "seaweedfs",
                             "image": image,
+                            # Requests on both, a ceiling only on memory: a CPU
+                            # limit throttles the storage path under exactly the
+                            # load that needs it, while unbounded memory takes
+                            # the node with it.
+                            "resources": {
+                                "requests": {"cpu": "100m", "memory": "256Mi"},
+                                "limits": {"memory": "1Gi"},
+                            },
                             "args": [
                                 "server",
                                 "-s3",

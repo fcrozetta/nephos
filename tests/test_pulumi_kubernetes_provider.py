@@ -658,6 +658,84 @@ def test_seaweedfs_service_stores_admin_credentials_as_plain_secret_keys() -> No
     }
 
 
+def test_seaweedfs_service_runs_unprivileged() -> None:
+    """Verified against chrislusf/seaweedfs:3.85: master, volume, filer and S3 all
+    start as uid 1000 with no permission errors, so root buys nothing. fsGroup is
+    what keeps the PVC writable once the process is not root."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    pod = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]
+    security = pod["securityContext"]
+    assert security["runAsNonRoot"] is True
+    assert security["runAsUser"] == 1000
+    assert security["fsGroup"] == 1000
+
+
+def test_seaweedfs_service_declares_resources() -> None:
+    """Requests on both, a ceiling only on memory. A CPU limit would throttle a
+    storage path under exactly the load that needs it, while an unbounded memory
+    leak takes the node down with it."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    resources = container["resources"]
+    assert resources["requests"] == {"cpu": "100m", "memory": "256Mi"}
+    assert resources["limits"] == {"memory": "1Gi"}
+    assert "cpu" not in resources["limits"]
+
+
+def test_seaweedfs_service_seeds_the_admin_identity_before_s3_can_serve() -> None:
+    """An unconfigured SeaweedFS answers `GET /` with 200. The lifecycle
+    provisioner closes that seconds after deploy, which still leaves a window on
+    a fresh volume -- and the NetworkPolicy admits 8333 from anywhere, so the
+    window is reachable.
+
+    An init container seeds the identity into the filer store on the PVC before
+    the serving container ever starts, so S3's first response is already 403.
+    Verified end to end against chrislusf/seaweedfs:3.85: seed, clean filer
+    shutdown, then the main container's first-ever response was 403 with the
+    identity intact and no leveldb corruption.
+
+    It must fail closed. A seeder that exits 0 without seeding would leave S3
+    open while looking fixed, which is exactly what a first attempt at this did.
+    """
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    pod = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]
+    init_containers = pod["initContainers"]
+    assert len(init_containers) == 1
+    seeder = init_containers[0]
+    assert seeder["image"] == "chrislusf/seaweedfs:3.85"
+    # Same PVC as the serving container, or it seeds a store nobody reads.
+    assert {"name": "data", "mountPath": "/data"} in seeder["volumeMounts"]
+    # Credentials come from the Service Secret, never from the manifest.
+    env = {item["name"]: item for item in seeder["env"]}
+    assert env["NEPHOS_S3_ACCESS_KEY"]["valueFrom"]["secretKeyRef"] == {
+        "name": "svc-seaweedfs-seaweedfs",
+        "key": "access-key",
+    }
+    assert env["NEPHOS_S3_SECRET_KEY"]["valueFrom"]["secretKeyRef"] == {
+        "name": "svc-seaweedfs-seaweedfs",
+        "key": "secret-key",
+    }
+    script = seeder["command"][-1]
+    # Overriding the entrypoint is required: the image's entrypoint is `weed`.
+    assert seeder["command"][0] == "sh"
+    # The filer does not start unless asked; `weed server` alone is master+volume.
+    assert "-filer" in script
+    # Readiness must key on a positive marker. Matching the shell prompt passes
+    # while the command underneath is erroring.
+    assert '"identities"' in script
+    # Fail closed: read back and exit non-zero if the identity is not there.
+    assert "exit 1" in script
+
+
 def test_seaweedfs_service_restricts_ingress_to_the_s3_port() -> None:
     """`weed server` runs master, volume, filer and S3 in one process and binds
     every component to the pod IP, but only S3 authenticates. Verified live from
