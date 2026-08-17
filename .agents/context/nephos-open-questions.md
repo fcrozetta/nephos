@@ -25,6 +25,16 @@ Need to decide:
 
 - exact OIDC client binding output fields and Secret key names
 - exact Zitadel service-account/JWT binding output fields and Secret key names
+- **the value of the `backup` readiness check.** `20260517-health-and-status-model.md`
+  is accepted and says twice that Phase 1 backup status is `unsupported`;
+  `_service_production_readiness_evidence` emits `deferred`, and
+  `20260817-service-readiness-must-be-measured.md` (accepted) restates `deferred`
+  as a `declared` check. Two accepted decisions therefore prescribe different
+  values for the same field. The candidate resolutions are to amend 20260517 so
+  both are legal with distinct meanings (`unsupported` a property of the Service,
+  `deferred` a platform policy), or to standardise on `unsupported` and drop
+  `deferred`. **Blocks the readiness implementation**: whichever slice implements
+  20260817 has to emit one of them. Raised by review on PR #103.
 
 Resolved for this phase:
 
