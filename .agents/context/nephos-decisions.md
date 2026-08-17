@@ -312,6 +312,12 @@ Phase 1 does not apply default-deny NetworkPolicy.
 
 Network policy is reserved for later design.
 
+Narrowed 2026-08-17 (ADR 20260816): this defers the *platform-wide* posture, not
+a Service provider emitting a targeted policy for its own runtime. `seaweedfs`
+emits one restricting ingress to its S3 port, because `weed server` binds master,
+volume and filer to the pod IP while only S3 authenticates. The general model
+stays an open question.
+
 ## D040: Traefik local ingress in Phase 1
 
 Traefik may be the Phase 1 default ingress controller, but not because Nephos

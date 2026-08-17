@@ -84,10 +84,22 @@ Accepted direction:
 - remove preserves namespaces
 - destroy deletes namespaces by default after destructive confirmation when persistent data exists
 - no default-deny NetworkPolicy in Phase 1
+- a Service provider may emit a targeted NetworkPolicy of its own where its
+  runtime is unsafe without one. `seaweedfs` does (ADR 20260816): `weed server`
+  binds master, volume and filer to the pod IP and only S3 authenticates, so
+  without a policy the filer serves every S3 credential and accepts reads and
+  writes against any bucket from any pod. This is not the platform-wide
+  default-deny that D039 defers; it is per-Service, opt-in by the provider, and
+  created and destroyed with the Service.
 
 Need to decide:
 
-- future NetworkPolicy model
+- future NetworkPolicy model, now that one Service emits its own policy. Open
+  sub-questions: whether a targeted policy stays provider-owned or becomes
+  declarable in the manifest, whether Services that are merely password-protected
+  (postgres, arcadedb, zitadel) should get one too, and whether D039's
+  platform-wide default-deny deferral still holds once several Services carry
+  their own.
 - exact cross-namespace connection metadata in bindings
 
 ## Local Ingress And Exposure Details
