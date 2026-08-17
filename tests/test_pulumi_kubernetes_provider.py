@@ -1,5 +1,8 @@
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
+
+import pytest
 
 from nephos_api.providers import ProviderContext
 from nephos_api.providers.kubernetes import (
@@ -1020,3 +1023,36 @@ def test_openbao_persistent_service_is_statefulset_with_unseal_sidecar() -> None
     volume = pod["volumes"][0]
     assert volume["secret"]["optional"] is True
     assert k8s.deployment.calls == []
+
+
+def test_seaweedfs_service_rejects_a_credential_weed_shell_cannot_represent() -> None:
+    """Caught at render time so a bad override fails the install with a readable
+    reason, instead of leaving the pod wedged in Init behind a seeder that
+    applied a command storing nothing."""
+    k8s = RecordingKubernetes()
+    spec = _seaweedfs_spec()
+    values = dict(spec.values)
+    values["s3AccessKey"] = "has'quote"
+    spec = replace(spec, values=values)
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _seaweedfs_service(spec, k8s=k8s, opts=None)
+
+    assert excinfo.value.reason == "seaweedfs_credential_unrepresentable"
+
+
+def test_seaweedfs_seed_script_quotes_and_verifies_by_credential() -> None:
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    script = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["initContainers"][0][
+        "command"
+    ][-1]
+    # Simple single quotes: weed shell honours those, and embedded quotes are
+    # rejected before they can reach here.
+    assert "-access_key '$NEPHOS_S3_ACCESS_KEY'" in script
+    assert "-secret_key '$NEPHOS_S3_SECRET_KEY'" in script
+    # Read back by credential, not by identity name: on a reused volume the name
+    # is already present, so a name-only check passes with a stale credential.
+    assert 'grep -qF "$NEPHOS_S3_ACCESS_KEY"' in script

@@ -35,6 +35,31 @@ ADMIN_ACTIONS = "Admin,Read,Write,List,Tagging"
 _ERROR_MARKERS = ("error:", "panic:")
 
 
+def assert_representable_credential(value: str, *, field: str) -> None:
+    """Reject a credential `weed shell` cannot carry.
+
+    `weed shell` accepts a simple single-quoted argument (`'has space'` stores
+    correctly) but it is not a shell: the `'\\''` escape idiom that `shlex.quote`
+    emits for an embedded quote is not understood, and the identity is silently
+    never created. Verified against 3.85.
+
+    So a value containing a single quote has no representation, and the honest
+    answer is to refuse it at the boundary rather than emit a command that seeds
+    nothing. Generated credentials are alphanumeric, so only an operator override
+    can reach this.
+    """
+    if "'" in value:
+        raise RuntimeBlockedError(
+            reason="seaweedfs_credential_unrepresentable",
+            message=(
+                f"SeaweedFS {field} contains a single quote. weed shell cannot "
+                "represent it, and applying it would silently seed no identity. "
+                "Use a value without single quotes, or leave the option unset so "
+                "Nephos generates one."
+            ),
+        )
+
+
 def assert_shell_succeeded(output: str, *, reason: str) -> None:
     if any(marker in output for marker in _ERROR_MARKERS):
         raise RuntimeBlockedError(
@@ -147,6 +172,8 @@ class KubernetesSeaweedFSLifecycle:
         )
         access_key = _decode(secret, ACCESS_KEY_SECRET_KEY)
         secret_key = _decode(secret, SECRET_KEY_SECRET_KEY)
+        assert_representable_credential(access_key, field="s3-access-key")
+        assert_representable_credential(secret_key, field="s3-secret-key")
         self._core_v1_api.read_namespaced_pod(namespace=namespace, name=pod_name)
         # Re-applying an identical identity is a verified no-op, so this is safe
         # on every reconcile and never rotates a credential already in use.

@@ -140,17 +140,37 @@ def test_reconcile_accepts_benign_shell_output() -> None:
     assert len(runner.commands) == 1
 
 
-def test_reconcile_quotes_credentials_that_would_break_the_shell() -> None:
-    """Generated keys are alphanumeric, but an operator-supplied one is free
-    text and reaches a shell heredoc."""
+def test_reconcile_quotes_credentials_containing_whitespace() -> None:
+    """Generated keys are alphanumeric, but an operator override is free text.
+    `weed shell` does honour a simple single-quoted argument -- verified against
+    3.85, `'has space'` stores as `has space`."""
     runner = RecordingRunner()
 
     _lifecycle(
-        {"access-key": "key with spaces", "secret-key": "s3cr3t'; rm -rf /"}, runner
+        {"access-key": "key with spaces", "secret-key": "also spaced"}, runner
     ).reconcile(_context())
 
     command = runner.commands[0][0]
     assert "-access_key 'key with spaces'" in command
-    assert "rm -rf /" in command
-    # The injected quote must be escaped rather than closing the argument.
-    assert "'; rm -rf /" not in command.replace("'\"'\"'", "<escaped>")
+    assert "-secret_key 'also spaced'" in command
+
+
+def test_reconcile_rejects_a_credential_weed_shell_cannot_represent() -> None:
+    """`weed shell` is not a shell. The `'\\''` idiom `shlex.quote` emits for an
+    embedded quote is not understood, and the identity is silently never created
+    -- verified: applying such a value stored nothing at all.
+
+    So this must be refused rather than escaped. The earlier version of this test
+    asserted that the produced string contained the escape sequence, which passed
+    against a value weed would have dropped on the floor.
+    """
+    runner = RecordingRunner()
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _lifecycle(
+            {"access-key": "has'quote", "secret-key": "fine"}, runner
+        ).reconcile(_context())
+
+    assert excinfo.value.reason == "seaweedfs_credential_unrepresentable"
+    # Nothing applied, so no half-seeded identity is left behind.
+    assert runner.commands == []

@@ -11,6 +11,9 @@ from nephos_api.providers.pulumi import (
     _ensure_pulumi_local_backend_passphrase,
     _pulumi_workspace_env_vars,
 )
+from nephos_api.providers.seaweedfs_lifecycle import (
+    assert_representable_credential,
+)
 from nephos_api.runtime_errors import RuntimeBlockedError
 
 PulumiKubernetesWorkload = str
@@ -1010,13 +1013,13 @@ until echo "s3.configure" \
   sleep 1
 done
 echo "s3.configure -user nephos-admin \
-  -access_key $NEPHOS_S3_ACCESS_KEY -secret_key $NEPHOS_S3_SECRET_KEY \
+  -access_key '$NEPHOS_S3_ACCESS_KEY' -secret_key '$NEPHOS_S3_SECRET_KEY' \
   -actions Admin,Read,Write,List,Tagging -apply" \
   | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 >/dev/null 2>&1
 if ! echo "s3.configure" \
   | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 2>&1 \
-  | grep -q "nephos-admin"; then
-  echo "seaweedfs seed: admin identity absent after apply" >&2
+  | grep -qF "$NEPHOS_S3_ACCESS_KEY"; then
+  echo "seaweedfs seed: admin credential absent after apply" >&2
   exit 1
 fi
 kill -TERM "$server_pid"
@@ -1036,6 +1039,11 @@ def _seaweedfs_service(
     image = _string_value(spec.values, "image", "chrislusf/seaweedfs:3.85")
     access_key = _required_string_value(spec.values, "s3AccessKey")
     secret_key = _required_string_value(spec.values, "s3SecretKey")
+    # weed shell cannot represent a single quote, and the seeder would apply a
+    # command that stores nothing. Fail at install with a readable reason rather
+    # than leave the pod wedged in Init.
+    assert_representable_credential(access_key, field="s3-access-key")
+    assert_representable_credential(secret_key, field="s3-secret-key")
     # ADR 20260816: no -s3.config. A static config file makes the S3 API server
     # skip its filer /etc/ subscription, so every identity written at runtime is
     # invisible (InvalidAccessKeyId) and app-scoped provisioning is impossible.
