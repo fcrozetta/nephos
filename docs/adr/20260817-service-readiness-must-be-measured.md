@@ -99,9 +99,14 @@ observes, and restating the gate it was emitted under does not count.
 **4. No branching on slug in the reconciler.** Dimensions beyond the generic set
 are contributed by the Service's provider or declared in its manifest. The
 Zitadel-specific `exposure`, `tls`, `database-topology` and `provisioning` checks
-move to that mechanism; this ADR does not fix which of the two, because that is
-an implementation choice the first slice should make with the code in front of
-it.
+move to that mechanism.
+
+Which of the two is **not settled here, and is not delegated to the implementing
+slice either**. The choice is architectural rather than incidental: the manifest
+path changes the canonical manifest/schema contract that registries author
+against, while the provider path moves an internal boundary only. It is recorded
+in `.agents/context/nephos-open-questions.md` and must be resolved before the
+implementation lands.
 
 **5. Every named dimension appears for every Service**, with `undetermined` where
 nothing evaluated it. `storage` stops being invisible by omission.

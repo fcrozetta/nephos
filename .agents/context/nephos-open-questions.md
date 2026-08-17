@@ -35,6 +35,14 @@ Need to decide:
   `deferred` a platform policy), or to standardise on `unsupported` and drop
   `deferred`. **Blocks the readiness implementation**: whichever slice implements
   20260817 has to emit one of them. Raised by review on PR #103.
+- **where per-Service readiness dimensions are declared.** 20260817 removes the
+  `if slug == "zitadel"` branch from the reconciler but does not fix what replaces
+  it. The manifest path (a Service declares its own dimensions) changes the
+  canonical manifest/schema contract that registries author against; the provider
+  path (the runtime provider contributes evidence) moves an internal boundary
+  only. **Blocks the readiness implementation** and is deliberately not left to
+  the implementing slice, since it is an architectural choice rather than an
+  incidental one. Raised by review on PR #103.
 
 Resolved for this phase:
 
