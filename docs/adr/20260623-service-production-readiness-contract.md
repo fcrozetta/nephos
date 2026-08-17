@@ -1,9 +1,16 @@
 # Service Production Readiness Contract
 
-- Status: proposed
+- Status: superseded by [20260817-service-readiness-must-be-measured](20260817-service-readiness-must-be-measured.md)
 - Deciders: Fer, Hermes Agent
 - Date: 2026-06-23
 - Tags: services, production-readiness, status, secrets, backups, auth, zitadel, phase-1
+
+Superseded 2026-08-17. This ADR was never accepted, and the implementation
+diverged from the option it chose: the generic checks became string literals, the
+reconciler branched on `if slug == "zitadel"` (the bespoke-per-Service option this
+ADR rejected), and `storage` was never implemented. Its dimension list and its
+TLS / secrets / backup deferrals carry forward unchanged into 20260817, which
+changes only how readiness is reported.
 
 Amends:
 

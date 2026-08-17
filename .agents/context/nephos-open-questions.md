@@ -25,8 +25,42 @@ Need to decide:
 
 - exact OIDC client binding output fields and Secret key names
 - exact Zitadel service-account/JWT binding output fields and Secret key names
+- **the value of the `backup` readiness check.** `20260517-health-and-status-model.md`
+  is accepted and says twice that Phase 1 backup status is `unsupported`;
+  `_service_production_readiness_evidence` emits `deferred`, and
+  `20260817-service-readiness-must-be-measured.md` (accepted) restates `deferred`
+  as a `declared` check. Two accepted decisions therefore prescribe different
+  values for the same field. The candidate resolutions are to amend 20260517 so
+  both are legal with distinct meanings (`unsupported` a property of the Service,
+  `deferred` a platform policy), or to standardise on `unsupported` and drop
+  `deferred`. **Blocks the readiness implementation**: whichever slice implements
+  20260817 has to emit one of them. Raised by review on PR #103.
+- **where per-Service readiness dimensions are declared.** 20260817 removes the
+  `if slug == "zitadel"` branch from the reconciler but does not fix what replaces
+  it. The manifest path (a Service declares its own dimensions) changes the
+  canonical manifest/schema contract that registries author against; the provider
+  path (the runtime provider contributes evidence) moves an internal boundary
+  only. **Blocks the readiness implementation** and is deliberately not left to
+  the implementing slice, since it is an architectural choice rather than an
+  incidental one. Raised by review on PR #103.
 
 Resolved for this phase:
+
+- Service readiness evidence must declare its basis. Every check carries
+  `measured` (observed this reconciliation pass), `declared` (standing platform
+  policy, e.g. deferred backup), or `undetermined` (applies but nothing evaluated
+  it, and never renders as healthy). Evidence is emitted on every reconciliation
+  outcome rather than only on `runtime_deployed`, `runtime` must be `measured`,
+  per-Service dimensions come from the provider or manifest rather than a slug
+  branch in the reconciler, and the payload carries a new `contractVersion`. The
+  TLS / Kubernetes-Secrets / deferred-backup positions carry forward unchanged.
+  See `docs/adr/20260817-service-readiness-must-be-measured.md`, which supersedes
+  the never-accepted `20260623`.
+
+  **Accepted but not yet implemented.** `_service_production_readiness_evidence`
+  still emits the 2026-06-23 shape, including the `if slug == "zitadel"` branch.
+  This is deliberately the same condition that produced the drift 20260817 was
+  written to correct, so it is tracked in `PLANS.md` rather than left implicit.
 
 - Service-surface route shape is `spec.portals` on `ServiceSpec`, with hosts
   generated as `<portal>.<service-slug>.<root-domain>` and exposure gated
