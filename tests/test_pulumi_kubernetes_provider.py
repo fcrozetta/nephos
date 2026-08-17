@@ -1,6 +1,8 @@
-import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
+
+import pytest
 
 from nephos_api.providers import ProviderContext
 from nephos_api.providers.kubernetes import (
@@ -45,6 +47,7 @@ class RecordingKubernetes:
         self.config_map = RecordingResource()
         self.service = RecordingResource()
         self.ingress = RecordingResource()
+        self.network_policy = RecordingResource()
         self.deployment = RecordingResource()
         self.stateful_set = RecordingResource()
         self.core = type(
@@ -83,7 +86,10 @@ class RecordingKubernetes:
                 "v1": type(
                     "NetworkingV1",
                     (),
-                    {"Ingress": self.ingress},
+                    {
+                        "Ingress": self.ingress,
+                        "NetworkPolicy": self.network_policy,
+                    },
                 )()
             },
         )()
@@ -601,9 +607,8 @@ def test_zitadel_service_never_creates_its_own_ingress() -> None:
     assert k8s.ingress.calls == []
 
 
-def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
-    k8s = RecordingKubernetes()
-    spec = PulumiKubernetesWorkloadSpec(
+def _seaweedfs_spec() -> PulumiKubernetesWorkloadSpec:
+    return PulumiKubernetesWorkloadSpec(
         project_name="nephos-api",
         stack_name="svc-seaweedfs",
         work_dir=Path("/tmp/workspaces/svc-seaweedfs"),
@@ -621,44 +626,195 @@ def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
         },
     )
 
-    _seaweedfs_service(spec, k8s=k8s, opts=None)
 
-    secret = k8s.secret.calls[0]
+def test_seaweedfs_service_forwards_values_to_runtime_resources() -> None:
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
     stateful_set = k8s.stateful_set.calls[0]
     service = k8s.service.calls[0]
     container = stateful_set["spec"]["template"]["spec"]["containers"][0]
     pvc = stateful_set["spec"]["volumeClaimTemplates"][0]
     env_names = {item["name"] for item in container.get("env", [])}
-    pod_spec = stateful_set["spec"]["template"]["spec"]
-    s3_config = json.loads(secret["string_data"]["s3.json"])
-    assert s3_config == {
-        "identities": [
-            {
-                "name": "nephos-admin",
-                "credentials": [
-                    {"accessKey": "alpha-access", "secretKey": "alpha-secret"}
-                ],
-                "actions": ["Admin", "Read", "List", "Tagging", "Write"],
-            }
-        ]
-    }
     assert container["image"] == "chrislusf/seaweedfs:3.85"
     assert "WEED_S3_ACCESS_KEY" not in env_names
     assert "WEED_S3_SECRET_KEY" not in env_names
-    assert "-s3.config=/etc/seaweedfs/s3.json" in container["args"]
-    assert {
-        "name": "s3-config",
-        "mountPath": "/etc/seaweedfs",
-        "readOnly": True,
-    } in container["volumeMounts"]
-    assert {
-        "name": "s3-config",
-        "secret": {"secretName": "svc-seaweedfs-seaweedfs"},
-    } in pod_spec["volumes"]
     assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
     assert service["spec"]["ports"] == [
         {"name": "s3", "port": 8333, "targetPort": "s3"}
     ]
+
+
+def test_seaweedfs_service_stores_admin_credentials_as_plain_secret_keys() -> None:
+    """ADR 20260816: identities live in the filer, so the Secret carries the
+    admin credential as data the lifecycle seeder reads -- not as an s3.json
+    document mounted into the pod."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    secret = k8s.secret.calls[0]
+    assert secret["string_data"] == {
+        "access-key": "alpha-access",
+        "secret-key": "alpha-secret",
+    }
+
+
+def test_seaweedfs_service_runs_unprivileged() -> None:
+    """Verified against chrislusf/seaweedfs:3.85: master, volume, filer and S3 all
+    start as uid 1000 with no permission errors, so root buys nothing. fsGroup is
+    what keeps the PVC writable once the process is not root."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    pod = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]
+    security = pod["securityContext"]
+    assert security["runAsNonRoot"] is True
+    assert security["runAsUser"] == 1000
+    assert security["fsGroup"] == 1000
+
+
+def test_seaweedfs_service_declares_resources() -> None:
+    """Requests on both, a ceiling only on memory. A CPU limit would throttle a
+    storage path under exactly the load that needs it, while an unbounded memory
+    leak takes the node down with it."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    resources = container["resources"]
+    assert resources["requests"] == {"cpu": "100m", "memory": "256Mi"}
+    assert resources["limits"] == {"memory": "1Gi"}
+    assert "cpu" not in resources["limits"]
+
+
+def test_seaweedfs_service_seeds_the_admin_identity_before_s3_can_serve() -> None:
+    """An unconfigured SeaweedFS answers `GET /` with 200. The lifecycle
+    provisioner closes that seconds after deploy, which still leaves a window on
+    a fresh volume -- and the NetworkPolicy admits 8333 from anywhere, so the
+    window is reachable.
+
+    An init container seeds the identity into the filer store on the PVC before
+    the serving container ever starts, so S3's first response is already 403.
+    Verified end to end against chrislusf/seaweedfs:3.85: seed, clean filer
+    shutdown, then the main container's first-ever response was 403 with the
+    identity intact and no leveldb corruption.
+
+    It must fail closed. A seeder that exits 0 without seeding would leave S3
+    open while looking fixed, which is exactly what a first attempt at this did.
+    """
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    pod = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]
+    init_containers = pod["initContainers"]
+    assert len(init_containers) == 1
+    seeder = init_containers[0]
+    assert seeder["image"] == "chrislusf/seaweedfs:3.85"
+    # Same PVC as the serving container, or it seeds a store nobody reads.
+    assert {"name": "data", "mountPath": "/data"} in seeder["volumeMounts"]
+    # Credentials come from the Service Secret, never from the manifest.
+    env = {item["name"]: item for item in seeder["env"]}
+    assert env["NEPHOS_S3_ACCESS_KEY"]["valueFrom"]["secretKeyRef"] == {
+        "name": "svc-seaweedfs-seaweedfs",
+        "key": "access-key",
+    }
+    assert env["NEPHOS_S3_SECRET_KEY"]["valueFrom"]["secretKeyRef"] == {
+        "name": "svc-seaweedfs-seaweedfs",
+        "key": "secret-key",
+    }
+    script = seeder["command"][-1]
+    # Overriding the entrypoint is required: the image's entrypoint is `weed`.
+    assert seeder["command"][0] == "sh"
+    # The filer does not start unless asked; `weed server` alone is master+volume.
+    assert "-filer" in script
+    # Readiness must key on a positive marker. Matching the shell prompt passes
+    # while the command underneath is erroring.
+    assert '"identities"' in script
+    # Fail closed: read back and exit non-zero if the identity is not there.
+    assert "exit 1" in script
+
+
+def test_seaweedfs_service_restricts_ingress_to_the_s3_port() -> None:
+    """`weed server` runs master, volume, filer and S3 in one process and binds
+    every component to the pod IP, but only S3 authenticates. Verified live from
+    an unprivileged pod in another namespace with no credentials: the filer
+    serves /etc/iam/identity.json (every S3 credential, admin included) and
+    accepts PUT/GET/DELETE against any bucket -- so per-binding S3 scoping is an
+    S3-protocol boundary and nothing more.
+
+    There is no in-pod fix: `weed server` exposes a single global -ip.bind with no
+    per-component override, so the filer cannot be confined to loopback while S3
+    stays reachable. A NetworkPolicy is the only place to draw the line.
+    """
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    assert len(k8s.network_policy.calls) == 1
+    policy = k8s.network_policy.calls[0]
+    assert policy["metadata"]["namespace"] == "svc-seaweedfs"
+    spec = policy["spec"]
+    assert spec["podSelector"] == {
+        "matchLabels": {"app.kubernetes.io/name": "svc-seaweedfs-seaweedfs"}
+    }
+    assert spec["policyTypes"] == ["Ingress"]
+    # Exactly one rule, exactly the S3 port. Numeric rather than the named port
+    # because 8333 is what was verified enforced on k3d.
+    assert spec["ingress"] == [{"ports": [{"protocol": "TCP", "port": 8333}]}]
+    # The ports that answer unauthenticated must not be reachable.
+    reachable = {
+        port["port"]
+        for rule in spec["ingress"]
+        for port in rule.get("ports", [])
+    }
+    for unauthenticated in (9333, 8888, 18888, 8080, 18080):
+        assert unauthenticated not in reachable
+
+
+def test_seaweedfs_service_gates_readiness_on_the_s3_port() -> None:
+    """Without a readiness probe the pod is Ready the instant the process starts,
+    Pulumi's await returns immediately, and binding provisioning races SeaweedFS
+    startup -- observed live as `dial tcp [::1]:18888: connect: connection
+    refused` 21s after container start. Because a blocked binding is terminal,
+    that one race permanently blocks the App.
+
+    The probe is tcpSocket, not httpGet, on purpose: once the admin identity is
+    seeded, `GET /` answers 403, which httpGet scores as a failure and would flap
+    the pod out of Ready forever after.
+
+    SeaweedFS starts the S3 listener only after it has connected to the filer, so
+    the S3 port accepting TCP is a sound proxy for "filer gRPC is reachable".
+    """
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    probe = container.get("readinessProbe")
+    assert probe is not None, "no readiness probe: provisioning will race startup"
+    assert probe["tcpSocket"] == {"port": "s3"}
+    assert "httpGet" not in probe
+
+
+def test_seaweedfs_service_does_not_pass_static_s3_config() -> None:
+    """-s3.config disables the filer /etc/ subscription, which would make every
+    runtime-provisioned identity invisible (InvalidAccessKeyId)."""
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    stateful_set = k8s.stateful_set.calls[0]
+    pod_spec = stateful_set["spec"]["template"]["spec"]
+    container = pod_spec["containers"][0]
+    assert not any(str(arg).startswith("-s3.config") for arg in container["args"])
+    mount_paths = {mount["mountPath"] for mount in container["volumeMounts"]}
+    assert "/etc/seaweedfs" not in mount_paths
+    assert pod_spec.get("volumes", []) == []
 
 
 def test_arcadedb_service_forwards_values_to_raw_statefulset() -> None:
@@ -867,3 +1023,36 @@ def test_openbao_persistent_service_is_statefulset_with_unseal_sidecar() -> None
     volume = pod["volumes"][0]
     assert volume["secret"]["optional"] is True
     assert k8s.deployment.calls == []
+
+
+def test_seaweedfs_service_rejects_a_credential_weed_shell_cannot_represent() -> None:
+    """Caught at render time so a bad override fails the install with a readable
+    reason, instead of leaving the pod wedged in Init behind a seeder that
+    applied a command storing nothing."""
+    k8s = RecordingKubernetes()
+    spec = _seaweedfs_spec()
+    values = dict(spec.values)
+    values["s3AccessKey"] = "has'quote"
+    spec = replace(spec, values=values)
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _seaweedfs_service(spec, k8s=k8s, opts=None)
+
+    assert excinfo.value.reason == "seaweedfs_credential_unrepresentable"
+
+
+def test_seaweedfs_seed_script_quotes_and_verifies_by_credential() -> None:
+    k8s = RecordingKubernetes()
+
+    _seaweedfs_service(_seaweedfs_spec(), k8s=k8s, opts=None)
+
+    script = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["initContainers"][0][
+        "command"
+    ][-1]
+    # Simple single quotes: weed shell honours those, and embedded quotes are
+    # rejected before they can reach here.
+    assert "-access_key '$NEPHOS_S3_ACCESS_KEY'" in script
+    assert "-secret_key '$NEPHOS_S3_SECRET_KEY'" in script
+    # Read back by credential, not by identity name: on a reused volume the name
+    # is already present, so a name-only check passes with a stale credential.
+    assert 'grep -qF "$NEPHOS_S3_ACCESS_KEY"' in script

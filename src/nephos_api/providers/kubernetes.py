@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +10,9 @@ from nephos_api.providers.pulumi import (
     _ensure_pulumi_cli,
     _ensure_pulumi_local_backend_passphrase,
     _pulumi_workspace_env_vars,
+)
+from nephos_api.providers.seaweedfs_lifecycle import (
+    assert_representable_credential,
 )
 from nephos_api.runtime_errors import RuntimeBlockedError
 
@@ -982,6 +984,49 @@ def _zitadel_service(
     )
 
 
+# Seeds the S3 admin identity into the filer store on the PVC before the serving
+# container exists, so S3's first response is already 403 rather than an open
+# store. Runs as an init container.
+#
+# Every line here is load-bearing and was established by trial against
+# chrislusf/seaweedfs:3.85:
+#   * `weed server` starts master and volume only -- the filer needs -filer.
+#   * readiness must key on a positive marker. An earlier attempt matched the
+#     shell prompt, which is printed even when the command underneath errors, so
+#     it "succeeded" against a filer that was not up and S3 came up wide open.
+#   * the seed is read back, and a missing identity exits non-zero. A seeder that
+#     exits 0 without seeding is worse than no seeder: it leaves the store open
+#     while looking fixed.
+_SEAWEEDFS_SEED_SCRIPT = """
+set -eu
+weed server -dir=/data -filer >/tmp/seed-server.log 2>&1 &
+server_pid=$!
+attempts=0
+until echo "s3.configure" \
+  | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 2>&1 \
+  | grep -q '"identities"'; do
+  attempts=$((attempts + 1))
+  if [ "$attempts" -gt 120 ]; then
+    echo "seaweedfs seed: filer did not become reachable" >&2
+    exit 1
+  fi
+  sleep 1
+done
+echo "s3.configure -user nephos-admin \
+  -access_key '$NEPHOS_S3_ACCESS_KEY' -secret_key '$NEPHOS_S3_SECRET_KEY' \
+  -actions Admin,Read,Write,List,Tagging -apply" \
+  | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 >/dev/null 2>&1
+if ! echo "s3.configure" \
+  | weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888 2>&1 \
+  | grep -qF "$NEPHOS_S3_ACCESS_KEY"; then
+  echo "seaweedfs seed: admin credential absent after apply" >&2
+  exit 1
+fi
+kill -TERM "$server_pid"
+wait "$server_pid" 2>/dev/null || true
+"""
+
+
 def _seaweedfs_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -994,10 +1039,15 @@ def _seaweedfs_service(
     image = _string_value(spec.values, "image", "chrislusf/seaweedfs:3.85")
     access_key = _required_string_value(spec.values, "s3AccessKey")
     secret_key = _required_string_value(spec.values, "s3SecretKey")
-    s3_config_json = _seaweedfs_s3_config_json(
-        access_key=access_key,
-        secret_key=secret_key,
-    )
+    # weed shell cannot represent a single quote, and the seeder would apply a
+    # command that stores nothing. Fail at install with a readable reason rather
+    # than leave the pod wedged in Init.
+    assert_representable_credential(access_key, field="s3-access-key")
+    assert_representable_credential(secret_key, field="s3-secret-key")
+    # ADR 20260816: no -s3.config. A static config file makes the S3 API server
+    # skip its filer /etc/ subscription, so every identity written at runtime is
+    # invisible (InvalidAccessKeyId) and app-scoped provisioning is impossible.
+    # The admin credential lives here as plain keys for the lifecycle seeder.
     k8s.core.v1.Secret(
         name,
         metadata={
@@ -1006,7 +1056,7 @@ def _seaweedfs_service(
             "labels": labels,
         },
         type="Opaque",
-        string_data={"s3.json": s3_config_json},
+        string_data={"access-key": access_key, "secret-key": secret_key},
         opts=opts,
     )
     k8s.core.v1.Service(
@@ -1019,6 +1069,33 @@ def _seaweedfs_service(
         spec={
             "ports": [{"name": "s3", "port": 8333, "targetPort": "s3"}],
             "selector": selector,
+        },
+        opts=opts,
+    )
+    # `weed server` runs master, volume, filer and S3 in one process and binds
+    # every component to the pod IP, but only S3 authenticates. The filer serves
+    # /etc/iam/identity.json -- every S3 credential, admin included -- and accepts
+    # PUT/GET/DELETE against any bucket, so without this the per-binding S3
+    # scoping is bypassable by anything that can route to the pod.
+    #
+    # This has to live here rather than in the container args: `weed server`
+    # exposes a single global -ip.bind with no per-component override, so the
+    # filer cannot be confined to loopback while S3 stays reachable.
+    #
+    # Ingress-only on purpose. Egress is left alone because the components talk
+    # to each other over loopback inside this pod, and the provisioning path is
+    # the Kubernetes exec API, which no pod-network policy governs.
+    k8s.networking.v1.NetworkPolicy(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "podSelector": {"matchLabels": selector},
+            "policyTypes": ["Ingress"],
+            "ingress": [{"ports": [{"protocol": "TCP", "port": 8333}]}],
         },
         opts=opts,
     )
@@ -1036,49 +1113,94 @@ def _seaweedfs_service(
             "template": {
                 "metadata": {"labels": {**labels, **selector}},
                 "spec": {
+                    # Verified on 3.85: master, volume, filer and S3 all start as
+                    # uid 1000 with no permission errors. fsGroup is what keeps
+                    # the PVC writable once the process is not root.
+                    "securityContext": {
+                        "runAsNonRoot": True,
+                        "runAsUser": 1000,
+                        "runAsGroup": 1000,
+                        "fsGroup": 1000,
+                    },
+                    "initContainers": [
+                        {
+                            "name": "seed-admin-identity",
+                            "image": image,
+                            # The image entrypoint is `weed`, so a script needs
+                            # command, not args.
+                            "command": ["sh", "-c", _SEAWEEDFS_SEED_SCRIPT],
+                            "env": [
+                                {
+                                    "name": "NEPHOS_S3_ACCESS_KEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "access-key",
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "NEPHOS_S3_SECRET_KEY",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "secret-key",
+                                        }
+                                    },
+                                },
+                            ],
+                            "volumeMounts": [
+                                {"name": "data", "mountPath": "/data"},
+                            ],
+                        }
+                    ],
                     "containers": [
                         {
                             "name": "seaweedfs",
                             "image": image,
+                            # Requests on both, a ceiling only on memory: a CPU
+                            # limit throttles the storage path under exactly the
+                            # load that needs it, while unbounded memory takes
+                            # the node with it.
+                            "resources": {
+                                "requests": {"cpu": "100m", "memory": "256Mi"},
+                                "limits": {"memory": "1Gi"},
+                            },
                             "args": [
                                 "server",
                                 "-s3",
                                 "-s3.port=8333",
-                                "-s3.config=/etc/seaweedfs/s3.json",
                                 "-dir=/data",
                             ],
                             "ports": [{"name": "s3", "containerPort": 8333}],
+                            # SeaweedFS starts the S3 listener only after it has
+                            # connected to the filer, so accepting TCP on the S3
+                            # port means the filer gRPC port is reachable too.
+                            # Without this the pod is Ready as soon as the process
+                            # starts, Pulumi's await returns immediately, and
+                            # binding provisioning races startup -- which fails as
+                            # a filer dial refusal and, because a blocked binding
+                            # is terminal, permanently blocks the consuming App.
+                            #
+                            # tcpSocket rather than httpGet: once the admin
+                            # identity is seeded, `GET /` answers 403, which
+                            # httpGet scores as failure and would flap the pod out
+                            # of Ready forever after.
+                            "readinessProbe": {
+                                "tcpSocket": {"port": "s3"},
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 2,
+                            },
                             "volumeMounts": [
                                 {"name": "data", "mountPath": "/data"},
-                                {
-                                    "name": "s3-config",
-                                    "mountPath": "/etc/seaweedfs",
-                                    "readOnly": True,
-                                },
                             ],
                         }
                     ],
-                    "volumes": [{"name": "s3-config", "secret": {"secretName": name}}],
                 },
             },
             "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
         },
         opts=opts,
-    )
-
-
-def _seaweedfs_s3_config_json(*, access_key: str, secret_key: str) -> str:
-    return json.dumps(
-        {
-            "identities": [
-                {
-                    "name": "nephos-admin",
-                    "credentials": [{"accessKey": access_key, "secretKey": secret_key}],
-                    "actions": ["Admin", "Read", "List", "Tagging", "Write"],
-                }
-            ]
-        },
-        separators=(",", ":"),
     )
 
 

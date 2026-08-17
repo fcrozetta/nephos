@@ -257,3 +257,38 @@ def test_lazy_runtime_deployer_forwards_every_deployer_protocol_method() -> None
     )
 
     assert missing == []
+
+
+def _engine_settings(tmp_path) -> Settings:
+    return Settings(
+        db_path=tmp_path / "state" / "nephos.db",
+        catalog_roots=(tmp_path / "catalog",),
+        kubeconfig=None,
+        kube_context=None,
+    )
+
+
+def test_provisioning_engines_include_object_storage(tmp_path) -> None:
+    """ADR 20260816: object-storage/s3 bindings must reach a live engine instead
+    of blocking with provisioning_engine_unknown."""
+    from nephos_api.main import _build_provisioning_engines
+
+    engines = _build_provisioning_engines(_engine_settings(tmp_path), core_v1_api=None)
+
+    assert "object-storage" in engines
+    engine = engines["object-storage"]
+    assert engine.__class__.__name__ == "SeaweedFSS3Provisioner"
+    # A cross-bucket admin grant would undo the per-binding scoping.
+    assert engine.recognized_entitlements == frozenset()
+
+
+def test_object_storage_engine_has_a_live_client(tmp_path) -> None:
+    """The provisioner blocks with binding_provisioner_unavailable whenever its
+    client is None, so registering it without one would look wired and fail."""
+    from nephos_api.main import _build_provisioning_engines
+
+    engines = _build_provisioning_engines(_engine_settings(tmp_path), core_v1_api=None)
+
+    client = engines["object-storage"]._client
+    assert client is not None
+    assert client.__class__.__name__ == "KubernetesSeaweedFSProvisioningClient"

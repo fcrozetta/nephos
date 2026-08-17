@@ -2,6 +2,55 @@
 
 ---
 
+## Current Plan Addendum: SeaweedFS turnkey install and S3 binding provisioning
+
+Goal:
+
+- Make `seaweedfs` install with zero operator input, and make every
+  `object-storage/s3` binding receive its own bucket plus an identity scoped to
+  that bucket.
+
+Plan: `docs/plans/2026-08-16-seaweedfs-turnkey-and-s3-provisioning.md`
+ADR: `docs/adr/20260816-seaweedfs-filer-backed-s3-provisioning.md` (accepted)
+
+Decision (Fer, 2026-08-16): scope is turnkey install **plus** scoped bindings,
+with ADR and plan written before code. Admin identity is seeded by a service
+lifecycle provisioner (not a sidecar). No migration for existing installs.
+
+Why the runtime has to change: pinned against `chrislusf/seaweedfs:3.85`, the
+`-s3.config` static file and filer-backed dynamic IAM are mutually exclusive.
+With `-s3.config` set the S3 API server never subscribes to the filer's `/etc/`,
+so identities written at runtime return `InvalidAccessKeyId`. The current
+workload passes `-s3.config`, which is exactly why bindings could never work.
+Dropping it is what unlocks provisioning — and it is also what creates the
+anonymous-S3 window the lifecycle seeder exists to close (an unconfigured
+SeaweedFS answers `GET /` with `200`).
+
+Verified live before planning: bucket-scoped identities return 403 on
+cross-bucket read *and* write, `ListAllMyBuckets` is filtered per identity,
+revocation is immediate and does not disturb other identities, identities
+survive a restart via the PVC, and every repeat/no-op path is silent.
+
+Current understanding:
+
+- The `seaweedfs` runtime provider is already registered (`main.py`), and the
+  Pulumi workload already exists; only the catalog entry and the binding half
+  are missing.
+- `entry_is_turnkey()` is the codebase's own definition of one-click, and
+  `seaweedfs` fails it on two `required` options with no default and no
+  `generate`. Generation already works for `service_instance` scope, so the
+  install half is manifest-only.
+- `_build_provisioning_engines` registers `sql`, `oidc`, `opencypher`. There is
+  no `object-storage` engine, and the `seaweedfs` manifest declares no
+  `provisioning.engine`, so bindings block twice over.
+- The deployer's service-lifecycle hook is hardcoded to
+  `provider_name == "openbao"`; SeaweedFS is the second consumer of a pattern
+  written for one.
+- `mythos-mail-ingress` already requires `object-storage/s3` and cannot install
+  until this lands.
+
+---
+
 ## Current Plan Addendum: Service portals
 
 Goal:

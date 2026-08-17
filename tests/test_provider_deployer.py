@@ -914,6 +914,101 @@ def test_pulumi_workspace_env_vars_include_local_backend_and_passphrase(
     assert "PULUMI_CONFIG_PASSPHRASE_FILE" not in env_vars
 
 
+class RecordingLifecycle:
+    def __init__(self) -> None:
+        self.contexts: list[ProviderContext] = []
+
+    def reconcile(self, context: ProviderContext) -> None:
+        self.contexts.append(context)
+
+
+def _write_lifecycle_provider_service(root: Path, *, name: str) -> Path:
+    """A Service whose runtime is a named provider, so deploy() can route a
+    post-deploy lifecycle by provider name."""
+    path = root / "services" / name / "service.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+apiVersion: nephos.pro/v1alpha1
+kind: Service
+metadata:
+  name: {name}
+spec:
+  provides:
+    - capability: object-storage
+      protocol: s3
+      as: s3
+  config:
+    options: []
+  provisioning:
+    mode: app-scoped-resource
+  operations: []
+  runtime:
+    type: provider
+    provider:
+      name: {name}
+    values:
+      mappings: []
+""".strip()
+    )
+    return path
+
+
+def _deployer_for_provider_service(
+    tmp_path: Path,
+    *,
+    name: str,
+    service_lifecycles: dict[str, object],
+) -> ProviderRuntimeDeployer:
+    manifest_path = _write_lifecycle_provider_service(tmp_path / "catalog", name=name)
+    repo = _repo(tmp_path)
+    with repo.transaction() as tx:
+        tx.create_service_instance(
+            slug=name,
+            catalog_name=name,
+            catalog_source_id="default",
+            catalog_source_path=str(manifest_path),
+            manifest_digest=f"sha256:{name}",
+        )
+    return ProviderRuntimeDeployer(
+        repository=repo,
+        app_provider=RecordingProvider(),
+        service_provider=RecordingProvider(),
+        service_lifecycles=service_lifecycles,
+    )
+
+
+def test_service_lifecycle_runs_for_its_own_provider_only(tmp_path: Path) -> None:
+    """The lifecycle hook is keyed by provider name, so a second Service can own
+    a post-deploy lifecycle without editing an if-statement in the deployer."""
+    openbao = RecordingLifecycle()
+    seaweedfs = RecordingLifecycle()
+    deployer = _deployer_for_provider_service(
+        tmp_path,
+        name="seaweedfs",
+        service_lifecycles={"openbao": openbao, "seaweedfs": seaweedfs},
+    )
+
+    deployer.deploy(target_type="service_instance", slug="seaweedfs")
+
+    assert len(seaweedfs.contexts) == 1
+    assert seaweedfs.contexts[0].provider_name == "seaweedfs"
+    assert openbao.contexts == []
+
+
+def test_service_lifecycle_absent_for_provider_is_a_no_op(tmp_path: Path) -> None:
+    openbao = RecordingLifecycle()
+    deployer = _deployer_for_provider_service(
+        tmp_path,
+        name="seaweedfs",
+        service_lifecycles={"openbao": openbao},
+    )
+
+    deployer.deploy(target_type="service_instance", slug="seaweedfs")
+
+    assert openbao.contexts == []
+
+
 def _repo(tmp_path: Path) -> DesiredStateRepository:
     db_path = tmp_path / "nephos.db"
     migrate_database(db_path=db_path)
