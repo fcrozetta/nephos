@@ -94,6 +94,18 @@ def _context(app_slug: str = "notes", alias: str = "blobs"):
     )
 
 
+def _bucket_of(ctx) -> str:
+    from nephos_api.provisioners.seaweedfs_client import _bucket_name
+
+    return _bucket_name(ctx)
+
+
+def _secret_of(ctx) -> str:
+    from nephos_api.provisioners.seaweedfs_client import _credential_secret_name
+
+    return _credential_secret_name(ctx)
+
+
 def _client(api: FakeCoreV1Api, runner: RecordingRunner):
     api.ns_labels = dict(namespace_labels("service_instance", "seaweedfs"))
     keys = iter(["APPKEY", "APPSECRET"])
@@ -120,7 +132,8 @@ def test_ensure_returns_the_adr_output_contract() -> None:
     assert values["endpointUrl"] == (
         "http://svc-seaweedfs-seaweedfs.svc-seaweedfs.svc.cluster.local:8333"
     )
-    assert values["bucket"] == "nephos-notes-blobs"
+    assert values["bucket"] == _bucket_of(_context())
+    assert values["bucket"].startswith("nephos-notes-blobs-")
     assert values["accessKeyId"] == "APPKEY"
     assert values["secretAccessKey"] == "APPSECRET"
 
@@ -130,11 +143,12 @@ def test_ensure_creates_the_bucket_and_scopes_the_identity_to_it() -> None:
 
     _client(api, runner).ensure_s3_binding(_context())
 
+    bucket = _bucket_of(_context())
     commands = runner.batches[0]
-    assert commands[0] == "s3.bucket.create -name nephos-notes-blobs"
+    assert commands[0] == f"s3.bucket.create -name {bucket}"
     configure = commands[1]
-    assert "-user nephos-notes-blobs" in configure
-    assert "-buckets nephos-notes-blobs" in configure
+    assert f"-user {bucket}" in configure
+    assert f"-buckets {bucket}" in configure
     assert "-actions Read,Write,List,Tagging" in configure
     assert "Admin" not in configure
 
@@ -147,7 +161,7 @@ def test_ensure_is_idempotent_and_never_rotates_an_existing_credential() -> None
     second = client.ensure_s3_binding(_context())
 
     assert first == second
-    assert api.created == ["nephos-s3-notes-blobs"]
+    assert api.created == [_secret_of(_context())]
 
 
 def test_ensure_labels_the_credential_secret_as_owned() -> None:
@@ -155,7 +169,7 @@ def test_ensure_labels_the_credential_secret_as_owned() -> None:
 
     _client(api, runner).ensure_s3_binding(_context())
 
-    secret = api.secrets["nephos-s3-notes-blobs"]
+    secret = api.secrets[_secret_of(_context())]
     assert secret.metadata.labels == binding_secret_labels(
         app_slug="notes",
         service_slug="seaweedfs",
@@ -172,10 +186,11 @@ def test_delete_revokes_the_identity_and_removes_the_bucket() -> None:
 
     client.delete_s3_binding(_context())
 
+    bucket = _bucket_of(_context())
     commands = runner.batches[-1]
-    assert commands[0] == "s3.configure -user nephos-notes-blobs -delete -apply"
-    assert commands[1] == "s3.bucket.delete -name nephos-notes-blobs"
-    assert api.deleted == ["nephos-s3-notes-blobs"]
+    assert commands[0] == f"s3.configure -user {bucket} -delete -apply"
+    assert commands[1] == f"s3.bucket.delete -name {bucket}"
+    assert api.deleted == [_secret_of(_context())]
 
 
 def test_delete_is_a_no_op_when_nothing_was_provisioned() -> None:
@@ -210,7 +225,7 @@ def test_refuses_a_terminating_service_namespace() -> None:
 def test_refuses_a_credential_secret_it_does_not_own() -> None:
     api, runner = FakeCoreV1Api(), RecordingRunner()
     client = _client(api, runner)
-    api.secrets["nephos-s3-notes-blobs"] = FakeSecret(
+    api.secrets[_secret_of(_context())] = FakeSecret(
         {"accessKeyId": "X", "secretAccessKey": "Y"}, {"owner": "someone-else"}
     )
 
@@ -236,7 +251,57 @@ def test_benign_shell_output_does_not_trip_the_failure_check() -> None:
 
     values = _client(api, runner).ensure_s3_binding(_context())
 
-    assert values["bucket"] == "nephos-notes-blobs"
+    assert values["bucket"] == _bucket_of(_context())
+    assert values["bucket"].startswith("nephos-notes-blobs-")
+
+
+def test_an_app_and_a_service_sharing_a_slug_do_not_share_a_bucket() -> None:
+    """App and Service slugs are UNIQUE on separate tables and install does not
+    check across them, and a service dependency passes the consumer slug as
+    `app_slug`. Without a binding-specific discriminator both consumers resolve
+    to the same bucket and the same credential Secret -- and the ownership labels
+    match too, so the guard passes and the second consumer is handed the first
+    one's credentials. Deleting either then deletes their shared bucket.
+    """
+    from nephos_api.provisioners.seaweedfs_client import (
+        _bucket_name,
+        _credential_secret_name,
+    )
+
+    app = BindingProvisioningContext(
+        binding_id="binding_abc123",
+        app_slug="mail",
+        service_slug="seaweedfs",
+        alias="blobs",
+        capability="object-storage",
+        protocol="s3",
+    )
+    # deployer._service_dependency_contexts passes the consumer slug as app_slug
+    service = BindingProvisioningContext(
+        binding_id="service-mail-blobs",
+        app_slug="mail",
+        service_slug="seaweedfs",
+        alias="blobs",
+        capability="object-storage",
+        protocol="s3",
+    )
+
+    assert _bucket_name(app) != _bucket_name(service)
+    assert _credential_secret_name(app) != _credential_secret_name(service)
+
+
+def test_resource_names_are_stable_for_the_same_binding() -> None:
+    """The discriminator must be derived, not random: deprovision recomputes the
+    names from the context and would otherwise miss."""
+    from nephos_api.provisioners.seaweedfs_client import (
+        _bucket_name,
+        _credential_secret_name,
+    )
+
+    first, second = _context(), _context()
+
+    assert _bucket_name(first) == _bucket_name(second)
+    assert _credential_secret_name(first) == _credential_secret_name(second)
 
 
 def test_long_names_are_truncated_to_valid_kubernetes_and_bucket_names() -> None:

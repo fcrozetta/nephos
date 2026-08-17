@@ -30,16 +30,17 @@ class FakeCoreV1Api:
 
 
 class RecordingRunner:
-    def __init__(self) -> None:
+    def __init__(self, output: str = "") -> None:
         self.commands: list[list[str]] = []
         self.namespace: str | None = None
         self.pod_name: str | None = None
+        self._output = output
 
     def run(self, *, core_v1_api, namespace, pod_name, commands) -> str:
         self.namespace = namespace
         self.pod_name = pod_name
         self.commands.append(commands)
-        return ""
+        return self._output
 
 
 def _context() -> ProviderContext:
@@ -101,6 +102,42 @@ def test_reconcile_blocks_when_the_admin_secret_is_missing_a_key() -> None:
     assert excinfo.value.reason == "seaweedfs_admin_credentials_missing"
     # Nothing was applied, so a half-configured identity cannot be left behind.
     assert runner.commands == []
+
+
+def test_reconcile_blocks_when_the_shell_reports_a_failure() -> None:
+    """`weed shell` exits 0 even when a subcommand fails, so the runner returns
+    the output instead of raising. Discarding it lets a failed re-seed record a
+    successful reconcile while the filer keeps the old admin credential and the
+    Secret advertises a new one that does not work."""
+
+    class FailingRunner(RecordingRunner):
+        def run(self, *, core_v1_api, namespace, pod_name, commands) -> str:
+            super().run(
+                core_v1_api=core_v1_api,
+                namespace=namespace,
+                pod_name=pod_name,
+                commands=commands,
+            )
+            return "error: LookupEntry1: rpc error: connection refused"
+
+    runner = FailingRunner()
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _lifecycle({"access-key": "K", "secret-key": "S"}, runner).reconcile(_context())
+
+    assert excinfo.value.reason == "seaweedfs_admin_seed_failed"
+
+
+def test_reconcile_accepts_benign_shell_output() -> None:
+    """The seed prints the whole identity document on success; a broad marker
+    list would turn every successful reconcile into a failure."""
+    runner = RecordingRunner()
+    runner_output = '{\n  "identities": [\n    {\n      "name": "nephos-admin"\n'
+    runner._output = runner_output  # type: ignore[attr-defined]
+
+    _lifecycle({"access-key": "K", "secret-key": "S"}, runner).reconcile(_context())
+
+    assert len(runner.commands) == 1
 
 
 def test_reconcile_quotes_credentials_that_would_break_the_shell() -> None:

@@ -22,6 +22,26 @@ ACCESS_KEY_SECRET_KEY = "access-key"
 SECRET_KEY_SECRET_KEY = "secret-key"
 ADMIN_ACTIONS = "Admin,Read,Write,List,Tagging"
 
+# `weed shell` exits 0 even when a subcommand fails, so failure is read from the
+# output text. Deliberately narrow: SeaweedFS prefixes real failures with
+# "error:", and a broader match (the bare word "failed") false-positives on the
+# body of those same messages and on benign output like the identity document a
+# successful `s3.configure` prints.
+#
+# Lives here, next to the runner whose contract it describes, so every caller
+# shares one definition. The binding client used to carry its own copy while the
+# lifecycle had none, which is how a failed admin re-seed could record a
+# successful reconcile.
+_ERROR_MARKERS = ("error:", "panic:")
+
+
+def assert_shell_succeeded(output: str, *, reason: str) -> None:
+    if any(marker in output for marker in _ERROR_MARKERS):
+        raise RuntimeBlockedError(
+            reason=reason,
+            message=f"weed shell reported a failure: {output.strip()[:400]}",
+        )
+
 
 class SeaweedShellRunner(Protocol):
     def run(
@@ -130,7 +150,7 @@ class KubernetesSeaweedFSLifecycle:
         self._core_v1_api.read_namespaced_pod(namespace=namespace, name=pod_name)
         # Re-applying an identical identity is a verified no-op, so this is safe
         # on every reconcile and never rotates a credential already in use.
-        self._exec_runner.run(
+        output = self._exec_runner.run(
             core_v1_api=self._core_v1_api,
             namespace=namespace,
             pod_name=pod_name,
@@ -143,6 +163,10 @@ class KubernetesSeaweedFSLifecycle:
                 )
             ],
         )
+        # Without this a failed re-seed records a successful Service reconcile
+        # while the filer keeps the old admin credential and the Secret
+        # advertises a new one that does not work.
+        assert_shell_succeeded(output, reason="seaweedfs_admin_seed_failed")
 
 
 def _decode(secret: object, key: str) -> str:

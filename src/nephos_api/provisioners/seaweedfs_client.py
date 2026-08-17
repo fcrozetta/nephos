@@ -22,23 +22,16 @@ from nephos_api.kubernetes_runtime import (
 from nephos_api.providers.seaweedfs_lifecycle import (
     KubernetesSeaweedShellRunner,
     SeaweedShellRunner,
+    assert_shell_succeeded,
     s3_configure_command,
     seaweedfs_runtime,
 )
 from nephos_api.provisioners.base import BindingProvisioningContext
-from nephos_api.runtime_errors import RuntimeBlockedError
 
 REGION = "us-east-1"
 S3_PORT = 8333
 BINDING_ACTIONS = "Read,Write,List,Tagging"
 _ALPHABET = string.ascii_letters + string.digits
-# `weed shell` exits 0 even when a subcommand fails, so failure is read from the
-# output text. Deliberately narrow: SeaweedFS prefixes real failures with
-# "error:", and a broader match (the bare word "failed") false-positives on the
-# body of those same messages. Verified no-ops that must NOT trip this:
-# re-creating an existing bucket, deleting a missing bucket, and deleting a
-# missing identity all print ordinary output.
-_ERROR_MARKERS = ("error:", "panic:")
 
 
 def _generate_key(length: int) -> str:
@@ -127,11 +120,7 @@ class KubernetesSeaweedFSProvisioningClient:
             pod_name=pod_name,
             commands=commands,
         )
-        if any(marker in output for marker in _ERROR_MARKERS):
-            raise RuntimeBlockedError(
-                reason="seaweedfs_provisioning_failed",
-                message=f"weed shell reported a failure: {output.strip()[:400]}",
-            )
+        assert_shell_succeeded(output, reason="seaweedfs_provisioning_failed")
         return output
 
     def _ensure_credential_secret(
@@ -180,23 +169,37 @@ def _endpoint_url(service_slug: str) -> str:
     return f"http://{name}.{namespace}.svc.cluster.local:{S3_PORT}"
 
 
-def _truncated(base: str, *, binding_id: str, separator: str = "-") -> str:
-    if len(base) <= 63:
-        return base
-    suffix = hashlib.sha256(binding_id.encode()).hexdigest()[:12]
-    prefix = base[: 63 - len(suffix) - 1].rstrip(separator)
-    return f"{prefix}{separator}{suffix}"
+_DISCRIMINATOR_LENGTH = 12
+_MAX_NAME_LENGTH = 63
+
+
+def _scoped(base: str, *, binding_id: str) -> str:
+    """`base` narrowed to one binding, always.
+
+    The discriminator is unconditional rather than a truncation fallback. App and
+    Service slugs are UNIQUE on separate tables and install checks neither against
+    the other, while a service dependency passes the consumer slug as `app_slug`
+    -- so an App and a Service sharing a slug and alias produce identical names
+    *and* identical ownership labels, and the second consumer is handed the first
+    one's credentials.
+
+    Derived from `binding_id`, not random: deprovision recomputes these names from
+    the context and would otherwise miss.
+    """
+    suffix = hashlib.sha256(binding_id.encode()).hexdigest()[:_DISCRIMINATOR_LENGTH]
+    budget = _MAX_NAME_LENGTH - len(suffix) - 1
+    return f"{base[:budget].rstrip('-')}-{suffix}"
 
 
 def _bucket_name(context: BindingProvisioningContext) -> str:
     # S3 bucket names are DNS labels: lowercase, 3-63 chars, no underscores.
     base = f"nephos-{context.app_slug}-{context.alias}".lower().replace("_", "-")
-    return _truncated(base, binding_id=context.binding_id)
+    return _scoped(base, binding_id=context.binding_id)
 
 
 def _credential_secret_name(context: BindingProvisioningContext) -> str:
     base = f"nephos-s3-{context.app_slug}-{context.alias}"
-    return _truncated(base, binding_id=context.binding_id)
+    return _scoped(base, binding_id=context.binding_id)
 
 
 def _read_optional_secret(core_v1_api, *, namespace: str, name: str):
