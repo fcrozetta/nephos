@@ -28,6 +28,22 @@ Need to decide:
 
 Resolved for this phase:
 
+- Service readiness evidence must declare its basis. Every check carries
+  `measured` (observed this reconciliation pass), `declared` (standing platform
+  policy, e.g. deferred backup), or `undetermined` (applies but nothing evaluated
+  it, and never renders as healthy). Evidence is emitted on every reconciliation
+  outcome rather than only on `runtime_deployed`, `runtime` must be `measured`,
+  per-Service dimensions come from the provider or manifest rather than a slug
+  branch in the reconciler, and the payload carries a new `contractVersion`. The
+  TLS / Kubernetes-Secrets / deferred-backup positions carry forward unchanged.
+  See `docs/adr/20260817-service-readiness-must-be-measured.md`, which supersedes
+  the never-accepted `20260623`.
+
+  **Accepted but not yet implemented.** `_service_production_readiness_evidence`
+  still emits the 2026-06-23 shape, including the `if slug == "zitadel"` branch.
+  This is deliberately the same condition that produced the drift 20260817 was
+  written to correct, so it is tracked in `PLANS.md` rather than left implicit.
+
 - Service-surface route shape is `spec.portals` on `ServiceSpec`, with hosts
   generated as `<portal>.<service-slug>.<root-domain>` and exposure gated
   default-deny per root domain (`platform_domains.allows_service_portals`).

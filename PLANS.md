@@ -2,6 +2,38 @@
 
 ---
 
+## Open Increment: implement the measured readiness contract
+
+ADR: `docs/adr/20260817-service-readiness-must-be-measured.md` (accepted,
+Fer, 2026-08-17), superseding the never-accepted `20260623`.
+
+**Accepted, unimplemented.** `_service_production_readiness_evidence` in
+`reconciler.py` still emits the 2026-06-23 shape: three string literals, one
+check that restates the `reason == "runtime_deployed"` gate it is emitted under,
+and an `if slug == "zitadel"` branch appending four more. `storage` is absent
+rather than unknown.
+
+This is worth stating plainly because it recreates exactly the condition the ADR
+was written to correct — a decision on the books that the code does not satisfy.
+It is tracked here so the gap is visible rather than assumed closed by the ADR
+existing.
+
+Scope when picked up:
+
+- add `basis` (`measured` / `declared` / `undetermined`) to every check
+- emit readiness evidence on every reconciliation outcome, not only on success
+- make `runtime` genuinely measured rather than a restatement of its gate
+- move the Zitadel dimensions out of the reconciler to provider- or
+  manifest-contributed evidence (the ADR deliberately leaves which one to the
+  implementing slice)
+- report every named dimension for every Service, `storage` included
+- bump `contractVersion`, and update the console, which consumes this payload
+
+Expect the platform to look *less* ready afterwards: most dimensions will report
+`undetermined`. That is the correction, not a regression.
+
+---
+
 ## Current Plan Addendum: SeaweedFS turnkey install and S3 binding provisioning
 
 Goal:

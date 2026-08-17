@@ -1,11 +1,11 @@
 # Service readiness must be measured, or say that it is not
 
-- Status: proposed
+- Status: accepted
 - Deciders: Fer
 - Date: 2026-08-17
 - Tags: services, production-readiness, status, evidence, phase-1
 
-Supersedes (on acceptance):
+Supersedes:
 
 - `20260623-service-production-readiness-contract.md`
 
