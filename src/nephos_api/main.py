@@ -363,6 +363,10 @@ def default_provider_deployer_factory(
             config=kubernetes_config,
             workload="mariadb-service",
         ),
+        "valkey": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="valkey-service",
+        ),
         "zitadel": PulumiKubernetesProvider(
             config=kubernetes_config,
             workload="zitadel-service",
@@ -570,6 +574,7 @@ def _build_provisioning_engines(
         MariaDBAppScopedProvisioner,
         PostgresAppScopedProvisioner,
         SeaweedFSS3Provisioner,
+        ValkeyAppScopedProvisioner,
         ZitadelAppScopedProvisioner,
     )
 
@@ -593,6 +598,15 @@ def _build_provisioning_engines(
         # (capability, protocol) narrowing lives inside the engine, as
         # arcadedb's _CORE_PROTOCOLS does.
         "mysql": MariaDBAppScopedProvisioner(core_v1_api=core_v1_api),
+        # ADR 20260825: capability `kv`, protocol `redis` (the RESP wire
+        # protocol Valkey speaks, exactly as mariadb declares `mysql`), engine
+        # named for the provisioner per ADR 20260824. `kv` is unclaimed, but the
+        # engine takes `valkey` rather than the free capability name so a second
+        # kv provider does not recreate the sql/mysql asymmetry.
+        # Isolation is per-binding ACL users scoped to a key prefix, not
+        # databases -- Valkey has none, and the numeric db index is not an ACL
+        # boundary.
+        "valkey": ValkeyAppScopedProvisioner(core_v1_api=core_v1_api),
         "oidc": ZitadelAppScopedProvisioner(client=zitadel_client),
         # ADR 20260630 fixes the output contract; the client speaks ArcadeDB's
         # HTTP admin API. Optional protocols (gremlin, mongo) stay disabled --
