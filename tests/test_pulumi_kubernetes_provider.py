@@ -17,6 +17,7 @@ from nephos_api.providers.kubernetes import (
     _postgres_service,
     _pulumi_program,
     _seaweedfs_service,
+    _valkey_service,
     _zitadel_service,
 )
 from nephos_api.runtime_errors import RuntimeBlockedError
@@ -405,6 +406,149 @@ def test_mariadb_service_blocks_without_a_root_password() -> None:
 
     with pytest.raises(RuntimeBlockedError) as excinfo:
         _mariadb_service(_mariadb_spec({}), k8s=k8s, opts=None)
+
+    assert excinfo.value.reason == "runtime_config_missing"
+
+
+def _valkey_spec(values: dict[str, object]) -> PulumiKubernetesWorkloadSpec:
+    return PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-valkey",
+        work_dir=Path("/tmp/workspaces/svc-valkey"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-valkey",
+        namespace="svc-valkey",
+        workload="valkey-service",
+        values=values,
+    )
+
+
+def test_valkey_service_names_match_what_the_provisioner_looks_up() -> None:
+    """The redis provisioner derives `{release}-redis` for the Secret, host and
+    pod, and reads the `valkey-password` key. A rename on either side is only
+    observable in a live cluster."""
+    k8s = RecordingKubernetes()
+
+    _valkey_service(_valkey_spec({"adminPassword": "admin-secret"}), k8s=k8s, opts=None)
+
+    secret = cast(dict[str, Any], k8s.secret.calls[0])
+    service = cast(dict[str, Any], k8s.service.calls[0])
+    stateful_set = cast(dict[str, Any], k8s.stateful_set.calls[0])
+    assert secret["metadata"]["name"] == "svc-valkey-valkey"
+    assert secret["string_data"] == {"valkey-password": "admin-secret"}
+    assert service["metadata"]["name"] == "svc-valkey-valkey"
+    assert service["spec"]["ports"] == [
+        {"name": "valkey", "port": 6379, "targetPort": "valkey"}
+    ]
+    assert stateful_set["spec"]["serviceName"] == "svc-valkey-valkey"
+
+
+def test_valkey_service_defaults_to_a_pinned_image() -> None:
+    k8s = RecordingKubernetes()
+
+    _valkey_service(_valkey_spec({"adminPassword": "admin-secret"}), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    assert container["image"] == "valkey/valkey:8.1"
+
+
+def test_valkey_service_never_sets_requirepass() -> None:
+    """Verified on Valkey 8.1: when `aclfile` is set Valkey silently ignores
+    `requirepass` and the default user loads from the file, so combining them
+    yields `user default on nopass ~* &* +@all` -- an unauthenticated server that
+    answers PING. The default user must come from the ACL file instead."""
+    k8s = RecordingKubernetes()
+
+    _valkey_service(_valkey_spec({"adminPassword": "admin-secret"}), k8s=k8s, opts=None)
+
+    pod_spec = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]
+    rendered = repr(pod_spec)
+    assert "requirepass" not in rendered
+    assert "--aclfile" in rendered
+    seed = pod_spec["initContainers"][0]["command"][2]
+    assert "user default on >%s ~* &* +@all" in seed
+
+
+def test_valkey_service_seed_preserves_binding_users_and_allows_rotation() -> None:
+    """Binding ACL users are persisted into this same file by ACL SAVE, so a
+    wholesale rewrite would delete every App credential on restart. Rewriting
+    only the `user default` line also makes Secret rotation take effect."""
+    k8s = RecordingKubernetes()
+
+    _valkey_service(_valkey_spec({"adminPassword": "admin-secret"}), k8s=k8s, opts=None)
+
+    seed = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["initContainers"][0]
+    script = seed["command"][2]
+    # Only the default line is dropped; everything else is carried forward.
+    assert "grep -v '^user default '" in script
+    assert "cat /tmp/nephos-acl-rest" in script
+    # ACL SAVE runs as uid 999, so the file has to be writable by it.
+    assert "chown 999:999" in script
+    assert "chmod 600" in script
+    assert seed["env"][0]["valueFrom"]["secretKeyRef"]["key"] == "valkey-password"
+
+
+def test_valkey_service_probe_matches_pong_rather_than_exit_code() -> None:
+    """`valkey-cli ping` exits 0 even when the server answers NOAUTH (verified),
+    so a bare exec probe on it is vacuous the way `mysqladmin ping` is."""
+    k8s = RecordingKubernetes()
+
+    _valkey_service(_valkey_spec({"adminPassword": "admin-secret"}), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    assert container["readinessProbe"]["exec"]["command"] == [
+        "sh",
+        "-c",
+        "valkey-cli ping | grep -q PONG",
+    ]
+    # The probe authenticates from the environment, never from argv.
+    assert {e["name"] for e in container["env"]} == {
+        "VALKEY_PASSWORD",
+        "REDISCLI_AUTH",
+    }
+
+
+def test_valkey_service_keeps_the_image_entrypoint_privilege_drop() -> None:
+    """Args only, no command: the official entrypoint prepends `valkey-server`
+    when the first arg starts with a dash, and that is what drops to uid 999."""
+    k8s = RecordingKubernetes()
+
+    _valkey_service(_valkey_spec({"adminPassword": "admin-secret"}), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    assert "command" not in container
+    assert container["args"][0] == "--aclfile"
+    assert container["args"][:2] == ["--aclfile", "/data/users.acl"]
+
+
+def test_valkey_service_persists_and_mounts_from_a_subpath() -> None:
+    k8s = RecordingKubernetes()
+
+    _valkey_service(
+        _valkey_spec({"adminPassword": "admin-secret", "storageSize": "4Gi"}),
+        k8s=k8s,
+        opts=None,
+    )
+
+    stateful_set_spec = k8s.stateful_set.calls[0]["spec"]
+    pod_spec = stateful_set_spec["template"]["spec"]
+    mount = {"name": "data", "mountPath": "/data", "subPath": "data"}
+    assert pod_spec["containers"][0]["volumeMounts"] == [mount]
+    # The seed step must see the same directory Redis will use.
+    assert pod_spec["initContainers"][0]["volumeMounts"] == [mount]
+    assert "--appendonly" in pod_spec["containers"][0]["args"]
+    assert stateful_set_spec["volumeClaimTemplates"][0]["spec"]["resources"] == {
+        "requests": {"storage": "4Gi"}
+    }
+
+
+def test_valkey_service_blocks_without_an_admin_password() -> None:
+    k8s = RecordingKubernetes()
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _valkey_service(_valkey_spec({}), k8s=k8s, opts=None)
 
     assert excinfo.value.reason == "runtime_config_missing"
 

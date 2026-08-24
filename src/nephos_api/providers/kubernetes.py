@@ -588,6 +588,185 @@ def _mariadb_service(
     )
 
 
+# Seeds the ACL file the Redis server reads at startup.
+#
+# `requirepass` is NOT used, and that is the load-bearing decision here. When
+# `aclfile` is set, Valkey silently ignores `requirepass` and the default user
+# loads from the file -- so an absent or empty ACL file yields
+# `user default on nopass ~* &* +@all`, i.e. a server that accepts every
+# unauthenticated connection. Verified on Valkey 8.1 (and identically on Redis
+# 8.2): an empty aclfile plus `--requirepass` answered an unauthenticated PING
+# with PONG. The default user is therefore defined in the file, from the Secret,
+# on every start.
+#
+# The rewrite is line-scoped rather than a clobber: binding users added at
+# runtime by `ACL SETUSER` + `ACL SAVE` live in this same file, so replacing it
+# wholesale would delete every App's credential on restart. Rewriting only the
+# `user default` line also means rotating the Secret actually takes effect, which
+# a create-if-absent seed would not.
+_VALKEY_ACL_SEED_SCRIPT = """set -eu
+ACL_FILE=/data/users.acl
+touch "$ACL_FILE"
+grep -v '^user default ' "$ACL_FILE" > /tmp/nephos-acl-rest || true
+{
+  printf 'user default on >%s ~* &* +@all\\n' "$VALKEY_PASSWORD"
+  cat /tmp/nephos-acl-rest
+} > "$ACL_FILE"
+rm -f /tmp/nephos-acl-rest
+# valkey-server drops to uid 999 and must be able to rewrite this file, because
+# ACL SAVE is what makes a binding survive a restart.
+chown 999:999 "$ACL_FILE"
+chmod 600 "$ACL_FILE"
+"""
+
+
+def _valkey_service(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    name = f"{spec.runtime_name}-valkey"
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    image = _string_value(spec.values, "image", "valkey/valkey:8.1")
+    admin_password = _required_string_value(spec.values, "adminPassword")
+    # `valkey-password` names the credential's own account (`default`), the same
+    # way arcadedb and mariadb name theirs. The valkey provisioner reads this exact
+    # key out of this exact Secret, so the pair is a cross-file contract.
+    k8s.core.v1.Secret(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        type="Opaque",
+        string_data={"valkey-password": admin_password},
+        opts=opts,
+    )
+    k8s.core.v1.Service(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+            "annotations": {"pulumi.com/skipAwait": "true"},
+        },
+        spec={
+            "ports": [
+                {
+                    "name": "valkey",
+                    "port": 6379,
+                    "targetPort": "valkey",
+                }
+            ],
+            "selector": selector,
+        },
+        opts=opts,
+    )
+    password_env = {
+        "name": "VALKEY_PASSWORD",
+        "valueFrom": {
+            "secretKeyRef": {
+                "name": name,
+                "key": "valkey-password",
+            }
+        },
+    }
+    data_mount = {
+        "name": "data",
+        "mountPath": "/data",
+        # Same reason mariadb mounts from a subPath: a fresh PVC can arrive with
+        # lost+found, and the seed script and Valkey both expect to own /data.
+        "subPath": "data",
+    }
+    k8s.apps.v1.StatefulSet(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "serviceName": name,
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    # Runs as root so it can chown the file to valkey; the
+                    # server container keeps the image's own entrypoint, which
+                    # drops to uid 999 itself.
+                    "initContainers": [
+                        {
+                            "name": "seed-acl",
+                            "image": image,
+                            "command": ["sh", "-c", _VALKEY_ACL_SEED_SCRIPT],
+                            "env": [password_env],
+                            "volumeMounts": [data_mount],
+                        }
+                    ],
+                    "containers": [
+                        {
+                            "name": "valkey",
+                            "image": image,
+                            # Args only, no command: the image's entrypoint
+                            # prepends `valkey-server` when the first argument
+                            # starts with a dash, which keeps its privilege drop.
+                            # Verified against valkey/valkey:8.1.
+                            "args": [
+                                "--aclfile",
+                                "/data/users.acl",
+                                "--dir",
+                                "/data",
+                                "--appendonly",
+                                "yes",
+                            ],
+                            "ports": [{"name": "valkey", "containerPort": 6379}],
+                            "env": [
+                                password_env,
+                                # valkey-cli reads REDISCLI_AUTH, not
+                                # VALKEYCLI_AUTH -- verified on 8.1, the Valkey
+                                # name is simply not honoured. So neither the
+                                # readiness probe nor the provisioner has to put
+                                # a password in argv.
+                                {
+                                    "name": "REDISCLI_AUTH",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "valkey-password",
+                                        }
+                                    },
+                                },
+                            ],
+                            # `valkey-cli ping` exits 0 even when the server
+                            # answers NOAUTH (verified on 8.1), so a bare exec
+                            # probe on it is vacuous the way `mysqladmin ping` is.
+                            # The PONG match is what makes this a real check.
+                            "readinessProbe": {
+                                "exec": {
+                                    "command": [
+                                        "sh",
+                                        "-c",
+                                        "valkey-cli ping | grep -q PONG",
+                                    ]
+                                },
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 2,
+                            },
+                            "volumeMounts": [data_mount],
+                        }
+                    ],
+                },
+            },
+            "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
+        },
+        opts=opts,
+    )
+
+
 def _cloudflared_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -1844,6 +2023,7 @@ _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "nephos-console": _nephos_console,
     "postgres-service": _postgres_service,
     "mariadb-service": _mariadb_service,
+    "valkey-service": _valkey_service,
     "cloudflared-service": _cloudflared_service,
     "zitadel-service": _zitadel_service,
     "seaweedfs-service": _seaweedfs_service,

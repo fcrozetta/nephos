@@ -97,7 +97,7 @@ def test_default_provider_deployer_factory_builds_pulumi_provider_deployer(
     assert captured["app_provider"].__class__.__name__ == "RuntimeProviderRouter"
     assert captured["service_provider"].__class__.__name__ == "RuntimeProviderRouter"
     service_runtimes = captured["service_provider"]._provider_runtimes
-    assert {"seaweedfs", "arcadedb", "mariadb"}.issubset(service_runtimes)
+    assert {"seaweedfs", "arcadedb", "mariadb", "valkey"}.issubset(service_runtimes)
     # A registered name with the wrong workload blocks as runtime_provider_unknown
     # only once Pulumi runs, i.e. at install time on a live cluster.
     assert service_runtimes["mariadb"]._workload == "mariadb-service"
@@ -306,6 +306,25 @@ def test_provisioning_engines_include_mysql(tmp_path) -> None:
     assert engines["sql"].__class__.__name__ == "PostgresAppScopedProvisioner"
 
 
+def test_provisioning_engines_include_valkey(tmp_path) -> None:
+    """ADR 20260825: `kv`/`redis` needs its own engine or every valkey binding
+    blocks with provisioning_engine_unknown. The engine is named for the
+    provisioner per ADR 20260824, not for the free capability name, so a second
+    kv provider cannot recreate the sql/mysql asymmetry."""
+    from nephos_api.main import _build_provisioning_engines
+
+    engines = _build_provisioning_engines(_engine_settings(tmp_path), core_v1_api=None)
+
+    assert "valkey" in engines
+    engine = engines["valkey"]
+    assert engine.__class__.__name__ == "ValkeyAppScopedProvisioner"
+    # Parity with the sql and mysql engines.
+    assert engine.recognized_entitlements == frozenset({"admin-credentials"})
+    # Distinct objects, or a redis binding could be handed SQL credentials.
+    assert engines["sql"] is not engine
+    assert engines["mysql"] is not engine
+
+
 def test_provisioning_engine_names_are_a_flat_unqualified_namespace(tmp_path) -> None:
     """ADR 20260824. Engine names identify a provisioner, one per Service, and no
     key is protocol-qualified -- arcadedb also provides (sql, arcadedb) and is
@@ -314,7 +333,14 @@ def test_provisioning_engine_names_are_a_flat_unqualified_namespace(tmp_path) ->
 
     engines = _build_provisioning_engines(_engine_settings(tmp_path), core_v1_api=None)
 
-    assert set(engines) == {"sql", "mysql", "oidc", "opencypher", "object-storage"}
+    assert set(engines) == {
+        "sql",
+        "mysql",
+        "valkey",
+        "oidc",
+        "opencypher",
+        "object-storage",
+    }
     # `object-storage` is a hyphenated capability name, not a qualification, so
     # the check is for a `{capability}-{protocol}` shape specifically.
     assert [name for name in engines if name.startswith(("sql-", "oidc-"))] == []
