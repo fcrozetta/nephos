@@ -1,6 +1,7 @@
 # A `kv` capability, and per-binding isolation without per-app databases
 
-- Status: proposed
+- Status: accepted
+- Deciders: Fer
 - Date: 2026-08-25
 - Tags: provisioning, bindings, capabilities, valkey, redis, isolation, licensing
 
