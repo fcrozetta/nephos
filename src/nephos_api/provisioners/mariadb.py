@@ -2,7 +2,6 @@ import base64
 import hashlib
 import re
 import secrets
-import shlex
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -27,32 +26,55 @@ class MariaDBSqlRunner(Protocol):
         core_v1_api: client.CoreV1Api,
         namespace: str,
         pod_name: str,
-        root_password: str,
         sql: str,
     ) -> None: ...
 
 
 class KubernetesMariaDBSqlRunner:
+    # Takes no password on purpose. An interpolated credential would sit in
+    # argv[2] of `sh -lc`, which is both readable in the pod's /proc and recorded
+    # verbatim in the Kubernetes API audit log for every exec. Instead the script
+    # dereferences MARIADB_ROOT_PASSWORD, which the `mariadb-service` workload
+    # already injects into the container from the runtime Secret -- so the value
+    # never crosses the API boundary at all. That injection is a cross-file
+    # contract with `_mariadb_service`; the guard below is what makes a broken
+    # one say so instead of surfacing as "access denied".
+    #
+    # This removes the *service-wide* credential only. The per-binding password
+    # is still in the SQL payload (`IDENTIFIED BY '...'`), so it still reaches
+    # argv and the audit log. That is a strictly smaller exposure -- one app's
+    # database rather than the superuser -- and closing it needs a different
+    # mechanism than an env var, since the value is part of the statement.
     def run_sql(
         self,
         *,
         core_v1_api: client.CoreV1Api,
         namespace: str,
         pod_name: str,
-        root_password: str,
         sql: str,
     ) -> None:
         marker = "NEPHOS_EXIT"
-        # MYSQL_PWD keeps the password off the process argv, the same reason the
-        # postgres runner uses PGPASSWORD. `mariadb` (not the deprecated `mysql`
-        # symlink) aborts on the first error in batch mode, which is what
-        # ON_ERROR_STOP=1 buys on the postgres side.
+        # MYSQL_PWD passes the credential to the client through the environment
+        # rather than its argv, the same reason the postgres runner uses
+        # PGPASSWORD. `mariadb` (not the deprecated `mysql` symlink) aborts on
+        # the first error in batch mode, which is what ON_ERROR_STOP=1 buys on
+        # the postgres side.
+        #
+        # The marker is printed on both branches: a bare `${VAR:?msg}` would exit
+        # the shell before printing it, and a missing marker is reported as
+        # "missing exec exit marker", losing the message that explains why.
         script = (
-            f"MYSQL_PWD={shlex.quote(root_password)} "
-            "mariadb -u root --batch <<'NEPHOS_SQL'\n"
+            'if [ -z "${MARIADB_ROOT_PASSWORD:-}" ]; then\n'
+            "  echo 'MARIADB_ROOT_PASSWORD is unset in the mariadb container;"
+            " the mariadb-service workload must inject it' >&2\n"
+            "  rc=1\n"
+            "else\n"
+            'MYSQL_PWD="$MARIADB_ROOT_PASSWORD"'
+            " mariadb -u root --batch <<'NEPHOS_SQL'\n"
             f"{sql}\n"
             "NEPHOS_SQL\n"
             "rc=$?\n"
+            "fi\n"
             f"printf '\\n{marker}:%s\\n' \"$rc\"\n"
             'exit "$rc"'
         )
@@ -128,14 +150,6 @@ class MariaDBAppScopedProvisioner:
             context,
             namespace=runtime.namespace,
         )
-        root_password = _decode_secret_key(
-            _read_required_secret(
-                self._core_v1_api,
-                namespace=runtime.namespace,
-                name=runtime.root_secret_name,
-            ),
-            "root-password",
-        )
         self._core_v1_api.read_namespaced_pod(
             namespace=runtime.namespace,
             name=runtime.pod_name,
@@ -144,9 +158,11 @@ class MariaDBAppScopedProvisioner:
             core_v1_api=self._core_v1_api,
             namespace=runtime.namespace,
             pod_name=runtime.pod_name,
-            root_password=root_password,
             sql=_provision_database_sql(credentials),
         )
+        # Read only when this binding is actually owed the credential. The runner
+        # gets it from the container's own environment, so an unentitled binding
+        # never pulls the service-wide root password into the control plane.
         return _binding_values(
             credentials,
             host=runtime.host,
@@ -154,8 +170,20 @@ class MariaDBAppScopedProvisioner:
             # adminUsername/adminPassword binding outputs, whose names are the
             # cross-provider contract shared with postgres (ADR 20260630).
             admin_password=(
-                root_password if _grants_admin_credentials(context) else None
+                self._read_root_password(runtime)
+                if _grants_admin_credentials(context)
+                else None
             ),
+        )
+
+    def _read_root_password(self, runtime: "_MariaDBRuntime") -> str:
+        return _decode_secret_key(
+            _read_required_secret(
+                self._core_v1_api,
+                namespace=runtime.namespace,
+                name=runtime.root_secret_name,
+            ),
+            "root-password",
         )
 
     def deprovision_binding(self, context: BindingProvisioningContext) -> None:
@@ -182,23 +210,18 @@ class MariaDBAppScopedProvisioner:
             "username": _decode_secret_key(existing, "username"),
             "password": _decode_secret_key(existing, "password"),
         }
-        root_password = _decode_secret_key(
-            _read_required_secret(
-                self._core_v1_api,
-                namespace=runtime.namespace,
-                name=runtime.root_secret_name,
-            ),
-            "root-password",
-        )
         self._core_v1_api.read_namespaced_pod(
             namespace=runtime.namespace,
             name=runtime.pod_name,
         )
+        # Teardown reads no Secret at all now: the runner authenticates from the
+        # container's environment, and deprovision owes nobody a credential. It
+        # also stops a missing root Secret from blocking a teardown that no
+        # longer needs it.
         self._sql_runner.run_sql(
             core_v1_api=self._core_v1_api,
             namespace=runtime.namespace,
             pod_name=runtime.pod_name,
-            root_password=root_password,
             sql=_deprovision_database_sql(credentials),
         )
         self._core_v1_api.delete_namespaced_secret(

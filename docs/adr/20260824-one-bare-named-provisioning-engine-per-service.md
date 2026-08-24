@@ -1,6 +1,7 @@
 # One bare-named provisioning engine per Service
 
-- Status: proposed
+- Status: accepted
+- Deciders: Fer
 - Date: 2026-08-24
 - Tags: provisioning, bindings, capabilities, naming, sql
 
@@ -163,3 +164,17 @@ Recorded here rather than done, deliberately:
 - **Registry-side engine validation.** `catalog.py` accepts any string as
   `provisioning.engine`; a typo is only caught at provision time as
   `provisioning_engine_unknown`, on a binding that is then terminal.
+- **`postgres.py` still interpolates its superuser password into the exec argv.**
+  `KubernetesPsqlRunner` builds `PGPASSWORD={shlex.quote(admin_password)} psql ...`
+  and hands it to `sh -lc` as `argv[2]`, so the postgres superuser credential is
+  recorded in the Kubernetes audit log on every provision and deprovision. The
+  mariadb runner now dereferences the container's own `MARIADB_ROOT_PASSWORD`
+  instead, and `_postgres_service` injects `POSTGRES_PASSWORD` the same way, so the
+  identical treatment applies. Not done here because it edits the platform's
+  bootstrap database path.
+- **Per-binding passwords still transit the exec payload.** Both runners send
+  `IDENTIFIED BY '...'` / `PASSWORD '...'` inside the SQL, so the per-app
+  credential still reaches argv and the audit log even after the superuser fix
+  above. Strictly smaller exposure (one app's database, not the superuser) and it
+  needs a different mechanism, since the value is part of the statement rather
+  than an environment input.

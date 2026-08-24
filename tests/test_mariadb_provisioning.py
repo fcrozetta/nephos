@@ -34,6 +34,7 @@ class FakeCoreV1Api:
         }
         self.created_secrets: list[client.V1Secret] = []
         self.deleted_secrets: list[tuple[str, str]] = []
+        self.read_secret_names: list[str] = []
         self.pods: dict[tuple[str, str], client.V1Pod] = {
             ("svc-mariadb", "svc-mariadb-mariadb-0"): client.V1Pod(
                 metadata=client.V1ObjectMeta(
@@ -55,6 +56,7 @@ class FakeCoreV1Api:
         namespace: str,
         name: str,
     ) -> client.V1Secret:
+        self.read_secret_names.append(name)
         secret = self.secrets.get((namespace, name))
         if secret is None:
             raise ApiException(status=404)
@@ -103,14 +105,12 @@ class FakeSqlRunner:
         core_v1_api: client.CoreV1Api,
         namespace: str,
         pod_name: str,
-        root_password: str,
         sql: str,
     ) -> None:
         self.calls.append(
             {
                 "namespace": namespace,
                 "pod_name": pod_name,
-                "root_password": root_password,
                 "sql": sql,
             }
         )
@@ -150,10 +150,7 @@ class FakeExecResponse:
         pass
 
 
-def test_mariadb_runner_keeps_password_out_of_argv_and_uses_mariadb_client(
-    monkeypatch,
-) -> None:
-    """MYSQL_PWD, not `-p<password>`: argv is world-readable inside the pod."""
+def _captured_script(monkeypatch, sql: str = "SELECT 1") -> dict:
     captured = {}
 
     def fake_stream(connect, pod_name, namespace, **kwargs):
@@ -163,22 +160,51 @@ def test_mariadb_runner_keeps_password_out_of_argv_and_uses_mariadb_client(
         return FakeExecResponse(stdout=["ok\n", "NEPHOS_EXIT:0\n"])
 
     monkeypatch.setattr("nephos_api.provisioners.mariadb.stream.stream", fake_stream)
-
     KubernetesMariaDBSqlRunner().run_sql(
         core_v1_api=FakeCoreV1Api(),
         namespace="svc-mariadb",
         pod_name="svc-mariadb-mariadb-0",
-        root_password="admin secret",
-        sql="SELECT 1",
+        sql=sql,
     )
+    return captured
 
-    script = captured["kwargs"]["command"][2]
-    assert captured["kwargs"]["command"][:2] == ["sh", "-lc"]
-    assert "MYSQL_PWD='admin secret'" in script
-    # The deprecated `mysql` symlink is scheduled for removal upstream.
-    assert "mariadb -u root --batch" in script
+
+def test_mariadb_runner_never_puts_a_credential_in_the_exec_command(
+    monkeypatch,
+) -> None:
+    """The exec command array is recorded verbatim in the Kubernetes audit log, so
+    an interpolated password leaks into cluster history on every provision. The
+    script must dereference the container's own env var instead."""
+    captured = _captured_script(monkeypatch)
+
+    command = captured["kwargs"]["command"]
+    script = command[2]
+    assert command[:2] == ["sh", "-lc"]
+    # The literal the workload injects, not the value.
+    assert 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD"' in script
+    # No credential-bearing flag, and no interpolated secret anywhere in argv.
     assert "--password" not in script
     assert "-p'" not in script
+    # A password would have to be quoted to survive the shell; nothing here is.
+    assert "root-secret" not in script
+    assert "admin-secret" not in script
+    # The deprecated `mysql` symlink is scheduled for removal upstream.
+    assert "mariadb -u root --batch" in script
+
+
+def test_mariadb_runner_reports_a_missing_env_var_instead_of_access_denied(
+    monkeypatch,
+) -> None:
+    """If the workload stops injecting MARIADB_ROOT_PASSWORD, an empty MYSQL_PWD
+    would surface as a generic access-denied. The guard names the real cause, and
+    still prints the exit marker so the message survives to the operator."""
+    captured = _captured_script(monkeypatch)
+
+    script = captured["kwargs"]["command"][2]
+    assert 'if [ -z "${MARIADB_ROOT_PASSWORD:-}" ]; then' in script
+    assert "MARIADB_ROOT_PASSWORD is unset in the mariadb container" in script
+    # Printed outside the if/else, so both branches emit it.
+    assert script.index("fi\n") < script.index("NEPHOS_EXIT:%s")
 
 
 def test_mariadb_runner_raises_on_nonzero_exec_marker(monkeypatch) -> None:
@@ -196,7 +222,6 @@ def test_mariadb_runner_raises_on_nonzero_exec_marker(monkeypatch) -> None:
             core_v1_api=FakeCoreV1Api(),
             namespace="svc-mariadb",
             pod_name="svc-mariadb-mariadb-0",
-            root_password="root-secret",
             sql="SELECT broken",
         )
 
@@ -216,7 +241,6 @@ def test_mariadb_runner_raises_when_exec_marker_is_missing(monkeypatch) -> None:
             core_v1_api=FakeCoreV1Api(),
             namespace="svc-mariadb",
             pod_name="svc-mariadb-mariadb-0",
-            root_password="root-secret",
             sql="SELECT 1",
         )
 
@@ -231,7 +255,6 @@ def test_mariadb_runner_accepts_zero_exec_marker(monkeypatch) -> None:
         core_v1_api=FakeCoreV1Api(),
         namespace="svc-mariadb",
         pod_name="svc-mariadb-mariadb-0",
-        root_password="root-secret",
         sql="SELECT 1",
     )
 
@@ -278,7 +301,6 @@ def test_mariadb_provisioner_creates_credentials_and_returns_outputs() -> None:
     }
     assert runner.calls[0]["namespace"] == "svc-mariadb"
     assert runner.calls[0]["pod_name"] == "svc-mariadb-mariadb-0"
-    assert runner.calls[0]["root_password"] == "root-secret"
 
 
 def test_mariadb_provision_sql_grants_from_any_host() -> None:
@@ -378,6 +400,78 @@ def test_mariadb_provisioner_grants_admin_via_entitlement() -> None:
     assert values is not None
     assert values["adminUsername"] == "root"
     assert values["adminPassword"] == "root-secret"
+
+
+def test_mariadb_unentitled_binding_never_reads_the_root_secret() -> None:
+    """The runner authenticates from the container's environment, so an ordinary
+    binding has no reason to pull the service-wide root password into the control
+    plane. Reading it anyway would put it in API traffic and in memory for every
+    provision, not just the entitled ones."""
+    core = FakeCoreV1Api()
+    provisioner = MariaDBAppScopedProvisioner(
+        core_v1_api=core,
+        sql_runner=FakeSqlRunner(),
+        password_factory=lambda: "my-secret",
+    )
+
+    provisioner.provision_binding(_context())
+
+    assert "svc-mariadb-mariadb" not in core.read_secret_names
+
+
+def test_mariadb_entitled_binding_does_read_the_root_secret() -> None:
+    """The other half: the credential still has to reach a binding that declared
+    the entitlement, or adminPassword would silently go missing."""
+    core = FakeCoreV1Api()
+    provisioner = MariaDBAppScopedProvisioner(
+        core_v1_api=core,
+        sql_runner=FakeSqlRunner(),
+        password_factory=lambda: "my-secret",
+    )
+
+    values = provisioner.provision_binding(
+        BindingProvisioningContext(
+            binding_id="binding_01",
+            app_slug="reporting",
+            service_slug="mariadb",
+            alias="database",
+            capability="sql",
+            protocol="mysql",
+            entitlements=frozenset({"admin-credentials"}),
+        )
+    )
+
+    assert "svc-mariadb-mariadb" in core.read_secret_names
+    assert values is not None
+    assert values["adminPassword"] == "root-secret"
+
+
+def test_mariadb_deprovision_survives_a_missing_root_secret() -> None:
+    """Teardown no longer needs the root credential at all, so a missing root
+    Secret must not block removing a binding. A blocked deprovision is terminal."""
+    core = FakeCoreV1Api()
+    del core.secrets[("svc-mariadb", "svc-mariadb-mariadb")]
+    core.secrets[("svc-mariadb", "nephos-my-paperless-database")] = _secret(
+        namespace="svc-mariadb",
+        name="nephos-my-paperless-database",
+        labels=_owned_labels(),
+        data={
+            "database": "nephos_paperless_database",
+            "username": "nephos_paperless_database",
+            "password": "existing-secret",
+        },
+    )
+    runner = FakeSqlRunner()
+    provisioner = MariaDBAppScopedProvisioner(
+        core_v1_api=core,
+        sql_runner=runner,
+        password_factory=lambda: "unused",
+    )
+
+    provisioner.deprovision_binding(_context())
+
+    assert "DROP DATABASE IF EXISTS" in runner.calls[0]["sql"]
+    assert core.deleted_secrets == [("svc-mariadb", "nephos-my-paperless-database")]
 
 
 def test_mariadb_engine_recognizes_only_admin_credentials() -> None:
