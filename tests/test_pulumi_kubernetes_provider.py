@@ -11,6 +11,7 @@ from nephos_api.providers.kubernetes import (
     PulumiKubernetesWorkloadSpec,
     _arcadedb_service,
     _cloudflared_service,
+    _mariadb_service,
     _openbao_persistent_service,
     _openbao_service,
     _postgres_service,
@@ -253,6 +254,159 @@ def test_postgres_service_can_bootstrap_zitadel_database() -> None:
         "mountPath": "/docker-entrypoint-initdb.d",
         "readOnly": True,
     } in container["volumeMounts"]
+
+
+def _mariadb_spec(values: dict[str, object]) -> PulumiKubernetesWorkloadSpec:
+    return PulumiKubernetesWorkloadSpec(
+        project_name="nephos-api",
+        stack_name="svc-mariadb",
+        work_dir=Path("/tmp/workspaces/svc-mariadb"),
+        state_dir=Path("/tmp/state"),
+        kubeconfig=None,
+        kube_context=None,
+        runtime_name="svc-mariadb",
+        namespace="svc-mariadb",
+        workload="mariadb-service",
+        values=values,
+    )
+
+
+def test_mariadb_service_names_match_what_the_provisioner_looks_up() -> None:
+    """The mariadb provisioner derives `{release}-mariadb` for the Secret, the
+    Service host and the pod, and reads the `root-password` key out of
+    it. A rename on either side is only observable in a live cluster."""
+    k8s = RecordingKubernetes()
+
+    _mariadb_service(_mariadb_spec({"rootPassword": "root-secret"}), k8s=k8s, opts=None)
+
+    secret = cast(dict[str, Any], k8s.secret.calls[0])
+    service = cast(dict[str, Any], k8s.service.calls[0])
+    stateful_set = cast(dict[str, Any], k8s.stateful_set.calls[0])
+    assert secret["metadata"]["name"] == "svc-mariadb-mariadb"
+    assert secret["string_data"] == {"root-password": "root-secret"}
+    assert service["metadata"]["name"] == "svc-mariadb-mariadb"
+    assert service["metadata"]["annotations"] == {"pulumi.com/skipAwait": "true"}
+    assert service["spec"]["ports"] == [
+        {"name": "mariadb", "port": 3306, "targetPort": "mariadb"}
+    ]
+    assert stateful_set["metadata"]["name"] == "svc-mariadb-mariadb"
+    assert stateful_set["spec"]["serviceName"] == "svc-mariadb-mariadb"
+
+
+def test_mariadb_service_defaults_to_a_pinned_lts_image() -> None:
+    k8s = RecordingKubernetes()
+
+    _mariadb_service(_mariadb_spec({"rootPassword": "root-secret"}), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    # `:latest` forces imagePullPolicy: Always and breaks locally-imported images.
+    assert container["image"] == "mariadb:11.8"
+
+
+def test_mariadb_service_reads_root_password_from_the_secret() -> None:
+    k8s = RecordingKubernetes()
+
+    _mariadb_service(
+        _mariadb_spec({"image": "mariadb:11.8", "rootPassword": "root-secret"}),
+        k8s=k8s,
+        opts=None,
+    )
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    assert container["env"] == [
+        {
+            "name": "MARIADB_ROOT_PASSWORD",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "svc-mariadb-mariadb",
+                    "key": "root-password",
+                }
+            },
+        },
+        {"name": "MARIADB_MYSQL_LOCALHOST_USER", "value": "1"},
+    ]
+
+
+def test_mariadb_service_probes_readiness_with_the_image_healthcheck() -> None:
+    """`mysqladmin ping` answers while the server still refuses queries, so it
+    would mark the Service ready before a binding could provision against it."""
+    k8s = RecordingKubernetes()
+
+    _mariadb_service(_mariadb_spec({"rootPassword": "root-secret"}), k8s=k8s, opts=None)
+
+    container = k8s.stateful_set.calls[0]["spec"]["template"]["spec"]["containers"][0]
+    assert container["readinessProbe"]["exec"]["command"] == [
+        "healthcheck.sh",
+        "--su-mysql",
+        "--connect",
+        "--innodb_initialized",
+    ]
+    # --connect must authenticate, and MARIADB_ROOT_PASSWORD is what locks the
+    # probe out. The mysql@localhost account is the probe's only login.
+    env_names = [e["name"] for e in container["env"]]
+    assert "MARIADB_MYSQL_LOCALHOST_USER" in env_names
+
+
+def test_mariadb_service_mounts_the_datadir_from_a_subpath() -> None:
+    """A fresh PVC can arrive with lost+found, and MariaDB's first-run
+    initialisation refuses a non-empty datadir."""
+    k8s = RecordingKubernetes()
+
+    _mariadb_service(
+        _mariadb_spec({"rootPassword": "root-secret", "storageSize": "8Gi"}),
+        k8s=k8s,
+        opts=None,
+    )
+
+    stateful_set_spec = k8s.stateful_set.calls[0]["spec"]
+    container = stateful_set_spec["template"]["spec"]["containers"][0]
+    assert container["volumeMounts"] == [
+        {"name": "data", "mountPath": "/var/lib/mysql", "subPath": "data"}
+    ]
+    assert stateful_set_spec["volumeClaimTemplates"] == [
+        {
+            "metadata": {
+                "name": "data",
+                "labels": {
+                    "app.kubernetes.io/managed-by": "nephos",
+                    "app.kubernetes.io/part-of": "nephos-dev-reference",
+                    "nephos.pro/runtime-name": "svc-mariadb",
+                },
+            },
+            "spec": {
+                "accessModes": ["ReadWriteOnce"],
+                "resources": {"requests": {"storage": "8Gi"}},
+            },
+        }
+    ]
+
+
+def test_mariadb_service_honours_the_configured_storage_class() -> None:
+    k8s = RecordingKubernetes()
+
+    _mariadb_service(
+        _mariadb_spec(
+            {
+                "rootPassword": "root-secret",
+                "storageSize": "20Gi",
+                "storageClassName": "local-path",
+            }
+        ),
+        k8s=k8s,
+        opts=None,
+    )
+
+    claim = k8s.stateful_set.calls[0]["spec"]["volumeClaimTemplates"][0]
+    assert claim["spec"]["storageClassName"] == "local-path"
+
+
+def test_mariadb_service_blocks_without_a_root_password() -> None:
+    k8s = RecordingKubernetes()
+
+    with pytest.raises(RuntimeBlockedError) as excinfo:
+        _mariadb_service(_mariadb_spec({}), k8s=k8s, opts=None)
+
+    assert excinfo.value.reason == "runtime_config_missing"
 
 
 def test_cloudflared_service_uses_secret_reference_and_configured_route() -> None:
@@ -768,9 +922,7 @@ def test_seaweedfs_service_restricts_ingress_to_the_s3_port() -> None:
     assert spec["ingress"] == [{"ports": [{"protocol": "TCP", "port": 8333}]}]
     # The ports that answer unauthenticated must not be reachable.
     reachable = {
-        port["port"]
-        for rule in spec["ingress"]
-        for port in rule.get("ports", [])
+        port["port"] for rule in spec["ingress"] for port in rule.get("ports", [])
     }
     for unauthenticated in (9333, 8888, 18888, 8080, 18080):
         assert unauthenticated not in reachable

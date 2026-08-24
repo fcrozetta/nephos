@@ -97,7 +97,10 @@ def test_default_provider_deployer_factory_builds_pulumi_provider_deployer(
     assert captured["app_provider"].__class__.__name__ == "RuntimeProviderRouter"
     assert captured["service_provider"].__class__.__name__ == "RuntimeProviderRouter"
     service_runtimes = captured["service_provider"]._provider_runtimes
-    assert {"seaweedfs", "arcadedb"}.issubset(service_runtimes)
+    assert {"seaweedfs", "arcadedb", "mariadb"}.issubset(service_runtimes)
+    # A registered name with the wrong workload blocks as runtime_provider_unknown
+    # only once Pulumi runs, i.e. at install time on a live cluster.
+    assert service_runtimes["mariadb"]._workload == "mariadb-service"
     # lcl + explicit opt-in registers the dev-mode openbao provider.
     assert "openbao" in service_runtimes
     assert captured["secret_resolver"].__class__.__name__ == (
@@ -280,6 +283,41 @@ def test_provisioning_engines_include_object_storage(tmp_path) -> None:
     assert engine.__class__.__name__ == "SeaweedFSS3Provisioner"
     # A cross-bucket admin grant would undo the per-binding scoping.
     assert engine.recognized_entitlements == frozenset()
+
+
+def test_provisioning_engines_include_mysql(tmp_path) -> None:
+    """ADR 20260824: one bare-named engine per Service. Engine dispatch is by name
+    only, so mariadb needs an engine of its own or every binding blocks with
+    provisioning_engine_unknown -- and the name follows arcadedb's `opencypher`
+    rather than being protocol-qualified."""
+    from nephos_api.main import _build_provisioning_engines
+
+    engines = _build_provisioning_engines(_engine_settings(tmp_path), core_v1_api=None)
+
+    assert "mysql" in engines
+    engine = engines["mysql"]
+    assert engine.__class__.__name__ == "MariaDBAppScopedProvisioner"
+    # Parity with the sql engine: the router blocks anything outside this set.
+    assert engine.recognized_entitlements == frozenset({"admin-credentials"})
+    # The two sql engines must stay distinct objects; sharing one would hand
+    # mysql bindings postgres credentials.
+    assert engines["sql"] is not engine
+    # `sql` stays postgres' name so no installed manifest has to be rewritten.
+    assert engines["sql"].__class__.__name__ == "PostgresAppScopedProvisioner"
+
+
+def test_provisioning_engine_names_are_a_flat_unqualified_namespace(tmp_path) -> None:
+    """ADR 20260824. Engine names identify a provisioner, one per Service, and no
+    key is protocol-qualified -- arcadedb also provides (sql, arcadedb) and is
+    still just `opencypher`. A second naming style would make that the anomaly."""
+    from nephos_api.main import _build_provisioning_engines
+
+    engines = _build_provisioning_engines(_engine_settings(tmp_path), core_v1_api=None)
+
+    assert set(engines) == {"sql", "mysql", "oidc", "opencypher", "object-storage"}
+    # `object-storage` is a hyphenated capability name, not a qualification, so
+    # the check is for a `{capability}-{protocol}` shape specifically.
+    assert [name for name in engines if name.startswith(("sql-", "oidc-"))] == []
 
 
 def test_object_storage_engine_has_a_live_client(tmp_path) -> None:
