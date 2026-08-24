@@ -29,6 +29,7 @@ from nephos_api.provisioners.valkey import (
     KubernetesValkeyCliRunner,
     ValkeyAppScopedProvisioner,
     ValkeyCliRunner,
+    assert_acl_saved,
     assert_valkey_succeeded,
 )
 from nephos_api.provisioners.zitadel import (
@@ -59,6 +60,7 @@ __all__ = [
     "ValkeyAppScopedProvisioner",
     "ValkeyCliRunner",
     "KubernetesValkeyCliRunner",
+    "assert_acl_saved",
     "assert_valkey_succeeded",
     "PulumiZitadelProvisionerConfig",
     "PulumiZitadelProvisioningClient",

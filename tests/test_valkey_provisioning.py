@@ -140,7 +140,7 @@ def test_runner_never_puts_a_credential_in_the_exec_command(monkeypatch) -> None
 
     def fake_stream(connect, pod_name, namespace, **kwargs):
         captured["kwargs"] = kwargs
-        return FakeExecResponse(stdout=["OK\n"])
+        return FakeExecResponse(stdout=["OK\n", "\nNEPHOS_EXIT:0\n"])
 
     monkeypatch.setattr("nephos_api.provisioners.valkey.stream.stream", fake_stream)
 
@@ -174,7 +174,7 @@ def test_runner_guards_a_missing_rediscli_auth(monkeypatch) -> None:
 
     def fake_stream(connect, pod_name, namespace, **kwargs):
         captured["kwargs"] = kwargs
-        return FakeExecResponse(stdout=["OK\n"])
+        return FakeExecResponse(stdout=["OK\n", "\nNEPHOS_EXIT:0\n"])
 
     monkeypatch.setattr("nephos_api.provisioners.valkey.stream.stream", fake_stream)
     KubernetesValkeyCliRunner().run(
@@ -223,18 +223,18 @@ def test_provisioner_creates_credentials_and_returns_outputs() -> None:
     assert values == {
         "host": "svc-valkey-valkey.svc-valkey.svc.cluster.local",
         "port": "6379",
-        "username": "nephos_paperless_cache",
+        "username": "nephos_paperless_cache_9ec2cb8c8517",
         "password": "valkey-pw!",
         "database": "0",
-        "keyPrefix": "nephos:paperless:cache:",
+        "keyPrefix": "nephos:paperless:cache:9ec2cb8c8517:",
         "uri": (
-            "redis://nephos_paperless_cache:valkey-pw%21@"
+            "redis://nephos_paperless_cache_9ec2cb8c8517:valkey-pw%21@"
             "svc-valkey-valkey.svc-valkey.svc.cluster.local:6379/0"
         ),
     }
     created = core.created_secrets[0]
     assert created.metadata is not None
-    assert created.metadata.name == "nephos-valkey-paperless-cache"
+    assert created.metadata.name == "nephos-valkey-paperless-cache-9ec2cb8c8517"
     assert created.metadata.labels == {
         "app.kubernetes.io/managed-by": "nephos",
         "nephos.pro/app-instance": "paperless",
@@ -244,9 +244,9 @@ def test_provisioner_creates_credentials_and_returns_outputs() -> None:
         "nephos.pro/binding-alias": "cache",
     }
     assert created.string_data == {
-        "username": "nephos_paperless_cache",
+        "username": "nephos_paperless_cache_9ec2cb8c8517",
         "password": "valkey-pw!",
-        "keyPrefix": "nephos:paperless:cache:",
+        "keyPrefix": "nephos:paperless:cache:9ec2cb8c8517:",
     }
 
 
@@ -266,8 +266,9 @@ def test_provision_commands_reset_scope_and_save() -> None:
     commands = runner.calls[0]["commands"]
     digest = hashlib.sha256(b"valkey-pw").hexdigest()
     assert commands == [
-        f"ACL SETUSER nephos_paperless_cache reset on #{digest} "
-        "~nephos:paperless:cache:* &nephos:paperless:cache:* +@all -@dangerous",
+        f"ACL SETUSER nephos_paperless_cache_9ec2cb8c8517 reset on #{digest} "
+        "~nephos:paperless:cache:9ec2cb8c8517:* "
+        "&nephos:paperless:cache:9ec2cb8c8517:* +@all -@dangerous",
         "ACL SAVE",
     ]
 
@@ -351,15 +352,17 @@ def test_engine_recognizes_only_admin_credentials() -> None:
 
 def test_provisioner_reuses_existing_owned_credential_secret() -> None:
     core = FakeCoreV1Api()
-    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache")] = _secret(
-        namespace="svc-valkey",
-        name="nephos-valkey-paperless-cache",
-        labels=_owned_labels(),
-        data={
-            "username": "nephos_paperless_cache",
-            "password": "existing-pw",
-            "keyPrefix": "nephos:paperless:cache:",
-        },
+    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache-9ec2cb8c8517")] = (
+        _secret(
+            namespace="svc-valkey",
+            name="nephos-valkey-paperless-cache-9ec2cb8c8517",
+            labels=_owned_labels(),
+            data={
+                "username": "nephos_paperless_cache_9ec2cb8c8517",
+                "password": "existing-pw",
+                "keyPrefix": "nephos:paperless:cache:9ec2cb8c8517:",
+            },
+        )
     )
     provisioner = ValkeyAppScopedProvisioner(
         core_v1_api=core, cli_runner=FakeCliRunner(), password_factory=lambda: "new-pw"
@@ -448,11 +451,13 @@ def test_provisioner_refuses_terminating_service_namespace() -> None:
 
 def test_provisioner_refuses_unowned_existing_credential_secret() -> None:
     core = FakeCoreV1Api()
-    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache")] = _secret(
-        namespace="svc-valkey",
-        name="nephos-valkey-paperless-cache",
-        labels={},
-        data={"username": "u", "password": "p", "keyPrefix": "x:"},
+    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache-9ec2cb8c8517")] = (
+        _secret(
+            namespace="svc-valkey",
+            name="nephos-valkey-paperless-cache-9ec2cb8c8517",
+            labels={},
+            data={"username": "u", "password": "p", "keyPrefix": "x:"},
+        )
     )
     provisioner = ValkeyAppScopedProvisioner(
         core_v1_api=core, cli_runner=FakeCliRunner(), password_factory=lambda: "unused"
@@ -464,15 +469,17 @@ def test_provisioner_refuses_unowned_existing_credential_secret() -> None:
 
 def test_deprovision_deletes_the_acl_user_and_saves() -> None:
     core = FakeCoreV1Api()
-    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache")] = _secret(
-        namespace="svc-valkey",
-        name="nephos-valkey-paperless-cache",
-        labels=_owned_labels(),
-        data={
-            "username": "nephos_paperless_cache",
-            "password": "existing-pw",
-            "keyPrefix": "nephos:paperless:cache:",
-        },
+    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache-9ec2cb8c8517")] = (
+        _secret(
+            namespace="svc-valkey",
+            name="nephos-valkey-paperless-cache-9ec2cb8c8517",
+            labels=_owned_labels(),
+            data={
+                "username": "nephos_paperless_cache_9ec2cb8c8517",
+                "password": "existing-pw",
+                "keyPrefix": "nephos:paperless:cache:9ec2cb8c8517:",
+            },
+        )
     )
     runner = FakeCliRunner()
     provisioner = ValkeyAppScopedProvisioner(
@@ -482,23 +489,27 @@ def test_deprovision_deletes_the_acl_user_and_saves() -> None:
     provisioner.deprovision_binding(_context())
 
     assert runner.calls[0]["commands"] == [
-        "ACL DELUSER nephos_paperless_cache",
+        "ACL DELUSER nephos_paperless_cache_9ec2cb8c8517",
         "ACL SAVE",
     ]
-    assert core.deleted_secrets == [("svc-valkey", "nephos-valkey-paperless-cache")]
+    assert core.deleted_secrets == [
+        ("svc-valkey", "nephos-valkey-paperless-cache-9ec2cb8c8517")
+    ]
 
 
 def test_deprovision_blocks_when_save_fails_so_a_restart_cannot_resurrect() -> None:
     core = FakeCoreV1Api()
-    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache")] = _secret(
-        namespace="svc-valkey",
-        name="nephos-valkey-paperless-cache",
-        labels=_owned_labels(),
-        data={
-            "username": "nephos_paperless_cache",
-            "password": "pw",
-            "keyPrefix": "nephos:paperless:cache:",
-        },
+    core.secrets[("svc-valkey", "nephos-valkey-paperless-cache-9ec2cb8c8517")] = (
+        _secret(
+            namespace="svc-valkey",
+            name="nephos-valkey-paperless-cache-9ec2cb8c8517",
+            labels=_owned_labels(),
+            data={
+                "username": "nephos_paperless_cache_9ec2cb8c8517",
+                "password": "pw",
+                "keyPrefix": "nephos:paperless:cache:9ec2cb8c8517:",
+            },
+        )
     )
     runner = FakeCliRunner(output="1\nERR ACL SAVE failed\n")
     provisioner = ValkeyAppScopedProvisioner(
@@ -556,6 +567,116 @@ def test_username_shape_is_enforced_before_composing_commands() -> None:
 
     with pytest.raises(ValueError, match="invalid Valkey username"):
         _deprovision_commands("evil name +@all")
+
+
+def test_scopes_are_distinct_when_an_app_and_a_service_share_a_slug() -> None:
+    """`app_instances.slug` and `service_instances.slug` are UNIQUE on separate
+    tables, and a service dependency passes the consumer slug as `app_slug`
+    (deployer.py). Without an unconditional discriminator an App `foo` and a
+    Service `foo` binding the same alias get the same ACL user, password, Secret
+    and key prefix -- they read each other's data, and deprovisioning either
+    revokes both. Same fix seaweedfs already carries."""
+    from nephos_api.provisioners.valkey import (
+        _credential_secret_name,
+        _key_prefix,
+        _valkey_identifier,
+    )
+
+    def ctx(binding_id: str) -> BindingProvisioningContext:
+        return BindingProvisioningContext(
+            binding_id=binding_id,
+            app_slug="foo",
+            service_slug="valkey",
+            alias="cache",
+            capability="kv",
+            protocol="redis",
+        )
+
+    app, service = ctx("binding_01"), ctx("service-foo-cache")
+
+    assert _valkey_identifier(app) != _valkey_identifier(service)
+    assert _credential_secret_name(app) != _credential_secret_name(service)
+    # The key prefix matters most: it is this engine's entire isolation story, so
+    # a shared prefix is not a naming clash, it is one App reading another's data.
+    assert _key_prefix(app) != _key_prefix(service)
+
+
+def test_scopes_are_stable_across_calls() -> None:
+    """Derived from binding_id, not random: deprovision recomputes these names
+    from the context and would otherwise miss the user it created."""
+    from nephos_api.provisioners.valkey import _key_prefix, _valkey_identifier
+
+    first, second = _context(), _context()
+    assert _valkey_identifier(first) == _valkey_identifier(second)
+    assert _key_prefix(first) == _key_prefix(second)
+
+
+@pytest.mark.parametrize(
+    ("label", "stdout", "code"),
+    [
+        (
+            "connection refused",
+            "Could not connect to Redis at 1.2.3.4:6379: Connection refused",
+            1,
+        ),
+        (
+            "the REDISCLI_AUTH guard's own message",
+            "REDISCLI_AUTH is unset in the valkey container",
+            1,
+        ),
+        ("missing binary", "sh: valkey-cli: not found", 127),
+    ],
+)
+def test_runner_raises_on_exec_failures_that_carry_no_valkey_error_reply(
+    monkeypatch, label: str, stdout: str, code: int
+) -> None:
+    """These exit nonzero while printing text containing no Valkey error reply, so
+    the marker scan alone reports success and publishes binding outputs for an ACL
+    user that was never created. The guard's own message was itself invisible."""
+
+    def fake_stream(connect, pod_name, namespace, **kwargs):
+        return FakeExecResponse(stdout=[f"{stdout}\n", f"\nNEPHOS_EXIT:{code}\n"])
+
+    monkeypatch.setattr("nephos_api.provisioners.valkey.stream.stream", fake_stream)
+
+    with pytest.raises(RuntimeError, match=stdout.split(":")[0]):
+        KubernetesValkeyCliRunner().run(
+            core_v1_api=FakeCoreV1Api(),
+            namespace="svc-valkey",
+            pod_name="svc-valkey-valkey-0",
+            commands=["ACL SAVE"],
+        )
+
+
+def test_runner_raises_when_the_exit_marker_is_missing(monkeypatch) -> None:
+    def fake_stream(connect, pod_name, namespace, **kwargs):
+        return FakeExecResponse(stdout=["output with no marker\n"])
+
+    monkeypatch.setattr("nephos_api.provisioners.valkey.stream.stream", fake_stream)
+
+    with pytest.raises(RuntimeError, match="missing exec exit marker"):
+        KubernetesValkeyCliRunner().run(
+            core_v1_api=FakeCoreV1Api(),
+            namespace="svc-valkey",
+            pod_name="svc-valkey-valkey-0",
+            commands=["ACL SAVE"],
+        )
+
+
+def test_acl_saved_check_catches_a_state_with_no_marker_and_exit_zero() -> None:
+    """LOADING exits 0 and matches no error marker. Every batch ends with
+    ACL SAVE, so its OK is the positive signal that the grant both applied and
+    persisted -- the failure that otherwise stays invisible until a restart."""
+    from nephos_api.provisioners.valkey import assert_acl_saved
+
+    with pytest.raises(RuntimeBlockedError, match="did not confirm ACL SAVE"):
+        assert_acl_saved(
+            "LOADING Valkey is loading the dataset in memory",
+            reason="binding_provisioner_failed",
+        )
+    # Both real batches end with the ACL SAVE reply.
+    assert_acl_saved("OK\nOK\n", reason="r")
+    assert_acl_saved("1\nOK\n", reason="r")
 
 
 def _owned_labels() -> dict[str, str]:

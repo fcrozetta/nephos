@@ -34,6 +34,8 @@ VALKEY_PORT = 6379
 # still `SELECT` another index (verified), so the db index carries no isolation.
 # It is reported as an output purely because clients ask for one.
 BINDING_DB_INDEX = "0"
+_DISCRIMINATOR_LENGTH = 12
+_MAX_NAME_LENGTH = 63
 # `valkey-cli` exits 0 even when a command returns an error reply, exactly like
 # `weed shell` (ADR 20260816), so success is judged from the output text. These
 # are the reply prefixes Valkey actually emits for the failures reachable here:
@@ -82,15 +84,20 @@ class KubernetesValkeyCliRunner:
         pod_name: str,
         commands: list[str],
     ) -> str:
+        marker = "NEPHOS_EXIT"
         script = (
             'if [ -z "${REDISCLI_AUTH:-}" ]; then\n'
             "  echo 'REDISCLI_AUTH is unset in the valkey container;"
             " the valkey-service workload must inject it' >&2\n"
-            "  exit 1\n"
-            "fi\n"
+            "  rc=1\n"
+            "else\n"
             "valkey-cli --no-auth-warning <<'NEPHOS_VALKEY'\n"
             + "\n".join(commands)
-            + "\nNEPHOS_VALKEY"
+            + "\nNEPHOS_VALKEY\n"
+            "rc=$?\n"
+            "fi\n"
+            f"printf '\\n{marker}:%s\\n' \"$rc\"\n"
+            'exit "$rc"'
         )
         response = stream.stream(
             core_v1_api.connect_get_namespaced_pod_exec,
@@ -112,7 +119,26 @@ class KubernetesValkeyCliRunner:
             if response.peek_stderr():
                 stderr.append(response.read_stderr())
         response.close()
-        return "".join(stdout) + "".join(stderr)
+        output = "".join(stdout) + "".join(stderr)
+        # The exit status is the half the marker scan cannot see. `valkey-cli`
+        # exits 0 on command errors, so output text catches those -- but a refused
+        # connection, a missing binary, or the REDISCLI_AUTH guard above exit
+        # nonzero while printing text that contains no Valkey error reply at all.
+        # Without this, provisioning reports success and publishes binding outputs
+        # for an ACL user that was never created.
+        return_code = _exec_exit_code(output, marker=marker)
+        if return_code is None:
+            stream_return_code = getattr(response, "returncode", None)
+            if stream_return_code not in (0, None):
+                return_code = int(stream_return_code)
+            else:
+                raise RuntimeError("missing exec exit marker")
+        if return_code not in (0, None):
+            raise RuntimeError(
+                _without_exec_marker(output, marker=marker).strip()
+                or "valkey-cli execution failed"
+            )
+        return _without_exec_marker(output, marker=marker)
 
 
 def assert_valkey_succeeded(output: str, *, reason: str) -> None:
@@ -121,6 +147,47 @@ def assert_valkey_succeeded(output: str, *, reason: str) -> None:
             reason=reason,
             message=f"valkey-cli reported a failure: {output.strip()[:400]}",
         )
+
+
+def assert_acl_saved(output: str, *, reason: str) -> None:
+    """Require the trailing `ACL SAVE` to have replied OK.
+
+    Scanning for known error replies is a denylist, and Valkey has states that
+    produce neither a listed marker nor a nonzero exit -- `LOADING` during a
+    restart is the obvious one. Every batch this provisioner sends ends with
+    `ACL SAVE`, so its `OK` is a positive signal that the grant both applied and
+    persisted. That is the failure worth being certain about: an unsaved change
+    looks entirely successful until the pod restarts.
+
+    Checks the last reply, not the reply count, so it does not detect a batch that
+    silently returned fewer replies than commands. Nothing observed produces that:
+    a dropped batch exits nonzero (the runner raises) and a rejected command
+    returns an error reply (the marker scan raises).
+    """
+    last = output.strip().splitlines()[-1:] if output.strip() else []
+    if last != ["OK"]:
+        raise RuntimeBlockedError(
+            reason=reason,
+            message=(
+                "valkey-cli did not confirm ACL SAVE; last reply was "
+                f"{(last[0] if last else '(no output)')!r}"
+            ),
+        )
+
+
+def _exec_exit_code(output: str, *, marker: str) -> int | None:
+    matches = re.findall(rf"^{re.escape(marker)}:(\d+)$", output, flags=re.MULTILINE)
+    if not matches:
+        return None
+    return int(matches[-1])
+
+
+def _without_exec_marker(output: str, *, marker: str) -> str:
+    return "\n".join(
+        line
+        for line in output.splitlines()
+        if re.fullmatch(rf"{re.escape(marker)}:\d+", line) is None
+    )
 
 
 class ValkeyAppScopedProvisioner:
@@ -176,6 +243,7 @@ class ValkeyAppScopedProvisioner:
         # looks successful, the app connects, and then every binding breaks at
         # once the next time the pod restarts.
         assert_valkey_succeeded(output, reason="binding_provisioner_failed")
+        assert_acl_saved(output, reason="binding_provisioner_failed")
         return _binding_values(
             credentials,
             host=runtime.host,
@@ -236,6 +304,7 @@ class ValkeyAppScopedProvisioner:
         # Same reasoning as provision, mirrored: an unsaved DELUSER means a pod
         # restart resurrects a user whose binding is gone.
         assert_valkey_succeeded(output, reason="binding_deprovisioner_failed")
+        assert_acl_saved(output, reason="binding_deprovisioner_failed")
         self._core_v1_api.delete_namespaced_secret(
             namespace=runtime.namespace,
             name=name,
@@ -316,33 +385,52 @@ def _is_valkey_binding(context: BindingProvisioningContext) -> bool:
     return context.capability == "kv" and context.protocol == "redis"
 
 
+def _discriminator(binding_id: str) -> str:
+    return hashlib.sha256(binding_id.encode()).hexdigest()[:_DISCRIMINATOR_LENGTH]
+
+
+def _scoped(base: str, *, binding_id: str, separator: str) -> str:
+    """`base` narrowed to one binding, always.
+
+    Follows `seaweedfs_client._scoped`: the discriminator is unconditional rather
+    than a truncation fallback. App and Service slugs are UNIQUE on separate
+    tables and install checks neither against the other, while a service
+    dependency passes the consumer slug as `app_slug` (`deployer.py`) -- so an App
+    and a Service sharing a slug and alias produce identical names *and* identical
+    ownership labels, and the second consumer is handed the first one's ACL user,
+    password and key prefix. Deprovisioning either would revoke both.
+
+    Derived from `binding_id`, not random: deprovision recomputes these names from
+    the context and would otherwise miss.
+    """
+    suffix = _discriminator(binding_id)
+    budget = _MAX_NAME_LENGTH - len(suffix) - 1
+    return f"{base[:budget].rstrip(separator)}{separator}{suffix}"
+
+
 def _credential_secret_name(context: BindingProvisioningContext) -> str:
     base = f"nephos-valkey-{context.app_slug}-{context.alias}"
-    if len(base) <= 63:
-        return base
-    suffix = hashlib.sha256(context.binding_id.encode()).hexdigest()[:12]
-    prefix = base[: 63 - len(suffix) - 1].rstrip("-")
-    return f"{prefix}-{suffix}"
+    return _scoped(base, binding_id=context.binding_id, separator="-")
 
 
 def _valkey_identifier(context: BindingProvisioningContext) -> str:
     # Valkey usernames are freer than SQL identifiers, but the 63-char budget and
     # underscore form are kept so one identifier shape is legal on every engine.
     base = f"nephos_{context.app_slug}_{context.alias}".replace("-", "_")
-    if len(base) <= 63:
-        return base
-    suffix = hashlib.sha256(context.binding_id.encode()).hexdigest()[:12]
-    prefix = base[: 63 - len(suffix) - 1].rstrip("_")
-    return f"{prefix}_{suffix}"
+    return _scoped(base, binding_id=context.binding_id, separator="_")
 
 
 def _key_prefix(context: BindingProvisioningContext) -> str:
-    # Colon-separated, which is the conventional Redis/Valkey namespace separator, and
-    # reported to the App as `keyPrefix` because the App has to apply it: Valkey
-    # enforces the pattern, it does not rewrite keys.
+    # Colon-separated, which is the conventional Redis/Valkey namespace separator,
+    # and reported to the App as `keyPrefix` because the App has to apply it:
+    # Valkey enforces the pattern, it does not rewrite keys.
+    #
+    # Carries the same unconditional discriminator as the other two scopes. Key
+    # patterns are this engine's whole isolation story, so a prefix shared by two
+    # bindings is not a naming collision, it is one App reading another's data.
     app = context.app_slug.replace("-", "_")
     alias = context.alias.replace("-", "_")
-    return f"nephos:{app}:{alias}:"
+    return f"nephos:{app}:{alias}:{_discriminator(context.binding_id)}:"
 
 
 def _read_optional_secret(
