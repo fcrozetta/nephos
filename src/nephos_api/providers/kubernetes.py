@@ -462,6 +462,132 @@ def _postgres_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
+def _mariadb_service(
+    spec: PulumiKubernetesWorkloadSpec,
+    *,
+    k8s,
+    opts,
+) -> None:
+    name = f"{spec.runtime_name}-mariadb"
+    labels = _labels(spec)
+    selector = {"app.kubernetes.io/name": name}
+    image = _string_value(spec.values, "image", "mariadb:11.8")
+    root_password = _required_string_value(spec.values, "rootPassword")
+    # `root-password`, naming the account the image actually creates, as arcadedb
+    # does for its own root rather than following postgres' `postgres-password`.
+    # The mariadb provisioner reads this exact key out of this exact Secret, so
+    # the pair is a cross-file contract.
+    k8s.core.v1.Secret(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        type="Opaque",
+        string_data={"root-password": root_password},
+        opts=opts,
+    )
+    k8s.core.v1.Service(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+            "annotations": {"pulumi.com/skipAwait": "true"},
+        },
+        spec={
+            "ports": [
+                {
+                    "name": "mariadb",
+                    "port": 3306,
+                    "targetPort": "mariadb",
+                }
+            ],
+            "selector": selector,
+        },
+        opts=opts,
+    )
+    k8s.apps.v1.StatefulSet(
+        name,
+        metadata={
+            "name": name,
+            "namespace": spec.namespace,
+            "labels": labels,
+        },
+        spec={
+            "serviceName": name,
+            "replicas": 1,
+            "selector": {"matchLabels": selector},
+            "template": {
+                "metadata": {"labels": {**labels, **selector}},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "mariadb",
+                            "image": image,
+                            "ports": [{"name": "mariadb", "containerPort": 3306}],
+                            "env": [
+                                {
+                                    "name": "MARIADB_ROOT_PASSWORD",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": name,
+                                            "key": "root-password",
+                                        }
+                                    },
+                                },
+                                # The readiness probe's login. `healthcheck.sh
+                                # --connect` has to authenticate, and setting a
+                                # root password is exactly what locks it out:
+                                # probing as the root OS user with no credential
+                                # gets access denied, the pod never goes Ready,
+                                # and the Service install hangs with a healthy
+                                # container. This creates `mysql@localhost` with
+                                # unix_socket auth and USAGE only -- no data
+                                # access -- which is the account the image's own
+                                # healthcheck documentation pairs with --su-mysql.
+                                {
+                                    "name": "MARIADB_MYSQL_LOCALHOST_USER",
+                                    "value": "1",
+                                },
+                            ],
+                            # `mysqladmin ping` answers before the server accepts
+                            # queries; the image's own healthcheck is the real
+                            # analogue of postgres' pg_isready.
+                            "readinessProbe": {
+                                "exec": {
+                                    "command": [
+                                        "healthcheck.sh",
+                                        "--su-mysql",
+                                        "--connect",
+                                        "--innodb_initialized",
+                                    ]
+                                },
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 2,
+                            },
+                            "volumeMounts": [
+                                {
+                                    "name": "data",
+                                    "mountPath": "/var/lib/mysql",
+                                    # Same reason postgres sets PGDATA to a
+                                    # subdirectory: a fresh PVC can arrive with
+                                    # lost+found, and a non-empty datadir breaks
+                                    # first-run initialisation.
+                                    "subPath": "data",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            },
+            "volumeClaimTemplates": [_volume_claim_template(spec, labels)],
+        },
+        opts=opts,
+    )
+
+
 def _cloudflared_service(
     spec: PulumiKubernetesWorkloadSpec,
     *,
@@ -1717,6 +1843,7 @@ _WORKLOAD_PROGRAMS: dict[str, PulumiKubernetesProgram] = {
     "reference-app": _reference_app,
     "nephos-console": _nephos_console,
     "postgres-service": _postgres_service,
+    "mariadb-service": _mariadb_service,
     "cloudflared-service": _cloudflared_service,
     "zitadel-service": _zitadel_service,
     "seaweedfs-service": _seaweedfs_service,

@@ -359,6 +359,10 @@ def default_provider_deployer_factory(
             config=kubernetes_config,
             workload="postgres-service",
         ),
+        "mariadb": PulumiKubernetesProvider(
+            config=kubernetes_config,
+            workload="mariadb-service",
+        ),
         "zitadel": PulumiKubernetesProvider(
             config=kubernetes_config,
             workload="zitadel-service",
@@ -563,6 +567,7 @@ def _build_provisioning_engines(
         KubernetesPulumiZitadelProvisioningClient,
         KubernetesSeaweedFSProvisioningClient,
         KubernetesZitadelProvisionerConfig,
+        MariaDBAppScopedProvisioner,
         PostgresAppScopedProvisioner,
         SeaweedFSS3Provisioner,
         ZitadelAppScopedProvisioner,
@@ -580,6 +585,14 @@ def _build_provisioning_engines(
     )
     return {
         "sql": PostgresAppScopedProvisioner(core_v1_api=core_v1_api),
+        # ADR 20260824: one bare-named engine per Service, following arcadedb.
+        # `sql` is already postgres', and arcadedb -- which also provides
+        # (sql, arcadedb) -- resolved the same collision by naming its engine
+        # `opencypher` rather than qualifying it by protocol. No engine key is
+        # protocol-qualified, so mariadb's is the bare `mysql`. The
+        # (capability, protocol) narrowing lives inside the engine, as
+        # arcadedb's _CORE_PROTOCOLS does.
+        "mysql": MariaDBAppScopedProvisioner(core_v1_api=core_v1_api),
         "oidc": ZitadelAppScopedProvisioner(client=zitadel_client),
         # ADR 20260630 fixes the output contract; the client speaks ArcadeDB's
         # HTTP admin API. Optional protocols (gremlin, mongo) stay disabled --
@@ -588,8 +601,10 @@ def _build_provisioning_engines(
             client=KubernetesArcadeDBProvisioningClient(core_v1_api=core_v1_api),
         ),
         # ADR 20260816: one bucket and one bucket-scoped identity per binding,
-        # applied through `weed shell` inside the Service pod. Engine name
-        # follows the capability name, as sql / oidc / opencypher do.
+        # applied through `weed shell` inside the Service pod. One bare-named
+        # engine per Service (ADR 20260824) -- a capability name where one is
+        # free, as here, but not necessarily: `opencypher` also serves arcadedb's
+        # (sql, arcadedb) bindings, and mariadb's is `mysql`.
         "object-storage": SeaweedFSS3Provisioner(
             client=KubernetesSeaweedFSProvisioningClient(core_v1_api=core_v1_api),
         ),
